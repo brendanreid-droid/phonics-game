@@ -10,7 +10,7 @@
 
 A phonics reading game for 5-year-olds. Working title **Soundlings**.
 
-A child plays a 5-minute "quest" of 12–15 short tasks. Each task teaches or tests one phonics skill against one target sound or word. Mastering a sound hatches a creature — a Soundling — whose name uses that sound. The creature collection *is* the progress map.
+A child plays a 5-minute "quest" of 14 short tasks. Each task teaches or tests one phonics skill against one target sound or word. Mastering a sound hatches a creature — a Soundling — whose name uses that sound. The creature collection *is* the progress map.
 
 ### 1.1 Goal
 
@@ -250,13 +250,17 @@ Conditions 3 and 4 are the important ones. (3) stops a child memorising the answ
 buildSession(profile, masteryRecords, level, now, rng): TaskInstance[]
 ```
 
-Returns 12–15 task instances, composed:
+Returns `config.sessionLength` task instances, composed:
 
-| Band | Share | Selection |
+Default session length is **14 tasks**, composed:
+
+| Band | Count (of 14) | Selection |
 |---|---|---|
-| **Current focus** | 60% | Newest 1–2 unmastered graphemes in the level |
-| **Due review** | 25% | Unmastered targets, ranked by `overdueness × (1 - strength)` |
-| **Win-backs** | 15% | Mastered targets at high strength — guaranteed success |
+| **Current focus** | 8 (~57%) | Newest 1–2 unmastered graphemes in the level |
+| **Due review** | 3 (~21%) | Unmastered targets, ranked by `overdueness × (1 - strength)` |
+| **Win-backs** | 3 (~21%) | Mastered targets at high strength — guaranteed success |
+
+Win-backs are a minimum of **3**, not a percentage, because invariants 1, 2 and 4 below require one at the open, one at the close and one in the middle third. An earlier draft of this spec said 60/25/15, which cannot satisfy those invariants at any session length under 20 — the invariants win, because they are what protect the child's experience.
 
 Hard invariants, each covered by a unit test:
 
@@ -264,8 +268,8 @@ Hard invariants, each covered by a unit test:
 2. Last task is a win-back. The child leaves on a success.
 3. No two adjacent tasks share a task type.
 4. At least one win-back in the middle third.
-5. Every task's target is introduced at or before the child's current level.
-6. Session length is within 12–15.
+5. Every task's target — and every distractor — uses only graphemes the child has actually been **introduced to**, meaning the introduction groups up to and including the one their current focus sits in. Not merely "taught somewhere in this level": on day one a child has met two letters, and offering a third as a wrong answer is a trick question, not a challenge.
+6. Session length equals `config.sessionLength` (default 14).
 7. If fewer than 2 mastered targets exist (i.e. a brand-new child), win-backs are replaced by the lowest-difficulty task type on the current focus — never by a hard task.
 
 Invariant 7 matters: a first-ever session has no mastered targets to draw win-backs from, and the naive implementation would open a brand-new 5-year-old on their hardest content.

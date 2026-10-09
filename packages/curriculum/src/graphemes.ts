@@ -1,0 +1,97 @@
+import type { Grapheme, GraphemeId } from './types';
+
+/**
+ * Level 1 of the Australian synthetic phonics sequence: s, a, t, p, i, m, f.
+ *
+ * This order is not arbitrary and must not be "tidied" alphabetically. These
+ * seven graphemes are taught first because they combine into a large number of
+ * real CVC words (sat, pat, tap, pit, mat, map...), so a child can read actual
+ * words within their first few sessions rather than reciting isolated letters.
+ *
+ * `confusableWith` may name graphemes from later levels (n, d, b, v). The
+ * distractor picker filters to graphemes the child has met, so listing them
+ * early is free and pays off at Level 2.
+ */
+export const GRAPHEME_LIST: Grapheme[] = [
+  {
+    id: 's',
+    phoneme: '/s/',
+    letterName: 'ess',
+    mnemonic: 'snake',
+    mnemonicEmoji: '🐍',
+    audio: { phoneme: 'ph.s', letterName: 'ln.s' },
+    introducedInLevel: 1,
+    sequenceIndex: 0,
+    confusableWith: ['f', 'z'],
+  },
+  {
+    id: 'a',
+    phoneme: '/a/',
+    letterName: 'ay',
+    mnemonic: 'apple',
+    mnemonicEmoji: '🍎',
+    audio: { phoneme: 'ph.a', letterName: 'ln.a' },
+    introducedInLevel: 1,
+    sequenceIndex: 1,
+    confusableWith: ['i', 'e', 'u'],
+  },
+  {
+    id: 't',
+    phoneme: '/t/',
+    letterName: 'tee',
+    mnemonic: 'teddy',
+    mnemonicEmoji: '🧸',
+    audio: { phoneme: 'ph.t', letterName: 'ln.t' },
+    introducedInLevel: 1,
+    sequenceIndex: 2,
+    confusableWith: ['p', 'd', 'f'],
+  },
+  {
+    id: 'p',
+    phoneme: '/p/',
+    letterName: 'pee',
+    mnemonic: 'pig',
+    mnemonicEmoji: '🐷',
+    audio: { phoneme: 'ph.p', letterName: 'ln.p' },
+    introducedInLevel: 1,
+    sequenceIndex: 3,
+    confusableWith: ['t', 'b', 'd'],
+  },
+  {
+    id: 'i',
+    phoneme: '/i/',
+    letterName: 'eye',
+    mnemonic: 'insect',
+    mnemonicEmoji: '🐛',
+    audio: { phoneme: 'ph.i', letterName: 'ln.i' },
+    introducedInLevel: 1,
+    sequenceIndex: 4,
+    confusableWith: ['a', 'e'],
+  },
+  {
+    id: 'm',
+    phoneme: '/m/',
+    letterName: 'em',
+    mnemonic: 'moon',
+    mnemonicEmoji: '🌙',
+    audio: { phoneme: 'ph.m', letterName: 'ln.m' },
+    introducedInLevel: 1,
+    sequenceIndex: 5,
+    confusableWith: ['n', 'w'],
+  },
+  {
+    id: 'f',
+    phoneme: '/f/',
+    letterName: 'ef',
+    mnemonic: 'fish',
+    mnemonicEmoji: '🐟',
+    audio: { phoneme: 'ph.f', letterName: 'ln.f' },
+    introducedInLevel: 1,
+    sequenceIndex: 6,
+    confusableWith: ['s', 'v', 'th'],
+  },
+];
+
+export const GRAPHEMES: Record<GraphemeId, Grapheme> = Object.fromEntries(
+  GRAPHEME_LIST.map((g) => [g.id, g]),
+);

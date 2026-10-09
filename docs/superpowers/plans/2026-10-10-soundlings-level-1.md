@@ -112,10 +112,12 @@ You are assumed to be a competent developer who has never seen this codebase and
   "devDependencies": {
     "@types/node": "^22.10.0",
     "typescript": "^5.6.3",
-    "vitest": "^2.1.8"
+    "vitest": "^5.0.3"
   }
 }
 ```
+
+vitest 5 rather than 2: the v2 line pulls transitive dev dependencies with published advisories, including a critical one. Nothing is production-exposed, but the whole suite in this plan uses only `describe`/`it`/`expect`/`vi` and `defineConfig`, which are unchanged across those majors, so there is no reason to start on the old line.
 
 - [ ] **Step 2: Create `tsconfig.base.json`**
 
@@ -183,7 +185,7 @@ Run: `npm install`
 Expected: completes, creates `node_modules/` and `package-lock.json`.
 
 Run: `npx vitest run`
-Expected: exits 0 with "No test files found" — the harness works and there is nothing to run yet.
+Expected: prints "No test files found" and exits **1**. That non-zero exit is vitest's default behaviour with an empty suite, not a misconfiguration — it resolves by itself in Task 2 when the first test file lands. Do not add `--passWithNoTests` to work around it; a repo that reports success while running no tests is a worse default to live with.
 
 - [ ] **Step 7: Commit**
 

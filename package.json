@@ -2,7 +2,10 @@
   "name": "soundlings",
   "private": true,
   "version": "0.1.0",
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
@@ -11,6 +14,6 @@
   "devDependencies": {
     "@types/node": "^22.10.0",
     "typescript": "^5.6.3",
-    "vitest": "^2.1.8"
+    "vitest": "^5.0.3"
   }
 }

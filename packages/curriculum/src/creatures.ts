@@ -5,9 +5,9 @@ import type { Creature } from './types';
  * saying the creature's name rehearses the sound the child just mastered — the
  * reward is the lesson, not a sticker bolted onto it.
  */
-export const CREATURE_LIST: Creature[] = [
+export const CREATURE_LIST: readonly Creature[] = [
   { id: 'sisi', name: 'Sisi', graphemeId: 's', emoji: '🐍' },
-  { id: 'ada', name: 'Ada', graphemeId: 'a', emoji: '🍎' },
+  { id: 'annie', name: 'Annie', graphemeId: 'a', emoji: '🍎' },
   { id: 'tito', name: 'Tito', graphemeId: 't', emoji: '🧸' },
   { id: 'popo', name: 'Popo', graphemeId: 'p', emoji: '🐷' },
   { id: 'indi', name: 'Indi', graphemeId: 'i', emoji: '🐛' },

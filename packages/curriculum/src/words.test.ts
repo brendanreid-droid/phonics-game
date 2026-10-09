@@ -16,7 +16,7 @@ describe('words', () => {
 
   it('spells every word from its own grapheme sequence', () => {
     for (const w of WORD_LIST) {
-      expect(w.graphemes.join('')).toBe(w.id.toLowerCase());
+      expect(w.graphemes.join('')).toBe(w.id);
     }
   });
 
@@ -37,7 +37,7 @@ describe('words', () => {
 
   it('gives every word an audio key matching its id', () => {
     for (const w of WORD_LIST) {
-      expect(w.audio).toBe(`wd.${w.id.toLowerCase()}`);
+      expect(w.audio).toBe(`wd.${w.id}`);
     }
   });
 
@@ -55,6 +55,14 @@ describe('words', () => {
   it('offers at least 8 picturable Level 1 words, so Picture Match has headroom', () => {
     const level1 = PICTURABLE_WORD_LIST.filter((w) => w.decodableFromLevel === 1);
     expect(level1.length).toBeGreaterThanOrEqual(8);
+  });
+
+  it('keeps the original-case spelling in `text` for display', () => {
+    expect(WORDS['sam'].text).toBe('Sam');
+    expect(WORDS['pam'].text).toBe('Pam');
+    for (const w of WORD_LIST) {
+      expect(w.text.toLowerCase(), w.id).toBe(w.id);
+    }
   });
 
   it('never gives a function word a picture', () => {

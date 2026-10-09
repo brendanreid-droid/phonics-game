@@ -7,6 +7,6 @@ export const LEVELS: Level[] = [
     graphemeIds: ['s', 'a', 't', 'p', 'i', 'm', 'f'],
     // Two at a time, so a child always has a small, finishable front.
     introductionGroups: [['s', 'a'], ['t', 'p'], ['i', 'm'], ['f']],
-    trickyWordIds: ['I', 'the', 'a'],
+    trickyWordIds: ['i', 'the', 'a'],
   },
 ];

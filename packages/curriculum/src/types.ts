@@ -4,7 +4,7 @@ export type GraphemeId = string;
 /** A spoken sound, written between slashes by convention: "/s/". */
 export type PhonemeId = string;
 
-/** A whole word, lowercase except proper nouns: "sat", "Sam". */
+/** A whole word's identity, always lowercase: "sat", "sam". Display casing lives in `text`. */
 export type WordId = string;
 
 /** Anything mastery can be tracked against. */
@@ -48,7 +48,7 @@ export interface Grapheme {
    * picker. May reference graphemes from later levels; the picker filters to
    * what the child has actually met.
    */
-  confusableWith: GraphemeId[];
+  confusableWith: readonly GraphemeId[];
 }
 
 /** A word as authored. `decodableFromLevel` is derived, never hand-written. */
@@ -56,6 +56,8 @@ export type WordSeed = Omit<Word, 'decodableFromLevel'>;
 
 export interface Word {
   id: WordId;
+  /** What is shown to the reader. Equals `id` except for proper nouns: "Sam". */
+  text: string;
   /** The graphemes in order. Drives Word Builder's slots. */
   graphemes: GraphemeId[];
   pattern: 'vc' | 'cv' | 'cvc';
@@ -72,6 +74,8 @@ export interface Word {
 /** A word that cannot be sounded out yet and is taught as a whole shape. */
 export interface TrickyWord {
   id: WordId;
+  /** What is shown to the reader. Equals `id` except where casing matters: "I". */
+  text: string;
   audio: string;
   introducedInLevel: number;
   /** Why it is tricky. Shown in the parent area, not to the child. */

@@ -1,4 +1,4 @@
-import { GRAPHEMES } from './graphemes';
+import { getGrapheme } from './graphemes';
 import type { Word, WordId, WordSeed } from './types';
 
 /**
@@ -16,36 +16,47 @@ import type { Word, WordId, WordSeed } from './types';
  */
 const SEEDS: WordSeed[] = [
   // Function words — no picture possible.
-  { id: 'at', graphemes: ['a', 't'], pattern: 'vc', audio: 'wd.at' },
-  { id: 'am', graphemes: ['a', 'm'], pattern: 'vc', audio: 'wd.am' },
-  { id: 'if', graphemes: ['i', 'f'], pattern: 'vc', audio: 'wd.if' },
-  { id: 'it', graphemes: ['i', 't'], pattern: 'vc', audio: 'wd.it' },
+  { id: 'at', text: 'at', graphemes: ['a', 't'], pattern: 'vc', audio: 'wd.at' },
+  { id: 'am', text: 'am', graphemes: ['a', 'm'], pattern: 'vc', audio: 'wd.am' },
+  { id: 'if', text: 'if', graphemes: ['i', 'f'], pattern: 'vc', audio: 'wd.if' },
+  { id: 'it', text: 'it', graphemes: ['i', 't'], pattern: 'vc', audio: 'wd.it' },
 
   // CVC words with reliable pictures.
-  { id: 'pat', graphemes: ['p', 'a', 't'], pattern: 'cvc', picture: '🐶', audio: 'wd.pat' },
-  { id: 'tap', graphemes: ['t', 'a', 'p'], pattern: 'cvc', picture: '🚰', audio: 'wd.tap' },
-  { id: 'pit', graphemes: ['p', 'i', 't'], pattern: 'cvc', picture: '🕳️', audio: 'wd.pit' },
-  { id: 'sit', graphemes: ['s', 'i', 't'], pattern: 'cvc', picture: '🪑', audio: 'wd.sit' },
-  { id: 'sip', graphemes: ['s', 'i', 'p'], pattern: 'cvc', picture: '🥤', audio: 'wd.sip' },
-  { id: 'pip', graphemes: ['p', 'i', 'p'], pattern: 'cvc', picture: '🌰', audio: 'wd.pip' },
-  { id: 'fat', graphemes: ['f', 'a', 't'], pattern: 'cvc', picture: '🐷', audio: 'wd.fat' },
-  { id: 'fit', graphemes: ['f', 'i', 't'], pattern: 'cvc', picture: '💪', audio: 'wd.fit' },
-  { id: 'mat', graphemes: ['m', 'a', 't'], pattern: 'cvc', picture: '🧘', audio: 'wd.mat' },
-  { id: 'map', graphemes: ['m', 'a', 'p'], pattern: 'cvc', picture: '🗺️', audio: 'wd.map' },
+  { id: 'pat', text: 'pat', graphemes: ['p', 'a', 't'], pattern: 'cvc', picture: '🐶', audio: 'wd.pat' },
+  { id: 'tap', text: 'tap', graphemes: ['t', 'a', 'p'], pattern: 'cvc', picture: '🚰', audio: 'wd.tap' },
+  { id: 'pit', text: 'pit', graphemes: ['p', 'i', 't'], pattern: 'cvc', picture: '🕳️', audio: 'wd.pit' },
+  { id: 'sit', text: 'sit', graphemes: ['s', 'i', 't'], pattern: 'cvc', picture: '🪑', audio: 'wd.sit' },
+  { id: 'sip', text: 'sip', graphemes: ['s', 'i', 'p'], pattern: 'cvc', picture: '🥤', audio: 'wd.sip' },
+  { id: 'pip', text: 'pip', graphemes: ['p', 'i', 'p'], pattern: 'cvc', picture: '🌰', audio: 'wd.pip' },
+  { id: 'fit', text: 'fit', graphemes: ['f', 'i', 't'], pattern: 'cvc', picture: '💪', audio: 'wd.fit' },
+  { id: 'mat', text: 'mat', graphemes: ['m', 'a', 't'], pattern: 'cvc', picture: '🧘', audio: 'wd.mat' },
+  { id: 'map', text: 'map', graphemes: ['m', 'a', 'p'], pattern: 'cvc', picture: '🗺️', audio: 'wd.map' },
 
   // CVC words without a reliable picture — still used for spelling and blending.
-  { id: 'sat', graphemes: ['s', 'a', 't'], pattern: 'cvc', audio: 'wd.sat' },
-  { id: 'tip', graphemes: ['t', 'i', 'p'], pattern: 'cvc', audio: 'wd.tip' },
-  { id: 'sap', graphemes: ['s', 'a', 'p'], pattern: 'cvc', audio: 'wd.sap' },
-  { id: 'Sam', graphemes: ['s', 'a', 'm'], pattern: 'cvc', audio: 'wd.sam' },
-  { id: 'Pam', graphemes: ['p', 'a', 'm'], pattern: 'cvc', audio: 'wd.pam' },
+  // fat is picture-less on purpose: a child names the obvious image (a pig) as
+  // "pig", and that emoji already belongs to /p/'s mnemonic and Popo.
+  { id: 'fat', text: 'fat', graphemes: ['f', 'a', 't'], pattern: 'cvc', audio: 'wd.fat' },
+  { id: 'sat', text: 'sat', graphemes: ['s', 'a', 't'], pattern: 'cvc', audio: 'wd.sat' },
+  { id: 'tip', text: 'tip', graphemes: ['t', 'i', 'p'], pattern: 'cvc', audio: 'wd.tip' },
+  { id: 'sap', text: 'sap', graphemes: ['s', 'a', 'p'], pattern: 'cvc', audio: 'wd.sap' },
+  { id: 'sam', text: 'Sam', graphemes: ['s', 'a', 'm'], pattern: 'cvc', audio: 'wd.sam' },
+  { id: 'pam', text: 'Pam', graphemes: ['p', 'a', 'm'], pattern: 'cvc', audio: 'wd.pam' },
 ];
 
 function decodableFromLevel(seed: WordSeed): number {
-  return Math.max(...seed.graphemes.map((g) => GRAPHEMES[g].introducedInLevel));
+  // getGrapheme throws on a bad id; naming the word here tells the author which seed to fix.
+  return Math.max(
+    ...seed.graphemes.map((g) => {
+      try {
+        return getGrapheme(g).introducedInLevel;
+      } catch (error) {
+        throw new Error(`Word "${seed.id}": ${(error as Error).message}`);
+      }
+    }),
+  );
 }
 
-export const WORD_LIST: Word[] = SEEDS.map((seed) => ({
+export const WORD_LIST: readonly Word[] = SEEDS.map((seed) => ({
   ...seed,
   decodableFromLevel: decodableFromLevel(seed),
 }));
@@ -55,4 +66,11 @@ export const WORDS: Record<WordId, Word> = Object.fromEntries(
 );
 
 /** Words usable in Picture Match. */
-export const PICTURABLE_WORD_LIST: Word[] = WORD_LIST.filter((w) => w.picture !== undefined);
+export const PICTURABLE_WORD_LIST: readonly Word[] = WORD_LIST.filter((w) => w.picture !== undefined);
+
+/** Like indexing WORDS, but an unknown id throws and names itself. */
+export function getWord(id: WordId): Word {
+  const word = WORDS[id];
+  if (!word) throw new Error(`Unknown word: ${id}`);
+  return word;
+}

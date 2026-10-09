@@ -12,7 +12,7 @@ import type { Grapheme, GraphemeId } from './types';
  * distractor picker filters to graphemes the child has met, so listing them
  * early is free and pays off at Level 2.
  */
-export const GRAPHEME_LIST: Grapheme[] = [
+export const GRAPHEME_LIST: readonly Grapheme[] = [
   {
     id: 's',
     phoneme: '/s/',
@@ -95,3 +95,10 @@ export const GRAPHEME_LIST: Grapheme[] = [
 export const GRAPHEMES: Record<GraphemeId, Grapheme> = Object.fromEntries(
   GRAPHEME_LIST.map((g) => [g.id, g]),
 );
+
+/** Like indexing GRAPHEMES, but an unknown id throws and names itself. */
+export function getGrapheme(id: GraphemeId): Grapheme {
+  const grapheme = GRAPHEMES[id];
+  if (!grapheme) throw new Error(`Unknown grapheme: ${id}`);
+  return grapheme;
+}

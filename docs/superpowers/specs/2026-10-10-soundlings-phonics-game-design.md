@@ -59,6 +59,7 @@ Where it is weak, and what we do instead:
 | Voice talent / recording source (see §9.3) | Before real-child testing, i.e. after step 6 | Hybrid: human phonemes + AI words |
 | Pull Supabase earlier than step 8 | Before step 4 | Keep at step 8; review gate needs no backend |
 | Final product name | Before App Store submission | Soundlings |
+| Namespace grapheme ids apart from word ids (see §4.1a) | Before `TRICKY_READ` or `SENTENCE_READ` ships | Brand `TargetId` as a union of tagged ids |
 
 ---
 
@@ -141,6 +142,14 @@ interface TrickyWord {
   introducedInLevel: number;
 }
 ```
+
+### 4.1a Known issue: one id namespace
+
+`TargetId` is `GraphemeId | WordId`, and both collapse to `string`. The grapheme `a` and the tricky word `a` are therefore the same id, as are the grapheme `i` and the tricky word `i`.
+
+This is survivable in v1 and is being left alone deliberately. Mastery is keyed on `(target, skill)`, so `a::LETTER_SOUND` and `a::TRICKY_READ` are already distinct records, and no v1 task type puts graphemes and tricky words in the same set of choices.
+
+It stops being survivable when `TRICKY_READ` or `SENTENCE_READ` ships, because `confusionKey(target, chosen)` carries no skill and a task's `choices` array would become genuinely ambiguous. Fix it then by branding the id types or tagging them (`g:a`, `w:a`) — and note that mastery records persist these ids, so by that point it is a data migration rather than a type change. That is the cost of deferring, accepted knowingly.
 
 ### 4.2 Skills
 

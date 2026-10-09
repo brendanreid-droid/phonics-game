@@ -37,7 +37,8 @@ You are assumed to be a competent developer who has never seen this codebase and
 | `src/trickyWords.ts` | Non-decodable words taught whole |
 | `src/creatures.ts` | One Soundling per grapheme |
 | `src/levels.ts` | Level definitions and introduction order |
-| `src/index.ts` | Public lookups — the only thing consumers import |
+| `src/lookups.ts` | Lookup and accessor functions over the data |
+| `src/index.ts` | Public barrel — the only thing consumers import |
 | `src/purity.test.ts` | Asserts the package has no dependencies and no React/network imports |
 | `src/integrity.test.ts` | Asserts the content itself is pedagogically valid |
 
@@ -961,6 +962,33 @@ git commit -m "feat(curriculum): add tricky words, creatures, levels, and public
 ```
 
 ---
+## Amendments to Tasks 2–5, after code review
+
+Tasks 2–5 were implemented, reviewed, and then amended. The code blocks above are the *original* instructions and are now behind the committed code. Where they differ, **the code is correct and this section explains why**. Read this before relying on anything in Tasks 2–5.
+
+| # | Change | Why |
+|---|---|---|
+| 1 | `allAudioKeys()` now includes tricky-word audio keys | Those five keys were invisible to the audio integrity test in Task 18, so the build could pass with missing sound files |
+| 2 | `as` and `is` moved to `introducedInLevel: 2`; reconciliation tests added both directions | They were marked Level 1 but absent from Level 1's `trickyWordIds`, and nothing caught the contradiction |
+| 3 | `introductionGroupIndex` returns `-1` for a grapheme taught at an earlier level, and throws only for an unknown one | It threw for every review grapheme from Level 2 on — which is exactly what the session builder passes it |
+| 4 | Added throwing `getGrapheme` / `getWord` / `getTrickyWord`; `words.ts` uses `getGrapheme` | A bad grapheme produced an opaque `Cannot read properties of undefined` at import time, naming neither the word nor the grapheme |
+| 5 | All word and tricky-word ids are lowercase; `Word` and `TrickyWord` gained `text` for display | `Sam`/`Pam`/`I` forced `toLowerCase()` at every comparison and audio key. Mastery records persist these ids, so changing them after launch would be a data migration |
+| 6 | Creature `Ada` renamed `Annie` | **Pedagogy bug.** "Ada" is AY-da — the letter *name*. The creature exists to rehearse the sound `/a/`. The spelling-based test could not catch it |
+| 7 | `purity.test.ts` walks `src` recursively and asserts every import is relative and inside `src`, or in an explicit allowlist | The old version missed subdirectories entirely and would not have caught a cross-package import, the likeliest real violation |
+| 8 | Direct tests for every lookup, plus uniqueness invariants on audio keys, `sequenceIndex`, `confusableWith` and picture emoji | The lookups had no tests at all, and two integrity tests were near-tautologies |
+| 9 | Grapheme list assertions scoped to `introducedInLevel === 1` | They asserted the *whole* list was seven items, so Level 2 would break them with an unhelpful message |
+| 10 | Lookups moved to `lookups.ts`; `index.ts` is re-exports only and no longer surfaces `WordSeed` | `index.ts` mixed logic with re-exports and leaked internal authoring plumbing |
+| 11 | Exported collections typed `readonly` | An engine calling `GRAPHEME_LIST.sort()` would silently reorder the teaching sequence process-wide |
+| 12 | `fat` lost its picture | 🐷 reads as "pig" to a child, and is already `p`'s mnemonic and Popo's emoji — a misleading image in Picture Match. 9 picturable words remain against a minimum of 8 |
+
+Two knock-on edits were made to later tasks in this plan, already applied above:
+- Task 14's `blendWords` swaps `fat` for `mat`, since `fat` is no longer picturable.
+- Task 12's `graphemesMetFor` filters out `-1` indices, per amendment 3.
+
+**Deliberately not done**, so a later reader does not mistake it for an oversight: grapheme ids and tricky-word ids still share one namespace, so the grapheme `a` and the tricky word `a` are both the string `a`. Mastery keys disambiguate by skill and no v1 task type mixes the two, so it cannot bite until `TRICKY_READ` ships. Tracked as a dated decision in the spec.
+
+---
+
 ## Task 6: Engine scaffold — types, config, seeded RNG
 
 **Files:**
@@ -2703,8 +2731,18 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
 function graphemesMetFor(level: number, focusGraphemes: GraphemeId[]): GraphemeId[] {
   const groups = getLevel(level).introductionGroups;
   if (focusGraphemes.length === 0) return groups.flat();
-  const furthest = Math.max(...focusGraphemes.map((g) => introductionGroupIndex(level, g)));
-  return groups.slice(0, furthest + 1).flat();
+
+  // introductionGroupIndex returns -1 for a grapheme taught at an EARLIER
+  // level, which from Level 2 on is the normal case for review material. Those
+  // contribute nothing to how far through this level's groups we are.
+  const indices = focusGraphemes
+    .map((g) => introductionGroupIndex(level, g))
+    .filter((index) => index >= 0);
+
+  // Everything in focus was taught earlier, so the whole level is already open.
+  if (indices.length === 0) return groups.flat();
+
+  return groups.slice(0, Math.max(...indices) + 1).flat();
 }
 
 /** True when a target is a met grapheme, or a word built only from met graphemes. */
@@ -3253,7 +3291,7 @@ describe('levelProgress', () => {
       mastered(g, 'SOUND_ID'),
       mastered(g, 'LETTER_SOUND'),
     ]);
-    const blendWords = ['pat', 'tap', 'pit', 'sit', 'sip', 'pip', 'fat', 'fit'];
+    const blendWords = ['pat', 'tap', 'pit', 'sit', 'sip', 'pip', 'fit', 'mat'];
     const spellWords = ['sat', 'tip', 'sap', 'mat', 'map', 'at'];
     const entries = [
       ...graphemeEntries,
@@ -6275,9 +6313,12 @@ describe('judgeAnswer', () => {
     expect(result.chosen).toBe(wrong);
   });
 
-  it('compares spelling answers case-insensitively so proper nouns work', () => {
-    const task = { ...plan()[0], correctChoice: 'Sam', skill: 'SEGMENT_SPELL' as const };
-    expect(judgeAnswer(task, 'sam').correct).toBe(true);
+  it('compares spelling answers case-insensitively, defensively', () => {
+    // Word ids are all lowercase, so this should never matter in practice.
+    // It is here so that a future capitalised id, or a tile label that
+    // arrives upper-case, cannot mark a correctly spelled word wrong.
+    const task = { ...plan()[0], correctChoice: 'sam', skill: 'SEGMENT_SPELL' as const };
+    expect(judgeAnswer(task, 'SAM').correct).toBe(true);
   });
 });
 

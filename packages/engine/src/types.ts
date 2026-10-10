@@ -12,18 +12,42 @@ export interface MasteryRecord {
   skill: Skill;
   /** Hours until recall probability halves. Grows with success, shrinks on error. */
   halfLifeHours: number;
-  /** Epoch ms of the most recent attempt. 0 if never attempted. */
+  /**
+   * The decay clock: epoch ms of the last unscaffolded correct attempt. Advanced
+   * by nothing else. An error or a scaffolded answer must leave it where it
+   * was — if any contact moved it, a child who had just failed a sound would
+   * look freshly remembered. 0 if never reinforced.
+   */
+  lastReinforcedAt: number;
+  /**
+   * Epoch ms of the most recent attempt of any kind, never moving backwards.
+   * For display and the overdue calculation only — NOT the decay clock.
+   * 0 if never attempted.
+   */
   lastSeenAt: number;
-  /** Unscaffolded correct answers. Secondary credit adds 0.5, so this is fractional. */
+  /** Unscaffolded correct answers, weighted. Secondary credit adds 0.5, so this is fractional. */
   correctCount: number;
+  /**
+   * Unscaffolded correct answers at full weight, i.e. the child was asked this
+   * target directly. Mastery requires at least one: secondary credit alone
+   * must never be enough.
+   */
+  primaryCorrectCount: number;
   attemptCount: number;
   consecutiveCorrect: number;
   avgLatencyMs: number;
   /** Task types the child has answered correctly without scaffolding. */
   taskTypesSeen: string[];
-  /** Distinct sessions in which this target was attempted. */
-  sessionsSeen: number;
-  lastSessionId: string | null;
+  /**
+   * How many times the session id has changed across unscaffolded correct
+   * answers. A session containing only errors or scaffolded answers proves
+   * nothing and does not count. This is a change counter, not a set: ids
+   * A, B, A count as 3, so it assumes a session never resumes once another
+   * has begun.
+   */
+  sessionsProven: number;
+  /** The session id of the most recent unscaffolded correct answer. */
+  lastProvenSessionId: string | null;
   scaffoldedCount: number;
 }
 

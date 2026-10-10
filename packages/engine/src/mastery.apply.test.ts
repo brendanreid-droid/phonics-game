@@ -91,9 +91,9 @@ describe('applyAttempt', () => {
     const a = applyAttempt(record, attempt({ sessionId: 'one' }), DEFAULT_CONFIG);
     const b = applyAttempt(a, attempt({ sessionId: 'one' }), DEFAULT_CONFIG);
     const c = applyAttempt(b, attempt({ sessionId: 'two' }), DEFAULT_CONFIG);
-    expect(a.sessionsSeen).toBe(1);
-    expect(b.sessionsSeen).toBe(1);
-    expect(c.sessionsSeen).toBe(2);
+    expect(a.sessionsProven).toBe(1);
+    expect(b.sessionsProven).toBe(1);
+    expect(c.sessionsProven).toBe(2);
   });
 
   it('tracks a running mean latency', () => {
@@ -114,5 +114,87 @@ describe('applyAttempt', () => {
     let record = { ...emptyRecord('s', 'SOUND_ID', DEFAULT_CONFIG), halfLifeHours: DEFAULT_CONFIG.maxHalfLifeHours };
     record = applyAttempt(record, attempt(), DEFAULT_CONFIG);
     expect(record.halfLifeHours).toBe(DEFAULT_CONFIG.maxHalfLifeHours);
+  });
+});
+
+describe('applyAttempt bookkeeping that anchors the decay clock', () => {
+  const fresh = () => emptyRecord('s', 'SOUND_ID', DEFAULT_CONFIG);
+
+  it('advances lastReinforcedAt on an unscaffolded correct answer', () => {
+    const next = applyAttempt(fresh(), attempt({ at: 7 * HOUR }), DEFAULT_CONFIG);
+    expect(next.lastReinforcedAt).toBe(7 * HOUR);
+  });
+
+  it('leaves lastReinforcedAt alone on an error', () => {
+    const proven = applyAttempt(fresh(), attempt({ at: 7 * HOUR }), DEFAULT_CONFIG);
+    const next = applyAttempt(proven, attempt({ correct: false, at: 30 * HOUR }), DEFAULT_CONFIG);
+    expect(next.lastReinforcedAt).toBe(7 * HOUR);
+  });
+
+  it('leaves lastReinforcedAt alone on a scaffolded answer', () => {
+    const proven = applyAttempt(fresh(), attempt({ at: 7 * HOUR }), DEFAULT_CONFIG);
+    const next = applyAttempt(proven, attempt({ scaffolded: true, at: 30 * HOUR }), DEFAULT_CONFIG);
+    expect(next.lastReinforcedAt).toBe(7 * HOUR);
+  });
+
+  it('never moves lastReinforcedAt or lastSeenAt backwards on an out-of-order attempt', () => {
+    const late = applyAttempt(fresh(), attempt({ at: 20 * HOUR }), DEFAULT_CONFIG);
+    const early = applyAttempt(late, attempt({ at: 5 * HOUR }), DEFAULT_CONFIG);
+    expect(early.lastReinforcedAt).toBe(20 * HOUR);
+    expect(early.lastSeenAt).toBe(20 * HOUR);
+  });
+
+  it('advances lastSeenAt on contact of every kind', () => {
+    const a = applyAttempt(fresh(), attempt({ at: 2 * HOUR }), DEFAULT_CONFIG);
+    const b = applyAttempt(a, attempt({ correct: false, at: 4 * HOUR }), DEFAULT_CONFIG);
+    const c = applyAttempt(b, attempt({ scaffolded: true, at: 6 * HOUR }), DEFAULT_CONFIG);
+    expect([a.lastSeenAt, b.lastSeenAt, c.lastSeenAt]).toEqual([2 * HOUR, 4 * HOUR, 6 * HOUR]);
+  });
+
+  it('counts primaryCorrectCount only for full-weight unscaffolded correct answers', () => {
+    const half = DEFAULT_CONFIG.secondaryWeight;
+    let record = fresh();
+    record = applyAttempt(record, attempt({ weight: half }), DEFAULT_CONFIG);
+    record = applyAttempt(record, attempt({ scaffolded: true }), DEFAULT_CONFIG);
+    record = applyAttempt(record, attempt({ correct: false }), DEFAULT_CONFIG);
+    expect(record.primaryCorrectCount).toBe(0);
+    record = applyAttempt(record, attempt({ weight: 1 }), DEFAULT_CONFIG);
+    expect(record.primaryCorrectCount).toBe(1);
+  });
+});
+
+describe('sessionsProven', () => {
+  const fresh = () => emptyRecord('s', 'SOUND_ID', DEFAULT_CONFIG);
+
+  it('is not advanced by a session in which the child only failed', () => {
+    const next = applyAttempt(fresh(), attempt({ correct: false, sessionId: 'one' }), DEFAULT_CONFIG);
+    expect(next.sessionsProven).toBe(0);
+    expect(next.lastProvenSessionId).toBeNull();
+  });
+
+  it('is not advanced by a session in which the child was only helped', () => {
+    const next = applyAttempt(fresh(), attempt({ scaffolded: true, sessionId: 'one' }), DEFAULT_CONFIG);
+    expect(next.sessionsProven).toBe(0);
+    expect(next.lastProvenSessionId).toBeNull();
+  });
+
+  it('counts a session once however many failures surround its proof', () => {
+    let record = fresh();
+    record = applyAttempt(record, attempt({ correct: false, sessionId: 'one' }), DEFAULT_CONFIG);
+    record = applyAttempt(record, attempt({ sessionId: 'one' }), DEFAULT_CONFIG);
+    record = applyAttempt(record, attempt({ correct: false, sessionId: 'two' }), DEFAULT_CONFIG);
+    expect(record.sessionsProven).toBe(1);
+    expect(record.lastProvenSessionId).toBe('one');
+  });
+
+  it('is a change counter, not a set: ids A, B, A count as three', () => {
+    // Documented behaviour. It is correct only if a session never resumes
+    // after another has begun; this test pins the semantics so a change to
+    // that assumption is deliberate.
+    let record = fresh();
+    for (const id of ['A', 'B', 'A']) {
+      record = applyAttempt(record, attempt({ sessionId: id }), DEFAULT_CONFIG);
+    }
+    expect(record.sessionsProven).toBe(3);
   });
 });

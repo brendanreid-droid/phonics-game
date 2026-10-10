@@ -50,7 +50,7 @@ describe('isMastered', () => {
     record = applyAttempt(record, attempt({ sessionId: 'one', taskTypeId: 'sound-hunt', at: HOUR }), DEFAULT_CONFIG);
     record = applyAttempt(record, attempt({ sessionId: 'one', taskTypeId: 'word-builder', at: 2 * HOUR }), DEFAULT_CONFIG);
     record = applyAttempt(record, attempt({ sessionId: 'one', taskTypeId: 'picture-match', at: 3 * HOUR }), DEFAULT_CONFIG);
-    expect(record.sessionsSeen).toBe(1);
+    expect(record.sessionsProven).toBe(1);
     expect(isMastered(record, 3 * HOUR, DEFAULT_CONFIG)).toBe(false);
   });
 

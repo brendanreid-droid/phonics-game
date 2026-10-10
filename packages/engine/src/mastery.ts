@@ -10,29 +10,64 @@ export function emptyRecord(targetId: TargetId, skill: Skill, config: EngineConf
     targetId,
     skill,
     halfLifeHours: config.initialHalfLifeHours,
+    lastReinforcedAt: 0,
     lastSeenAt: 0,
     correctCount: 0,
+    primaryCorrectCount: 0,
     attemptCount: 0,
     consecutiveCorrect: 0,
     avgLatencyMs: 0,
     taskTypesSeen: [],
-    sessionsSeen: 0,
-    lastSessionId: null,
+    sessionsProven: 0,
+    lastProvenSessionId: null,
     scaffoldedCount: 0,
   };
 }
 
+function assertFinite(value: number, what: string, record: MasteryRecord): void {
+  if (!Number.isFinite(value)) {
+    throw new RangeError(
+      `mastery record ${record.targetId}::${record.skill} has non-finite ${what} (${value})`,
+    );
+  }
+}
+
+/**
+ * A record can reach us from storage or a hand edit, bypassing the clamps
+ * `applyAttempt` applies. Out-of-range values are pulled back into
+ * [min, max]; a non-finite one is corruption and is refused loudly, because
+ * NaN would otherwise fail every `>=` comparison and the child would simply
+ * never master the sound, with nothing visibly wrong.
+ */
+function usableHalfLife(record: MasteryRecord, config: EngineConfig): number {
+  assertFinite(record.halfLifeHours, 'halfLifeHours', record);
+  return Math.min(config.maxHalfLifeHours, Math.max(config.minHalfLifeHours, record.halfLifeHours));
+}
+
 /**
  * Probability the child could recall this right now, as exponential decay
- * (halving every `halfLifeHours`) from the last attempt. Strength is computed
- * rather than stored, so a record left untouched for a week correctly reports
- * that it has gone stale.
+ * (halving every `halfLifeHours`) from `lastReinforcedAt` — the last
+ * unscaffolded correct answer, NOT the last contact. If any contact reset the
+ * clock, a child who had just failed a sound would look freshly remembered.
+ * Strength is computed rather than stored, so a record left untouched for a
+ * week correctly reports that it has gone stale.
+ *
+ * Returns 0 until the child has been proven on the target directly: with no
+ * evidence there is nothing to decay.
+ *
+ * `config` supplies the half-life bounds. It is a parameter, rather than a
+ * boundary-time sanitiser, because every caller (mastery check, session
+ * builder) already holds the config, and a read-time clamp cannot be bypassed
+ * by a record that was persisted or edited outside `applyAttempt`.
  */
-export function strengthAt(record: MasteryRecord, now: number): number {
-  if (record.attemptCount === 0) return 0;
-  const elapsedHours = Math.max(0, now - record.lastSeenAt) / MS_PER_HOUR;
+export function strengthAt(record: MasteryRecord, now: number, config: EngineConfig): number {
+  if (record.primaryCorrectCount === 0) return 0;
+  assertFinite(now, 'now', record);
+  assertFinite(record.lastReinforcedAt, 'lastReinforcedAt', record);
+  const halfLifeHours = usableHalfLife(record, config);
+  const elapsedHours = Math.max(0, now - record.lastReinforcedAt) / MS_PER_HOUR;
   // Base 2, not e: after exactly one half-life the strength must be 0.5.
-  return Math.pow(0.5, elapsedHours / record.halfLifeHours);
+  return Math.pow(0.5, elapsedHours / halfLifeHours);
 }
 
 /**
@@ -60,12 +95,7 @@ export function applyAttempt(
   next.attemptCount = record.attemptCount + 1;
   next.avgLatencyMs =
     (record.avgLatencyMs * record.attemptCount + attempt.latencyMs) / next.attemptCount;
-  next.lastSeenAt = attempt.at;
-
-  if (attempt.sessionId !== record.lastSessionId) {
-    next.sessionsSeen = record.sessionsSeen + 1;
-    next.lastSessionId = attempt.sessionId;
-  }
+  next.lastSeenAt = Math.max(record.lastSeenAt, attempt.at);
 
   if (attempt.scaffolded) {
     next.scaffoldedCount = record.scaffoldedCount + 1;
@@ -85,7 +115,13 @@ export function applyAttempt(
 
   next.halfLifeHours = Math.min(config.maxHalfLifeHours, record.halfLifeHours * growth);
   next.correctCount = record.correctCount + attempt.weight;
+  if (attempt.weight === 1) next.primaryCorrectCount = record.primaryCorrectCount + 1;
   next.consecutiveCorrect = record.consecutiveCorrect + 1;
+  next.lastReinforcedAt = Math.max(record.lastReinforcedAt, attempt.at);
+  if (attempt.sessionId !== record.lastProvenSessionId) {
+    next.sessionsProven = record.sessionsProven + 1;
+    next.lastProvenSessionId = attempt.sessionId;
+  }
   if (!next.taskTypesSeen.includes(attempt.taskTypeId)) {
     next.taskTypesSeen.push(attempt.taskTypeId);
   }
@@ -102,14 +138,15 @@ export function applyAttempt(
  * The two conditions people try to remove are the two that matter.
  * `masteryTaskTypes` stops a child "mastering" a sound by memorising the shape
  * of one mini-game. `masterySessions` requires retention across a gap rather
- * than same-sitting recall.
+ * than same-sitting recall; only sessions containing unscaffolded correct
+ * evidence count (see `MasteryRecord.sessionsProven`).
  */
 export function isMastered(record: MasteryRecord, now: number, config: EngineConfig): boolean {
   return (
-    strengthAt(record, now) >= config.masteryStrength &&
+    strengthAt(record, now, config) >= config.masteryStrength &&
     record.correctCount >= config.masteryCorrect &&
     record.taskTypesSeen.length >= config.masteryTaskTypes &&
-    record.sessionsSeen >= config.masterySessions
+    record.sessionsProven >= config.masterySessions
   );
 }
 

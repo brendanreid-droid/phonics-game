@@ -132,6 +132,38 @@ describe('isMastered: being asked directly, and float safety', () => {
   });
 });
 
+describe('isMastered thresholds are inclusive', () => {
+  it('accepts a strength of exactly masteryStrength and rejects a hair below it', () => {
+    const config = withDefaults({ masteryStrength: 0.5 });
+    // Half-life 10h, last reinforced at 0: strength is exactly 0.5 at 10h.
+    const record = { ...provenRecord(), halfLifeHours: 10, lastReinforcedAt: 0 };
+    expect(isMastered(record, 10 * HOUR, config)).toBe(true);
+    expect(isMastered(record, 10 * HOUR + 1, config)).toBe(false);
+  });
+
+  it('accepts a correctCount of exactly masteryCorrect and rejects 2.5', () => {
+    const record = provenRecord();
+    expect(record.correctCount).toBe(DEFAULT_CONFIG.masteryCorrect);
+    expect(isMastered(record, 3 * HOUR, DEFAULT_CONFIG)).toBe(true);
+    expect(isMastered({ ...record, correctCount: 2.5 }, 3 * HOUR, DEFAULT_CONFIG)).toBe(false);
+  });
+
+  it('accepts exactly the required task types and sessions, and rejects one fewer of each', () => {
+    const record = provenRecord();
+    expect(record.taskTypesSeen).toHaveLength(DEFAULT_CONFIG.masteryTaskTypes);
+    expect(record.sessionsProven).toBe(DEFAULT_CONFIG.masterySessions);
+    expect(isMastered({ ...record, taskTypesSeen: ['sound-hunt'] }, 3 * HOUR, DEFAULT_CONFIG)).toBe(false);
+    expect(isMastered({ ...record, sessionsProven: 1 }, 3 * HOUR, DEFAULT_CONFIG)).toBe(false);
+  });
+
+  it('does not count a failed or helped session as a proven one', () => {
+    let record = provenRecord();
+    record = applyAttempt(record, attempt({ sessionId: 'three', correct: false, at: 4 * HOUR }), DEFAULT_CONFIG);
+    record = applyAttempt(record, attempt({ sessionId: 'four', scaffolded: true, at: 5 * HOUR }), DEFAULT_CONFIG);
+    expect(record.sessionsProven).toBe(2);
+  });
+});
+
 describe('getRecord and recordAttempt', () => {
   it('returns a fresh empty record for an unseen target', () => {
     const record = getRecord({}, 'a', 'LETTER_SOUND', DEFAULT_CONFIG);

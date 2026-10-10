@@ -267,3 +267,57 @@ describe('applyAttempt input validation', () => {
     expect(next.halfLifeHours).toBeCloseTo(DEFAULT_CONFIG.maxHalfLifeHours * 0.4, 6);
   });
 });
+
+describe('applyAttempt growth, exactly', () => {
+  const fresh = () => emptyRecord('s', 'SOUND_ID', DEFAULT_CONFIG);
+
+  it('grows linearly in the rate: growth = 1 + (growthFactor - 1) * rate', () => {
+    // growthFactor 1.9, initial half-life 6.
+    const full = applyAttempt(fresh(), attempt({ weight: 1, latencyMs: 1000 }), DEFAULT_CONFIG);
+    const half = applyAttempt(fresh(), attempt({ weight: 0.5, latencyMs: 1000 }), DEFAULT_CONFIG);
+    const slow = applyAttempt(fresh(), attempt({ weight: 1, latencyMs: 9000 }), DEFAULT_CONFIG);
+    const slowHalf = applyAttempt(fresh(), attempt({ weight: 0.5, latencyMs: 9000 }), DEFAULT_CONFIG);
+    expect(full.halfLifeHours).toBeCloseTo(6 * 1.9, 9);
+    expect(half.halfLifeHours).toBeCloseTo(6 * 1.45, 9);
+    expect(slow.halfLifeHours).toBeCloseTo(6 * 1.45, 9);
+    expect(slowHalf.halfLifeHours).toBeCloseTo(6 * 1.225, 9);
+  });
+
+  it('treats exactly slowLatencyMs as fast, and one millisecond over as slow', () => {
+    const atLimit = applyAttempt(fresh(), attempt({ latencyMs: DEFAULT_CONFIG.slowLatencyMs }), DEFAULT_CONFIG);
+    const over = applyAttempt(fresh(), attempt({ latencyMs: DEFAULT_CONFIG.slowLatencyMs + 1 }), DEFAULT_CONFIG);
+    expect(atLimit.halfLifeHours).toBeCloseTo(6 * 1.9, 9);
+    expect(over.halfLifeHours).toBeCloseTo(6 * 1.45, 9);
+  });
+});
+
+describe('applyAttempt on scaffolded attempts', () => {
+  const streaking = () => ({ ...emptyRecord('s', 'SOUND_ID', DEFAULT_CONFIG), consecutiveCorrect: 4, correctCount: 4 });
+
+  it('a scaffolded WRONG answer changes no half-life and no credit, but resets the streak', () => {
+    const record = streaking();
+    const next = applyAttempt(record, attempt({ scaffolded: true, correct: false }), DEFAULT_CONFIG);
+    expect(next.halfLifeHours).toBe(record.halfLifeHours);
+    expect(next.correctCount).toBe(4);
+    expect(next.consecutiveCorrect).toBe(0);
+    expect(next.scaffoldedCount).toBe(1);
+  });
+
+  it('still counts as contact: attemptCount, avgLatencyMs and lastSeenAt advance', () => {
+    const first = applyAttempt(emptyRecord('s', 'SOUND_ID', DEFAULT_CONFIG), attempt({ latencyMs: 1000, at: 2 * HOUR }), DEFAULT_CONFIG);
+    const next = applyAttempt(first, attempt({ scaffolded: true, latencyMs: 3000, at: 9 * HOUR }), DEFAULT_CONFIG);
+    expect(next.attemptCount).toBe(2);
+    expect(next.avgLatencyMs).toBe(2000);
+    expect(next.lastSeenAt).toBe(9 * HOUR);
+  });
+
+  it('earns none of the evidence a real answer would', () => {
+    const record = emptyRecord('s', 'SOUND_ID', DEFAULT_CONFIG);
+    const next = applyAttempt(record, attempt({ scaffolded: true, sessionId: 'one' }), DEFAULT_CONFIG);
+    expect(next.primaryCorrectCount).toBe(0);
+    expect(next.sessionsProven).toBe(0);
+    expect(next.lastReinforcedAt).toBe(0);
+    expect(next.taskTypesSeen).toEqual([]);
+    expect(next.consecutiveCorrect).toBe(0);
+  });
+});

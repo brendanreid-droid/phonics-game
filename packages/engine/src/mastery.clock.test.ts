@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_CONFIG } from './config';
+import { withDefaults } from './config';
 import { applyAttempt, emptyRecord, isMastered, strengthAt } from './mastery';
 import type { Attempt, MasteryRecord } from './types';
+
+/**
+ * These tests pin the decay and reinforcement arithmetic on fixed numbers, so they
+ * do not use the shipped DEFAULT_CONFIG: retuning that for pacing must not silently
+ * change what a formula test proves.
+ */
+const DEFAULT_CONFIG = withDefaults({ initialHalfLifeHours: 6, growthFactor: 1.9, slowLatencyMs: 4000, focusTargetCount: 2 });
 
 const HOUR = 3_600_000;
 

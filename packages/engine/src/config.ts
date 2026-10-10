@@ -57,7 +57,9 @@ export const DEFAULT_CONFIG: EngineConfig = {
   sessionLength: 14,
   winbackCount: 3,
   reviewCount: 3,
-  focusTargetCount: 2,
+  // Three, matching the first introduction group (s, a, t). Four would span two
+  // groups, which is not a small front a child can finish.
+  focusTargetCount: 3,
 
   masteryStrength: 0.8,
   masteryCorrect: 3,
@@ -68,15 +70,24 @@ export const DEFAULT_CONFIG: EngineConfig = {
 
   winbackStrength: 0.9,
 
-  initialHalfLifeHours: 6,
+  // 24h: a once-a-day product. At 6h, three correct answers left strength at
+  // 0.71 by the next morning, below the 0.8 mastery gate, so a child could not
+  // master anything by practising once a day.
+  initialHalfLifeHours: 24,
   minHalfLifeHours: 1,
   maxHalfLifeHours: 24 * 90,
-  growthFactor: 1.9,
+  // Measured, not principled: it implies three correct answers give about two
+  // months of retention, which is surely generous. It was chosen because the
+  // simulation (simulate.ts) found nothing slower that let a child finish Level 1
+  // in a reasonable number of quests. Revisit against real children.
+  growthFactor: 4,
   errorShrink: 0.4,
   secondaryWeight: 0.5,
   // Above this, a correct answer was effortful rather than automatic, and
-  // automaticity is the actual goal of phonics practice.
-  slowLatencyMs: 4000,
+  // automaticity is the actual goal of phonics practice. 7s, not 4s: a five-year-old
+  // taking five seconds to decode a word is reading, not failing. At 4s a child who
+  // averaged 5.2s had every answer reinforced at half rate and could not finish.
+  slowLatencyMs: 7000,
   slowReinforceFactor: 0.5,
 
   scaffoldAfterErrors: 2,

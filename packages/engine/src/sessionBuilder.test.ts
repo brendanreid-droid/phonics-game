@@ -39,6 +39,14 @@ function masteredPairs(
   return map;
 }
 
+/** s, a, t mastered plus the spellings that do not touch p, i or m: only f is left outside the focus. */
+function reviewBase(): MasteryMap {
+  return {
+    ...masteredGraphemes(['s', 'a', 't']),
+    ...masteredPairs([['at', 'SEGMENT_SPELL'], ['sat', 'SEGMENT_SPELL'], ['fat', 'SEGMENT_SPELL']]),
+  };
+}
+
 /** Both sound skills mastered for each grapheme. */
 function masteredGraphemes(ids: readonly string[]): MasteryMap {
   return masteredPairs(ids.flatMap((id): Pair[] => [[id, 'SOUND_ID'], [id, 'LETTER_SOUND']]));
@@ -51,6 +59,13 @@ function args(mastery: MasteryMap, sessionId: string, extra: Partial<BuildSessio
 function build(mastery: MasteryMap, sessionId = 'test-session', extra: Partial<BuildSessionArgs> = {}) {
   return buildSession(args(mastery, sessionId, extra));
 }
+
+/**
+ * Hours since mastery at which strength has slipped below the win-back bar (0.9) but
+ * not the mastery bar (0.8). Tied to the shipped half-life (three correct answers give
+ * 24 * 4^3 = 1536h); tests that use it assert the window, so retuning fails loudly.
+ */
+const MID_STRENGTH_AGO_HOURS = 300;
 
 const SEEDS = Array.from({ length: 40 }, (_, i) => `seed-${i}`);
 
@@ -166,7 +181,7 @@ describe('buildSession invariants', () => {
       'brand new': ['s', 'a', 't'],
       'day two: s and a heard but not yet sung': ['s', 'a', 't'],
       's and a mastered': ['s', 'a', 't', 'p', 'i'],
-      's a t mastered': ['s', 'a', 't', 'p', 'i'],
+      's a t mastered': level1,
       's a t p mastered': level1,
       's a t p i mastered': level1,
       'six mastered': level1,
@@ -301,7 +316,7 @@ describe('buildSession for a brand-new child', () => {
     // s is mastered but has decayed below the win-back bar, so there are no win-backs
     // and focus has moved on to a and t. A close that merely took the first available
     // singer would land on s, which this quest never asked about.
-    const mastery = masteredPairs([['s', 'SOUND_ID'], ['s', 'LETTER_SOUND']], { agoHours: 9 });
+    const mastery = masteredPairs([['s', 'SOUND_ID'], ['s', 'LETTER_SOUND']], { agoHours: MID_STRENGTH_AGO_HOURS });
     for (const skill of ['SOUND_ID', 'LETTER_SOUND'] as const) {
       const strength = strengthAt(getRecord(mastery, 's', skill, DEFAULT_CONFIG), NOW, DEFAULT_CONFIG);
       expect(strength).toBeGreaterThanOrEqual(DEFAULT_CONFIG.masteryStrength);
@@ -381,7 +396,10 @@ describe('buildSession for a brand-new child', () => {
     expect(isMastered(getRecord(mastery, 's', 'SOUND_ID', DEFAULT_CONFIG), NOW, DEFAULT_CONFIG)).toBe(true);
     for (const seed of SEEDS) {
       const plan = build(mastery, seed);
-      expect(plan.filter((t) => t.band === 'winback').length, seed).toBe(0);
+      // The opening and breather anchors cannot be win-backs: there is only one candidate.
+      // The close may be, if it lands on that sound, because it did meet the win-back bar.
+      const winbackSlots = plan.map((t, i) => (t.band === 'winback' ? i : -1)).filter((i) => i >= 0);
+      expect(winbackSlots.every((i) => i === plan.length - 1), `${seed}: win-backs at ${winbackSlots}`).toBe(true);
     }
   });
 
@@ -483,13 +501,13 @@ describe('buildSession composition', () => {
   });
 
   it('draws focus from the newest unmastered sounds and the words that contain them', () => {
-    // s and a mastered, so focus moves to t and p.
+    // s and a mastered, so focus moves to t, p and i.
     const plan = build(masteredGraphemes(['s', 'a']));
     for (const task of plan.filter((t) => t.band === 'focus' && !t.anchor)) {
       const graphemes = task.skill === 'BLEND_READ' || task.skill === 'SEGMENT_SPELL'
         ? getWord(task.primaryTarget).graphemes
         : [task.primaryTarget];
-      expect(graphemes.some((g) => g === 't' || g === 'p'), `${task.id}`).toBe(true);
+      expect(graphemes.some((g) => g === 't' || g === 'p' || g === 'i'), `${task.id}`).toBe(true);
     }
   });
 
@@ -681,43 +699,44 @@ describe('buildSession composition', () => {
   });
 
   it('reviews the weakest material first', () => {
-    // s and a are mastered; t and p are the focus; i is met but outside it, so it is the only
-    // review. i/SOUND_ID has just been failed, i/LETTER_SOUND is nearly known.
-    const base = masteredGraphemes(['s', 'a']);
+    // s, a and t are mastered, and so are the spellings that do not touch the focus. p, i
+    // and m are the focus; f is met but outside it, so it is the only review.
+    // f/SOUND_ID has just been failed, f/LETTER_SOUND is nearly known.
+    const base = reviewBase();
     const answer = (skill: Skill, correct: boolean, at: number, id: string): Attempt => ({
-      sessionId: id, targetId: 'i', skill, taskTypeId: 'sound-hunt', correct, scaffolded: false, latencyMs: 900, weight: 1, at,
+      sessionId: id, targetId: 'f', skill, taskTypeId: 'sound-hunt', correct, scaffolded: false, latencyMs: 900, weight: 1, at,
     });
-    let weak = emptyRecord('i', 'SOUND_ID', DEFAULT_CONFIG);
+    let weak = emptyRecord('f', 'SOUND_ID', DEFAULT_CONFIG);
     weak = applyAttempt(weak, answer('SOUND_ID', false, NOW - HOUR, 'w1'), DEFAULT_CONFIG);
-    let nearly = emptyRecord('i', 'LETTER_SOUND', DEFAULT_CONFIG);
+    let nearly = emptyRecord('f', 'LETTER_SOUND', DEFAULT_CONFIG);
     nearly = applyAttempt(nearly, answer('LETTER_SOUND', true, NOW - HOUR, 'n1'), DEFAULT_CONFIG);
     nearly = applyAttempt(nearly, answer('LETTER_SOUND', true, NOW - HOUR, 'n2'), DEFAULT_CONFIG);
-    const mastery = { ...base, [masteryKey('i', 'SOUND_ID')]: weak, [masteryKey('i', 'LETTER_SOUND')]: nearly };
+    const mastery = { ...base, [masteryKey('f', 'SOUND_ID')]: weak, [masteryKey('f', 'LETTER_SOUND')]: nearly };
     for (const seed of SEEDS) {
       const review = build(mastery, seed, { config: { reviewCount: 1 } }).filter((t) => t.band === 'review');
       expect(review.length, seed).toBe(1);
-      expect(`${review[0].primaryTarget}/${review[0].skill}`, seed).toBe('i/SOUND_ID');
+      expect(`${review[0].primaryTarget}/${review[0].skill}`, seed).toBe('f/SOUND_ID');
     }
   });
 
   it('counts how overdue a target is as well as how weak, when reviewing', () => {
-    // Equal strength: both were last answered correctly two hours ago. i/SOUND_ID was then
+    // Equal strength: both were last answered correctly two hours ago. f/SOUND_ID was then
     // seen again with a hint a moment ago, which moves lastSeenAt but proves nothing, while
-    // i/LETTER_SOUND has gone untouched. Only the overdue term separates them, and
-    // i/SOUND_ID would win a tie because it comes first in teaching order.
-    const base = masteredGraphemes(['s', 'a']);
+    // f/LETTER_SOUND has gone untouched. Only the overdue term separates them, and
+    // f/SOUND_ID would win a tie because it comes first in teaching order.
+    const base = reviewBase();
     const correct = (skill: Skill, id: string): Attempt => ({
-      sessionId: id, targetId: 'i', skill, taskTypeId: 'sound-hunt', correct: true, scaffolded: false, latencyMs: 900, weight: 1, at: NOW - 2 * HOUR,
+      sessionId: id, targetId: 'f', skill, taskTypeId: 'sound-hunt', correct: true, scaffolded: false, latencyMs: 900, weight: 1, at: NOW - 2 * HOUR,
     });
-    let sid = applyAttempt(emptyRecord('i', 'SOUND_ID', DEFAULT_CONFIG), correct('SOUND_ID', 'a'), DEFAULT_CONFIG);
+    let sid = applyAttempt(emptyRecord('f', 'SOUND_ID', DEFAULT_CONFIG), correct('SOUND_ID', 'a'), DEFAULT_CONFIG);
     sid = applyAttempt(sid, { ...correct('SOUND_ID', 'b'), scaffolded: true, at: NOW - 60_000 }, DEFAULT_CONFIG);
-    const ls = applyAttempt(emptyRecord('i', 'LETTER_SOUND', DEFAULT_CONFIG), correct('LETTER_SOUND', 'a'), DEFAULT_CONFIG);
-    const mastery = { ...base, [masteryKey('i', 'SOUND_ID')]: sid, [masteryKey('i', 'LETTER_SOUND')]: ls };
+    const ls = applyAttempt(emptyRecord('f', 'LETTER_SOUND', DEFAULT_CONFIG), correct('LETTER_SOUND', 'a'), DEFAULT_CONFIG);
+    const mastery = { ...base, [masteryKey('f', 'SOUND_ID')]: sid, [masteryKey('f', 'LETTER_SOUND')]: ls };
     expect(strengthAt(sid, NOW, DEFAULT_CONFIG)).toBeCloseTo(strengthAt(ls, NOW, DEFAULT_CONFIG), 10);
     expect(sid.lastSeenAt).toBeGreaterThan(ls.lastSeenAt);
     for (const seed of SEEDS) {
       const review = build(mastery, seed, { config: { reviewCount: 1 } }).filter((t) => t.band === 'review');
-      expect(`${review[0].primaryTarget}/${review[0].skill}`, seed).toBe('i/LETTER_SOUND');
+      expect(`${review[0].primaryTarget}/${review[0].skill}`, seed).toBe('f/LETTER_SOUND');
     }
   });
 
@@ -820,14 +839,14 @@ describe('buildSession for a child who has mastered everything', () => {
   });
 
   it('still builds a full quest when it has mastered everything but is returning after a gap', () => {
-    // Nine hours on, strength has slipped below the win-back bar but not the mastery bar:
+    // Some time on, strength has slipped below the win-back bar but not the mastery bar:
     // everything is mastered and nothing qualifies as a win-back.
     const decayed = masteredPairs(
       Object.keys(everything()).map((key): Pair => {
         const [id, skill] = key.split('::');
         return [id, skill as Skill];
       }),
-      { agoHours: 9 },
+      { agoHours: MID_STRENGTH_AGO_HOURS },
     );
     for (const seed of SEEDS) {
       const plan = build(decayed, seed);

@@ -198,3 +198,23 @@ describe('sessionsProven', () => {
     expect(record.sessionsProven).toBe(3);
   });
 });
+
+describe('applyAttempt error shrink scales with evidence weight', () => {
+  const fresh = () => emptyRecord('s', 'SOUND_ID', DEFAULT_CONFIG);
+
+  it('shrinks to 0.4x for a full-weight error', () => {
+    const next = applyAttempt(fresh(), attempt({ correct: false, weight: 1 }), DEFAULT_CONFIG);
+    expect(next.halfLifeHours).toBeCloseTo(6 * 0.4, 9);
+  });
+
+  it('shrinks only to 0.7x for a half-weight error — a missed word is weak evidence against each sound', () => {
+    const next = applyAttempt(fresh(), attempt({ correct: false, weight: 0.5 }), DEFAULT_CONFIG);
+    expect(next.halfLifeHours).toBeCloseTo(6 * 0.7, 9);
+  });
+
+  it('still respects the floor for a half-weight error', () => {
+    const record = { ...fresh(), halfLifeHours: 1 };
+    const next = applyAttempt(record, attempt({ correct: false, weight: 0.5 }), DEFAULT_CONFIG);
+    expect(next.halfLifeHours).toBe(DEFAULT_CONFIG.minHalfLifeHours);
+  });
+});

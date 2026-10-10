@@ -104,7 +104,10 @@ export function applyAttempt(
   }
 
   if (!attempt.correct) {
-    next.halfLifeHours = Math.max(config.minHalfLifeHours, record.halfLifeHours * config.errorShrink);
+    // A weaker piece of evidence is a weaker accusation: missing a word is not
+    // as strong a signal against each of its sounds as missing the sound itself.
+    const shrink = 1 - (1 - config.errorShrink) * attempt.weight;
+    next.halfLifeHours = Math.max(config.minHalfLifeHours, record.halfLifeHours * shrink);
     next.consecutiveCorrect = 0;
     return next;
   }

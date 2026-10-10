@@ -2,11 +2,12 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { CREATURES } from '@soundlings/curriculum';
 import { tokens } from '@soundlings/ui';
+import { levelFromParam } from '../src/progress/levelCards';
 import { creatureIdsFromParam, starsFromParam } from '../src/quest/questLogic';
 
 export default function ResultsScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ stars?: string; creatures?: string }>();
+  const params = useLocalSearchParams<{ stars?: string; creatures?: string; level?: string }>();
 
   const stars = starsFromParam(params.stars);
   const creatures = creatureIdsFromParam(params.creatures).flatMap((id) => {
@@ -54,7 +55,7 @@ export default function ResultsScreen() {
         accessibilityRole="button"
         accessibilityLabel="Finish"
         style={({ pressed }) => [styles.primary, pressed && styles.pressed]}
-        onPress={() => router.replace('/')}
+        onPress={() => router.dismissTo('/island')}
       >
         <Text style={styles.primaryText}>Finish</Text>
       </Pressable>
@@ -63,7 +64,7 @@ export default function ResultsScreen() {
         accessibilityRole="button"
         accessibilityLabel="Play one more quest"
         style={styles.secondary}
-        onPress={() => router.replace('/quest')}
+        onPress={() => router.replace({ pathname: '/quest', params: { level: String(levelFromParam(params.level)) } })}
       >
         <Text style={styles.secondaryText}>One more</Text>
       </Pressable>

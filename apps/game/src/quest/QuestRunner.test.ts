@@ -12,6 +12,8 @@ import type { Attempt, MasteryMap, TaskInstance } from '@soundlings/engine';
 import type { AudioService } from '@soundlings/audio';
 import { MemoryProgressRepo } from '../data/MemoryProgressRepo';
 import type { ActiveSession, ProgressRepo } from '../data/ProgressRepo';
+import { masteredLevelOne } from '../progress/masteryFixture';
+import { localDateString } from '../progress/streaks';
 import { QuestRunner } from './QuestRunner';
 import type { QuestView } from './QuestRunner';
 
@@ -778,5 +780,119 @@ describe('creatures', () => {
     const { runner } = await started(repo);
     await finishCleanly(runner);
     expect(viewOf(runner).newCreatures).toEqual([]);
+  });
+});
+
+describe('finishing a quest records the day and latches completion', () => {
+  const FIXED = () => START;
+  const runnerWith = (repo: ProgressRepo, extra: { markPlayed?: (date: string) => Promise<void> } = {}) =>
+    new QuestRunner({ profileId: PROFILE, level: 1, repo, audio: silentAudio(), now: FIXED, celebrateMs: 0, ...extra });
+
+  it('records the local day on which a quest was finished', async () => {
+    const repo = new MemoryProgressRepo();
+    const runner = runnerWith(repo);
+    await runner.start();
+    await finishCleanly(runner);
+    expect(await repo.loadPlayedDates(PROFILE)).toEqual([localDateString(START)]);
+  });
+
+  it('tells the profile which day was played, for the island\'s streak', async () => {
+    const markPlayed = vi.fn(async () => {});
+    const runner = runnerWith(new MemoryProgressRepo(), { markPlayed });
+    await runner.start();
+    await finishCleanly(runner);
+    expect(markPlayed).toHaveBeenCalledTimes(1);
+    expect(markPlayed).toHaveBeenCalledWith(localDateString(START));
+  });
+
+  it('does not count a day for a quest that was not finished', async () => {
+    const repo = new MemoryProgressRepo();
+    const markPlayed = vi.fn(async () => {});
+    const runner = runnerWith(repo, { markPlayed });
+    await runner.start();
+    await runner.answer(correctFor(taskOf(runner)));
+    await runner.answer(correctFor(taskOf(runner)));
+    expect(await repo.loadPlayedDates(PROFILE)).toEqual([]);
+    expect(markPlayed).not.toHaveBeenCalled();
+  });
+
+  it('records a second quest on the same day once only', async () => {
+    const repo = new MemoryProgressRepo();
+    for (let i = 0; i < 2; i += 1) {
+      const runner = runnerWith(repo);
+      await runner.start();
+      await finishCleanly(runner);
+    }
+    expect(await repo.loadPlayedDates(PROFILE)).toHaveLength(1);
+  });
+
+  it('still finishes, and says so, when the day could not be saved', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const repo = new MemoryProgressRepo();
+    vi.spyOn(repo, 'markPlayedOn').mockRejectedValue(new Error('disk full'));
+    const runner = runnerWith(repo, { markPlayed: async () => { throw new Error('nope'); } });
+    await runner.start();
+    await finishCleanly(runner);
+    expect(viewOf(runner).status).toBe('finished');
+    expect(await repo.loadActiveSession(PROFILE)).toBeNull();
+    error.mockRestore();
+  });
+
+  describe('level completion', () => {
+    /** Everything in the level mastered except /s/ by ear, which this quest's last task finishes. */
+    const almostThere = (): MasteryMap => {
+      const mastery = masteredLevelOne(START - 3_600_000);
+      const earlier: Attempt[] = ['sound-hunt', 'sound-hunt', 'picture-match'].map((taskTypeId, i) => ({
+        sessionId: 'earlier-A', targetId: 's', skill: 'SOUND_ID', taskTypeId,
+        correct: true, scaffolded: false, latencyMs: 1000, weight: 1, at: START - 3_600_000 + i,
+      }));
+      mastery[masteryKey('s', 'SOUND_ID')] = recordAttempts({}, earlier, DEFAULT_CONFIG)[masteryKey('s', 'SOUND_ID')];
+      return mastery;
+    };
+
+    const lastTaskCompletesTheLevel = (): TaskInstance[] => {
+      const full = buildSession({ sessionId: 'complete-1', level: 1, mastery: {}, confusions: {}, now: START });
+      const hunt = full.find((t) => t.taskTypeId === 'sound-hunt' && t.primaryTarget === 's');
+      const other = full.find((t) => t.taskTypeId === 'sound-singer' && t.primaryTarget !== 's');
+      if (!hunt || !other) throw new Error('expected suitable tasks in the plan');
+      return [other, hunt];
+    };
+
+    it('is a real setup: the level is not complete until the final task is answered', () => {
+      expect(levelProgress(1, almostThere(), START, DEFAULT_CONFIG).complete).toBe(false);
+    });
+
+    it('latches the level when the final task of the quest is what completes it', async () => {
+      // The check must come after the last outcome is recorded, or the answer
+      // that finishes the level is the one that does not count toward it.
+      const repo = new MemoryProgressRepo();
+      await repo.saveMastery(PROFILE, almostThere());
+      await storeQuest(repo, lastTaskCompletesTheLevel(), 0, { sessionId: 'quest-today' });
+      const runner = runnerWith(repo);
+      await runner.start();
+      await finishCleanly(runner);
+      expect(await repo.loadCompletions(PROFILE)).toEqual({ 1: START });
+    });
+
+    it('does not latch a level that is not yet complete', async () => {
+      const repo = new MemoryProgressRepo();
+      const runner = runnerWith(repo);
+      await runner.start();
+      await finishCleanly(runner);
+      expect(await repo.loadCompletions(PROFILE)).toEqual({});
+    });
+
+    it('does not latch a level just because a quest was finished', async () => {
+      const repo = new MemoryProgressRepo();
+      await repo.saveMastery(PROFILE, almostThere());
+      // A quest that never touches /s/ by ear: the level is still one short.
+      const full = buildSession({ sessionId: 'x', level: 1, mastery: {}, confusions: {}, now: START });
+      const other = full.filter((t) => t.primaryTarget !== 's').slice(0, 2);
+      await storeQuest(repo, other, 0, { sessionId: 'quest-today' });
+      const runner = runnerWith(repo);
+      await runner.start();
+      await finishCleanly(runner);
+      expect(await repo.loadCompletions(PROFILE)).toEqual({});
+    });
   });
 });

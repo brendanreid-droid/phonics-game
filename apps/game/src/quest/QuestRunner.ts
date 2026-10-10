@@ -18,6 +18,7 @@ import type {
 import { ENCOURAGE_KEYS, PRAISE_KEYS } from '@soundlings/audio';
 import type { AudioService } from '@soundlings/audio';
 import type { ActiveSession, ProgressRepo } from '../data/ProgressRepo';
+import { localDateString } from '../progress/streaks';
 import type { HintTier } from '../tasks/useHintLadder';
 import {
   applyClosingSwap,
@@ -50,6 +51,12 @@ export interface QuestDeps {
   repo: ProgressRepo;
   audio: AudioService;
   now: () => number;
+  /**
+   * Called once when a quest is finished, with the local date it was finished
+   * on. The profile repo keeps `lastPlayedOn` for the island's streak; this is
+   * how it hears about it, without the runner knowing profiles exist.
+   */
+  markPlayed?: (date: string) => Promise<void>;
   config?: EngineConfig;
   /**
    * How long a right answer is given to land before the next task replaces it,
@@ -353,6 +360,7 @@ export class QuestRunner {
           at: now(),
         }),
       );
+      await this.recordFinish();
       await this.safely(() => repo.saveActiveSession(profileId, null));
       const earned = this.earnedCreatures(now());
       const newCreatures = earned.filter((id) => !this.creaturesAtStart.includes(id));
@@ -380,6 +388,26 @@ export class QuestRunner {
     // A wrong-but-abandoned answer has nothing to celebrate, so it moves on.
     if (this.celebrateMs > 0) await this.settle(praised, this.celebrateMs);
     this.show(next);
+  }
+
+  /**
+   * The day played, and the level latched if the child has now finished it.
+   *
+   * Runs after the last outcome has been recorded into `this.mastery`, or the
+   * answer that completes a level would be the one that does not count toward
+   * it. Latching is what lets a finished level stay finished once its evidence
+   * decays (spec 5.7); the live calculation is left alone.
+   */
+  private async recordFinish(): Promise<void> {
+    const { repo, profileId, level, now, markPlayed } = this.deps;
+    const finishedAt = now();
+    const today = localDateString(finishedAt);
+
+    await this.safely(() => repo.markPlayedOn(profileId, today));
+    if (markPlayed) await this.safely(() => markPlayed(today));
+    if (levelProgress(level, this.mastery, finishedAt, this.config).complete) {
+      await this.safely(() => repo.markLevelComplete(profileId, level, finishedAt));
+    }
   }
 
   private settle(clip: Promise<void>, ms: number): Promise<void> {

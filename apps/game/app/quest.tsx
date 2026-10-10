@@ -1,18 +1,35 @@
 import { useEffect, useMemo } from 'react';
-import { useRouter } from 'expo-router';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { AudioService } from '@soundlings/audio';
 import { tokens } from '@soundlings/ui';
 import { ExpoClipPlayer } from '../src/audio/ExpoClipPlayer';
-import { AsyncStorageProgressRepo } from '../src/data/AsyncStorageProgressRepo';
+import { useProfile } from '../src/profiles/ProfileContext';
+import { levelFromParam } from '../src/progress/levelCards';
 import { useQuest } from '../src/quest/useQuest';
 import { componentFor } from '../src/tasks/registry';
 
-/** Plan 2 replaces this with the selected child profile. */
-const PROFILE_ID = 'dev-profile';
-
 export default function QuestScreen() {
+  const { ready, selected } = useProfile();
+
+  // A deep link, or storage cleared mid-quest: starting a quest nobody owns
+  // would write a child's progress under no one.
+  if (ready && selected === null) return <Redirect href="/" />;
+  if (!selected) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color={tokens.color.accent} />
+      </View>
+    );
+  }
+  return <Quest profileId={selected.id} />;
+}
+
+function Quest({ profileId }: { profileId: string }) {
   const router = useRouter();
+  const { progress, markPlayed } = useProfile();
+  const params = useLocalSearchParams<{ level?: string }>();
+  const level = levelFromParam(params.level);
 
   const audio = useMemo(() => {
     const player = new ExpoClipPlayer();
@@ -20,19 +37,25 @@ export default function QuestScreen() {
     return new AudioService(player);
   }, []);
 
-  const repo = useMemo(() => new AsyncStorageProgressRepo(), []);
   const now = useMemo(() => () => Date.now(), []);
 
-  const { state, answer } = useQuest({ profileId: PROFILE_ID, level: 1, repo, audio, now });
+  const { state, answer } = useQuest({
+    profileId,
+    level,
+    repo: progress,
+    audio,
+    now,
+    markPlayed: (date) => markPlayed(profileId, date),
+  });
 
   // Navigation is an effect, not something done while rendering.
   useEffect(() => {
     if (state.status !== 'finished') return;
     router.replace({
       pathname: '/results',
-      params: { stars: String(state.stars), creatures: state.newCreatures.join(',') },
+      params: { stars: String(state.stars), creatures: state.newCreatures.join(','), level: String(level) },
     });
-  }, [state.status, state.stars, state.newCreatures, router]);
+  }, [state.status, state.stars, state.newCreatures, level, router]);
 
   if (state.status === 'error') {
     return (
@@ -42,7 +65,7 @@ export default function QuestScreen() {
           accessibilityRole="button"
           accessibilityLabel="Back"
           style={styles.back}
-          onPress={() => router.replace('/')}
+          onPress={() => router.replace('/island')}
         >
           <Text style={styles.backText}>Back</Text>
         </Pressable>

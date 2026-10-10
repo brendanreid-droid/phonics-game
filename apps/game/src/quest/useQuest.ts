@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import type { AudioService } from '@soundlings/audio';
 import type { ProgressRepo } from '../data/ProgressRepo';
 import type { HintTier } from '../tasks/useHintLadder';
@@ -18,11 +18,26 @@ export function useQuest(args: {
   repo: ProgressRepo;
   audio: AudioService;
   now: () => number;
+  markPlayed?: (date: string) => Promise<void>;
 }): { state: QuestView; answer: (given: string, tier: HintTier) => void } {
   const { profileId, level, repo, audio, now } = args;
 
+  // Held in a ref and read when called, so that a new callback on every render
+  // does not rebuild the runner, which would restart the quest underneath the
+  // child. The runner needs only the latest one at the moment a quest finishes.
+  const markPlayedRef = useRef(args.markPlayed);
+  markPlayedRef.current = args.markPlayed;
+
   const runner = useMemo(
-    () => new QuestRunner({ profileId, level, repo, audio, now }),
+    () =>
+      new QuestRunner({
+        profileId,
+        level,
+        repo,
+        audio,
+        now,
+        markPlayed: (date) => markPlayedRef.current?.(date) ?? Promise.resolve(),
+      }),
     [profileId, level, repo, audio, now],
   );
 

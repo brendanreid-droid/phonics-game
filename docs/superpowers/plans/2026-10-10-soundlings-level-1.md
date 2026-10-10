@@ -24,6 +24,14 @@ You are assumed to be a competent developer who has never seen this codebase and
 - **Commit after every task.** Each task ends in a green test run and a commit.
 - Run all package tests with `npm test` from the repo root.
 
+## Review depth is deliberately uneven
+
+`packages/curriculum` and `packages/engine` get mutation testing: every important assertion is verified by breaking the implementation and confirming a named test fails. The app layer does not.
+
+That is a considered trade, not neglect. A wrong colour, a misaligned tile or a button that does nothing is visible in seconds on a simulator, and you will find it by looking. A mastery model that quietly marks a sound learned when the child got it wrong is invisible — it surfaces six months later as a child who cannot read, and nobody will know why. The engine is also where this plan has actually been wrong: the decay formula, the mastery clock, and an invariant that was mathematically unsatisfiable all passed a full green suite.
+
+So: logic that no human can eyeball gets adversarial testing. Pixels get a person looking at them.
+
 ---
 
 ## File structure

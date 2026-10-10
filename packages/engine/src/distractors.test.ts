@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { WORDS } from '@soundlings/curriculum';
 import { DEFAULT_CONFIG } from './config';
 import {
+  graphemeDistance,
   pickGraphemeDistractors,
   pickTileDistractors,
   pickWordDistractors,
@@ -340,6 +341,39 @@ describe('pickWordDistractors', () => {
     const first = pickWordDistractors({ target: 'sit', count: 2, level: 1, rng: makeRng(11) });
     const second = pickWordDistractors({ target: 'sit', count: 2, level: 1, rng: makeRng(11) });
     expect(first).toEqual(second);
+  });
+});
+
+describe('graphemeDistance', () => {
+  it('is 0 for identical graphemes', () => {
+    expect(graphemeDistance(['m', 'a', 't'], ['m', 'a', 't'])).toBe(0);
+  });
+
+  it('counts each differing position for equal-length words', () => {
+    expect(graphemeDistance(['m', 'a', 't'], ['m', 'a', 'p'])).toBe(1);
+    expect(graphemeDistance(['m', 'a', 't'], ['p', 'a', 't'])).toBe(1);
+    expect(graphemeDistance(['m', 'a', 't'], ['m', 'i', 'p'])).toBe(2);
+    expect(graphemeDistance(['m', 'a', 't'], ['s', 'i', 'p'])).toBe(3);
+  });
+
+  it('is symmetric for equal-length words', () => {
+    expect(graphemeDistance(['s', 'i', 't'], ['f', 'i', 'p'])).toBe(
+      graphemeDistance(['f', 'i', 'p'], ['s', 'i', 't']),
+    );
+  });
+
+  it('treats words of different length as maximally distant, in either argument order', () => {
+    // Even when the shorter word is a prefix of the longer one.
+    expect(graphemeDistance(['a', 't'], ['m', 'a', 't'])).toBe(3);
+    expect(graphemeDistance(['m', 'a', 't'], ['a', 't'])).toBe(3);
+    expect(graphemeDistance(['s', 'a', 't'], ['s', 'a', 't', 's'])).toBe(4);
+    expect(graphemeDistance(['s', 'a', 't', 's'], ['s', 'a', 't'])).toBe(4);
+  });
+
+  it('ranks a different-length word no closer than a same-length word differing everywhere', () => {
+    expect(graphemeDistance(['m', 'a', 't'], ['a', 't'])).toBeGreaterThanOrEqual(
+      graphemeDistance(['m', 'a', 't'], ['s', 'i', 'p']),
+    );
   });
 });
 

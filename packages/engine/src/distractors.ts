@@ -101,8 +101,14 @@ function unique<T>(items: readonly T[]): T[] {
   return [...new Set(items)];
 }
 
-/** How many positions differ. Different lengths count as maximally distant. */
-function graphemeDistance(a: readonly GraphemeId[], b: readonly GraphemeId[]): number {
+/**
+ * How many positions differ. Different lengths count as maximally distant.
+ *
+ * The different-length branch is unreachable via Level 1 data, because every
+ * picturable word there is CVC. It exists for the Level 2 blends (stop, slip,
+ * hand) and is covered by direct unit tests. Do not delete it as dead code.
+ */
+export function graphemeDistance(a: readonly GraphemeId[], b: readonly GraphemeId[]): number {
   if (a.length !== b.length) return Math.max(a.length, b.length);
   let distance = 0;
   for (let i = 0; i < a.length; i += 1) {

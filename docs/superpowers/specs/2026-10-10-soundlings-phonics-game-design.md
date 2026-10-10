@@ -213,16 +213,23 @@ One record per `(childProfileId, targetId, skill)`:
 
 ```ts
 interface MasteryRecord {
-  strength: number;        // 0..1, decayed on read
   halfLifeHours: number;
+  /**
+   * The decay clock. Advanced ONLY by an unscaffolded correct answer.
+   * See the warning below — this must never be the time of the last contact.
+   */
+  lastReinforcedAt: number;
+  /** Last contact of any kind. For display and for the overdue calculation only. */
   lastSeenAt: number;
-  correctCount: number;
+  correctCount: number;          // unscaffolded only; secondary credit adds 0.5
+  primaryCorrectCount: number;   // full-weight unscaffolded correct answers
   attemptCount: number;
   consecutiveCorrect: number;
   avgLatencyMs: number;
   taskTypesSeen: string[];       // mastery requires >= 2
-  sessionsSeen: number;
-  scaffoldedCount: number;       // scaffolded wins tracked but excluded from mastery
+  sessionsProven: number;        // sessions containing unscaffolded correct evidence
+  lastProvenSessionId: string | null;
+  scaffoldedCount: number;       // tracked, but excluded from mastery
 }
 ```
 
@@ -236,9 +243,21 @@ strength(now) = 0.5 ^ ( (now - lastSeenAt) / halfLifeHours )
 
 An earlier draft of this spec wrote this as `e^(-elapsed / halfLifeHours)`, which is wrong: that reaches 1/e ≈ 0.368 after one half-life, not 0.5, so the parameter was not a half-life at all and the model decayed by a factor of 1/ln2 ≈ 1.44 too fast. The equivalent correct form is `e^(-elapsed · ln2 / halfLifeHours)`. Any pacing intuition formed against the old formula is void — §5.7's quest estimates are calibrated by the simulation harness (§11) precisely so that an error like this surfaces as a failing test rather than as a child being asked the same sound for a fortnight.
 
-On a correct, unscaffolded, non-slow attempt: `halfLifeHours *= growthFactor` (start 1.9, tapering as `correctCount` rises).
-On an error: `halfLifeHours = max(minHalfLife, halfLifeHours * 0.4)` and `consecutiveCorrect = 0`.
-On a scaffolded correct: no half-life change. The child was helped; nothing was proven.
+On a correct, unscaffolded, non-slow attempt: `halfLifeHours *= growthFactor` (start 1.9, tapering as `correctCount` rises), and `lastReinforcedAt = now`.
+On an error: `halfLifeHours = max(minHalfLife, halfLifeHours * shrink)` and `consecutiveCorrect = 0`, where `shrink = 1 - (1 - errorShrink) * weight` so that a secondary target is penalised in proportion to how weak the evidence was. `lastReinforcedAt` does **not** move.
+On a scaffolded correct: no half-life change, no credit, and `lastReinforcedAt` does **not** move. The child was helped; nothing was proven.
+
+#### The decay clock is anchored to evidence, not to contact
+
+**This is the single easiest thing to get wrong in the whole engine, and an earlier draft of this spec got it wrong.** If strength decays from the time of the *last attempt* rather than the last *successful, unaided* attempt, then any contact resets recall to ~1. The consequences were verified against a real implementation:
+
+- A child who answered correctly three times yesterday and then got it **wrong** today was classified as mastered.
+- A child who was **shown the answer** was classified as mastered — the exact opposite of the rule two lines above.
+- A sound the child had **just failed** became eligible for the win-back slot, whose entire purpose is a guaranteed success. The quest would have opened and closed on the sound the child could not do.
+
+So: `strengthAt` reads `lastReinforcedAt`, and returns 0 when `primaryCorrectCount` is 0 (nothing has ever been proven, so there is nothing to decay). An error leaves the clock where it was and shrinks the half-life, which correctly drops strength sharply rather than restoring it.
+
+The same reasoning governs `sessionsProven`: it counts sessions containing unscaffolded correct evidence, not sessions containing an attempt. A session in which the child only failed or was only helped proves nothing and must not advance it.
 
 "Slow" = latency above a per-task-type threshold. A slow correct answer reinforces at half rate. Recognition that is correct but effortful is not yet automatic, and automaticity is the actual goal of phonics practice.
 
@@ -249,11 +268,16 @@ Mastery is evaluated at **session-build time**, not immediately after an answer 
 A target is **mastered** for a skill when **all** hold:
 
 1. `strength >= 0.8`
-2. `correctCount >= 3` (unscaffolded; secondary credit counts as 0.5 — see §4.4)
+2. `correctCount + ε >= 3` (unscaffolded; secondary credit counts as 0.5 — see §4.4)
 3. `taskTypesSeen.length >= 2`
-4. `sessionsSeen >= 2`
+4. `sessionsProven >= 2`
+5. `primaryCorrectCount >= 1`
 
 Conditions 3 and 4 are the important ones. (3) stops a child memorising the answer pattern of a single mini-game. (4) requires retention across a gap, not same-sitting recall.
+
+Condition 5 exists because without it a sound could be mastered entirely through secondary credit — that is, a child could be credited with knowing `/m/` having never once been asked `/m/` directly, purely from spelling words containing it. Secondary credit is meant to accelerate mastery, not to replace being asked.
+
+The `ε` in condition 2 is not pedantry. Secondary credit is currently 0.5, which is exact in binary floating point, so six half-credits sum to exactly 3. The simulation harness (§11) will retune `secondaryWeight`, and at 0.3 ten credits sum to 2.9999999999999996 — denying a child who has earned exactly the required evidence. Compare with a small epsilon.
 
 ### 5.4 Session builder
 

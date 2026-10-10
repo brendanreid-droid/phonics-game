@@ -1909,6 +1909,42 @@ git commit -m "feat(engine): add mastery predicate requiring two task types and 
 
 ---
 
+## Amendments to Tasks 6–9, after code review
+
+Tasks 6–9 were implemented, reviewed, and then substantially amended. The code blocks above are the *original* instructions and are now behind the committed code. **Where they differ, the code is correct.** A quality review ran 40 single-point mutations against the committed engine; 15 survived, meaning the suite did not protect the behaviour. These amendments close that.
+
+### The blocking bug: the decay clock was anchored to contact, not evidence
+
+`strengthAt` decayed from `lastSeenAt`, which advanced on *every* attempt. Any contact therefore reset recall to ~1. Verified against the real implementation:
+
+| Scenario | Wrong behaviour |
+|---|---|
+| Three clean correct answers in one session, then **wrong** the next day | classified as **mastered** |
+| Same, but the child is **shown the answer** | classified as **mastered** — the exact opposite of the scaffolding rule |
+| A sound the child has **just failed** | passes `strength >= winbackStrength`, so it becomes eligible for the win-back slot whose purpose is guaranteed success |
+
+The third is the one that would have reached a child: the session builder would have opened and closed a quest on the sound they had just got wrong.
+
+`MasteryRecord` now has `lastReinforcedAt` (the decay clock, advanced only by an unscaffolded correct answer), keeps `lastSeenAt` for display and the overdue calculation, renames `sessionsSeen` to `sessionsProven` (sessions containing unscaffolded correct evidence), and adds `primaryCorrectCount`. `strengthAt` decays from `lastReinforcedAt` and returns 0 when nothing has ever been proven. Spec §5.1–5.3 carry the full reasoning.
+
+### Other amendments
+
+| # | Change | Why |
+|---|---|---|
+| 1 | New `taskOutcome.ts` with `attemptsForTask` and `recordTaskResult` | Nothing built `Attempt[]` from a task result, so the quest runner and the simulation harness would each re-derive the weighting and could drift. `config.secondaryWeight` was read nowhere in `src`. This is now the only place weights are assigned |
+| 2 | Error shrink scales by weight: `1 - (1 - errorShrink) * weight` | A wrong word answer applied the *full* shrink to each of its sounds, penalising weak evidence as hard as direct evidence. The weaker-evidence rule applied on the way up but not on the way down |
+| 3 | `isMastered` additionally requires `primaryCorrectCount >= 1`; `weight` guarded to `(0, 1]` | A sound could be mastered entirely via secondary credit — credited as known without ever being asked. Weight 0 also recorded a task type, and a negative weight shrank the half-life |
+| 4 | Half-life clamped and required finite on read; `latencyMs` validated; `lastSeenAt` advanced with `Math.max` | A persisted record bypassed the clamps. `halfLife=0` with zero elapsed gave NaN, `halfLife=-1` gave strength 2. NaN fails `>=` silently, so a child would never master that sound with nothing visibly wrong |
+| 5 | Epsilon on the `correctCount` threshold | Safe at the current 0.5 weight, which is exact in binary. At a retuned 0.3, ten credits sum to 2.9999999999999996 and deny a child who earned exactly the required evidence |
+| 6 | `recordAttempts` takes one shallow copy and folds in place | It copied the whole map per attempt, and it is the hot call |
+| 7 | `deriveSeed(seed, index)` added to `rng.ts` | The session builder would otherwise reach for `sessionSeed + i` |
+| 8 | RNG tests rebuilt | Eight mutations survived: a biased shuffle, an early-stopping shuffle, a shuffle that mutates its input, a divisor that can emit exactly 1.0, a dropped xorshift, a changed constant, and `seedFromString` returning 0 or hashing one character. The "does not mutate the input" test was **vacuous** — its seed returned the identity permutation, so it could not fail |
+| 9 | Mastery tests added for `recordAttempts`, the skill dimension of `masteryKey`/`getRecord`, `confusionKey`, `withDefaults`, exact growth values, the slow-latency and strength boundaries, the scaffolded-wrong path, and the fields a scaffolded attempt must still advance | Each had a surviving mutation, so none of it was protected |
+
+Knock-on edits already applied to later tasks in this plan: Task 12's urgency score tests `attemptCount === 0` rather than `lastSeenAt === 0` (a clock starting at 0 would otherwise read every attempted record as unseen); Task 15 imports `recordTaskResult` instead of defining its own fold; Task 27 calls `recordTaskResult`.
+
+---
+
 ## Task 10: Task-type metadata
 
 **Files:**
@@ -2818,8 +2854,12 @@ function rankByUrgency(
   function urgency(pairing: Pairing): number {
     const record = getRecord(mastery, pairing.targetId, pairing.skill, config);
     const strength = strengthAt(record, now);
-    const elapsedHours = record.lastSeenAt === 0 ? 0 : (now - record.lastSeenAt) / 3_600_000;
-    const overdue = record.lastSeenAt === 0 ? 0 : elapsedHours / record.halfLifeHours;
+    // Test "never attempted" with attemptCount, NOT `lastSeenAt === 0`. A
+    // simulation (or a test) whose clock starts at 0 would otherwise read
+    // every freshly attempted record as never seen.
+    const unseen = record.attemptCount === 0;
+    const elapsedHours = unseen ? 0 : (now - record.lastSeenAt) / 3_600_000;
+    const overdue = unseen ? 0 : elapsedHours / record.halfLifeHours;
     return (1 - strength) * (1 + overdue);
   }
 }
@@ -3618,16 +3658,12 @@ export function simulateChild(args: SimulateArgs): SimulateResult {
         guard.record(task.primaryTarget, true);
       }
 
-      mastery = applyTaskOutcome({
+      mastery = recordTaskResult(
         mastery,
         task,
-        sessionId,
-        correct,
-        scaffolded,
-        latencyMs: latency,
-        at: now,
+        { sessionId, correct, scaffolded, latencyMs: latency, at: now },
         config,
-      });
+      );
 
       if (!correct) {
         const wrongChoice = task.choices.find((c) => c !== task.correctChoice);
@@ -3653,14 +3689,25 @@ export function simulateChild(args: SimulateArgs): SimulateResult {
   };
 }
 
-/**
- * Folds a completed task into the mastery map: full credit for the primary
- * target, half credit for each secondary target.
- *
- * Exported because the quest runner in apps/game must apply outcomes exactly
- * the same way the simulation does — if these ever diverge, the calibrated
- * pacing numbers stop describing the real game.
- */
+**Amended after review — do not implement the function below.** It was moved into the engine proper as `packages/engine/src/taskOutcome.ts`, exporting `attemptsForTask` and `recordTaskResult`, and it already exists by the time you reach this task.
+
+The reason it moved: it is the only place attempt weights are assigned, and defining it inside the simulation harness meant the quest runner would have had to re-derive the same fold — the primary attempt at full weight, one secondary attempt per grapheme at `config.secondaryWeight`, and the `chosen` handling. Two implementations of that would drift, and the moment they drift the calibrated pacing numbers stop describing the real game.
+
+So `simulate.ts` **imports** `recordTaskResult` rather than defining its own fold, and so does the quest runner in Task 27. Skip ahead to Step 4 of this task; the signature is:
+
+```ts
+recordTaskResult(
+  map: MasteryMap,
+  task: TaskInstance,
+  outcome: { sessionId: string; correct: boolean; scaffolded: boolean; latencyMs: number; chosen?: string; at: number },
+  config: EngineConfig,
+): MasteryMap
+```
+
+<details>
+<summary>Original, superseded instruction (kept for the record)</summary>
+
+```ts
 export function applyTaskOutcome(args: {
   mastery: MasteryMap;
   task: TaskInstance;
@@ -3708,6 +3755,8 @@ export function applyTaskOutcome(args: {
 }
 ```
 
+</details>
+
 - [ ] **Step 4: Run the test**
 
 Run: `npx vitest run packages/engine/src/simulate.test.ts`
@@ -3724,7 +3773,7 @@ Do **not** widen the test's range to make it pass. The ranges encode the claim t
 Add to `packages/engine/src/index.ts`:
 
 ```ts
-export { applyTaskOutcome, simulateChild } from './simulate';
+export { simulateChild } from './simulate';
 export type { ChildProfile, SimulateArgs, SimulateResult } from './simulate';
 ```
 
@@ -6291,7 +6340,7 @@ git commit -m "feat(game): add Word Builder with tap-to-place input and task reg
 
 The orchestrator. All the judgement lives in `judgeAnswer` and `advance`, which are plain functions so they can be tested without rendering.
 
-Critically, this applies outcomes through `applyTaskOutcome` from the engine — the same function the simulation uses. If the app ever folded outcomes differently, the calibrated pacing numbers would stop describing the real game.
+Critically, this applies outcomes through `recordTaskResult` from the engine — the same function the simulation uses. If the app ever folded outcomes differently, the calibrated pacing numbers would stop describing the real game. That function is the only place attempt weights are assigned, which is why it lives in the engine rather than in either caller.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -6448,10 +6497,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   DEFAULT_CONFIG,
   FrustrationGuard,
-  applyTaskOutcome,
   buildSession,
   levelProgress,
   recordConfusion,
+  recordTaskResult,
 } from '@soundlings/engine';
 import type { ConfusionMap, MasteryMap, TaskInstance } from '@soundlings/engine';
 import type { AudioService } from '@soundlings/audio';
@@ -6587,17 +6636,19 @@ export function useQuest(args: {
 
       // Record the outcome exactly as the simulation does, so the calibrated
       // pacing numbers continue to describe the real game.
-      mastery.current = applyTaskOutcome({
-        mastery: mastery.current,
+      mastery.current = recordTaskResult(
+        mastery.current,
         task,
-        sessionId: current.sessionId,
-        correct: judgement.correct || scaffolded,
-        scaffolded,
-        latencyMs,
-        at: now(),
+        {
+          sessionId: current.sessionId,
+          correct: judgement.correct || scaffolded,
+          scaffolded,
+          latencyMs,
+          at: now(),
+          ...(judgement.chosen === undefined ? {} : { chosen: judgement.chosen }),
+        },
         config,
-        ...(judgement.chosen === undefined ? {} : { chosen: judgement.chosen }),
-      });
+      );
 
       if (judgement.chosen !== undefined) {
         confusions.current = recordConfusion(confusions.current, task.primaryTarget, judgement.chosen);

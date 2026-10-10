@@ -161,6 +161,9 @@ export class AsyncStorageProgressRepo implements ProgressRepo {
       await AsyncStorage.setItem(key, JSON.stringify(value));
     } catch {
       // A failed write is survivable; a thrown error mid-quest is not.
+      // TODO(Plan 2): this swallows the failure completely, so a full disk
+      // silently leaves the saved resume point and attempt log stale. The quest
+      // runner may want to surface a failed save, e.g. via a returned flag.
     }
   }
 

@@ -43,6 +43,14 @@ class FakePlayer {
 const created: FakePlayer[] = [];
 const sources: unknown[] = [];
 
+// The generated map holds literal require() calls of .m4a files, which only
+// Metro can evaluate. Stand in a map with the same keys and a distinct number
+// per key; assetMap.test.ts is what proves the real map matches the manifest.
+vi.mock('./assetMap.generated', async () => {
+  const { manifestKeys } = await import('@soundlings/audio');
+  return { AUDIO_ASSETS: Object.fromEntries(manifestKeys().map((key, i) => [key, i + 1])) };
+});
+
 vi.mock('expo-audio', () => ({
   createAudioPlayer: (source: unknown) => {
     const p = new FakePlayer();
@@ -178,8 +186,18 @@ describe('ExpoClipPlayer', () => {
     expect(created[0].seeks).toEqual([0, 0]);
   });
 
-  it('throws on an unknown audio key rather than failing silently', async () => {
-    await expect(new ExpoClipPlayer().play('no.such.key')).rejects.toThrow('Unknown audio key');
+  it('throws on an unknown audio key, naming it, rather than failing silently', async () => {
+    await expect(new ExpoClipPlayer().play('no.such.key')).rejects.toThrow('Unknown audio key: no.such.key');
+    expect(created.length).toBe(0);
+  });
+
+  it('loads each clip from the bundled asset map, not from a path string', async () => {
+    const { manifestKeys } = await import('@soundlings/audio');
+    const keys = manifestKeys();
+    const player = new ExpoClipPlayer();
+    await player.preload([keys[0], keys[1]]);
+    expect(sources).toEqual([1, 2]);
+    expect(sources.every((source) => typeof source === 'number')).toBe(true);
   });
 
   it('configures the audio session to play through the silent switch', async () => {

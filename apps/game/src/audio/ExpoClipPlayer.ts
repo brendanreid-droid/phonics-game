@@ -1,6 +1,6 @@
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
-import { audioPath } from '@soundlings/audio';
 import type { ClipPlayer } from '@soundlings/audio';
+import { AUDIO_ASSETS } from './assetMap.generated';
 
 type Player = ReturnType<typeof createAudioPlayer>;
 
@@ -123,20 +123,20 @@ export class ExpoClipPlayer implements ClipPlayer {
 }
 
 /**
- * Metro requires statically analysable require() calls for assets, so the
- * manifest path is mapped to a bundled module here. `audioPath` throws on an
- * unknown key, which keeps a typo loud instead of silent.
+ * Looks the clip up in the generated require map. Metro bundles an asset only
+ * when it sees a literal `require()` of it, so a path assembled at runtime from
+ * the manifest would point at a file that was never included. The map is
+ * generated from the manifest by scripts/generate-audio-asset-map.ts, and a
+ * test fails if the two drift.
  *
- * RELEASE WARNING: bundled assets need real require() calls for Metro to
- * include them. This returns a URI, which is only expected to work in
- * development via the asset server; a standalone build will not contain the
- * clips. Before building a standalone app, replace the body with a generated
- * `ASSETS` map of literal
- * `require('../../assets/voice/placeholder-au/ph.s.m4a')` entries. Writing
- * that generator is Plan 2 work: it is not needed to reach the review gate,
- * and noting it here is cheaper than discovering it during a release build.
+ * Throws on an unknown key, like `audioPath` does: a typo that fails silently
+ * leaves a child looking at a screen that asked them nothing.
+ *
+ * Release note: this used to return a bare relative URI, which resolves
+ * nowhere. That is now handled; clips are bundled by the generated require map.
  */
-function resolveAsset(key: string): { uri: string } {
-  const relative = audioPath(key);
-  return { uri: relative };
+function resolveAsset(key: string): number {
+  const asset = AUDIO_ASSETS[key];
+  if (asset === undefined) throw new Error(`Unknown audio key: ${key}`);
+  return asset;
 }

@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_CONFIG,
+  applyAttempt,
   attemptsForTask,
   buildSession,
   emptyRecord,
+  levelProgress,
+  masteryKey,
   recordAttempts,
   recordTaskResult,
 } from '@soundlings/engine';
+import type { Skill } from '@soundlings/curriculum';
 import type { Attempt, MasteryMap, TaskInstance } from '@soundlings/engine';
 import type { ActiveSession, ProgressRepo } from './ProgressRepo';
 
@@ -31,6 +35,33 @@ function veteranMastery(): MasteryMap {
       );
     }
   }
+  return mastery;
+}
+
+/**
+ * A mastery map in which every Level 1 requirement is met at NOW: all seven
+ * sounds in both skills, six words to read and five to spell. The same
+ * construction completion.test.ts in the engine uses for its quotas.
+ */
+function masteredLevelOne(): MasteryMap {
+  const mastery: MasteryMap = {};
+  const master = (targetId: string, skill: Skill): void => {
+    let record = emptyRecord(targetId, skill, DEFAULT_CONFIG);
+    const base: Attempt = {
+      sessionId: '', targetId, skill, taskTypeId: 'sound-hunt',
+      correct: true, scaffolded: false, latencyMs: 800, weight: 1, at: NOW,
+    };
+    record = applyAttempt(record, { ...base, sessionId: 'one', taskTypeId: 'sound-hunt' }, DEFAULT_CONFIG);
+    record = applyAttempt(record, { ...base, sessionId: 'two', taskTypeId: 'word-builder' }, DEFAULT_CONFIG);
+    record = applyAttempt(record, { ...base, sessionId: 'three', taskTypeId: 'picture-match' }, DEFAULT_CONFIG);
+    mastery[masteryKey(targetId, skill)] = record;
+  };
+  for (const g of ['s', 'a', 't', 'p', 'i', 'm', 'f']) {
+    master(g, 'SOUND_ID');
+    master(g, 'LETTER_SOUND');
+  }
+  for (const w of ['pat', 'tap', 'pit', 'sit', 'sip', 'pip']) master(w, 'BLEND_READ');
+  for (const w of ['sat', 'tip', 'sap', 'mat', 'map']) master(w, 'SEGMENT_SPELL');
   return mastery;
 }
 
@@ -335,6 +366,172 @@ export function describeProgressRepo(name: string, fresh: () => ProgressRepo): v
         await store.saveHighScore('kid', { level: 2, stars: 1, cleanRun: false, at: NOW + 1 });
         const scores = await store.loadHighScores('kid');
         expect(scores.map((s) => s.level).sort()).toEqual([1, 2]);
+      });
+    });
+
+    describe('level completions', () => {
+      it('has no completed levels for a new child', async () => {
+        const store = fresh();
+        expect(await store.loadCompletions('kid')).toEqual({});
+      });
+
+      it('latches a level completion with the time it happened', async () => {
+        const store = fresh();
+        await store.markLevelComplete('kid', 1, 1000);
+        expect(await store.loadCompletions('kid')).toEqual({ 1: 1000 });
+      });
+
+      it('keeps the FIRST completion time, not the most recent', async () => {
+        // The badge is "you did this", not "you did this most recently".
+        const store = fresh();
+        await store.markLevelComplete('kid', 1, 1000);
+        await store.markLevelComplete('kid', 1, 5000);
+        expect(await store.loadCompletions('kid')).toEqual({ 1: 1000 });
+      });
+
+      it('keeps the first time even when an earlier-stamped call arrives later', async () => {
+        // "First" means first latched, not smallest number: a clock that moved
+        // backwards must not be able to rewrite when the child did it.
+        const store = fresh();
+        await store.markLevelComplete('kid', 1, 5000);
+        await store.markLevelComplete('kid', 1, 1000);
+        expect(await store.loadCompletions('kid')).toEqual({ 1: 5000 });
+      });
+
+      it('keeps the first of two simultaneous completions: call order, none lost', async () => {
+        const store = fresh();
+        await Promise.all([
+          store.markLevelComplete('kid', 1, 1000),
+          store.markLevelComplete('kid', 1, 5000),
+          store.markLevelComplete('kid', 2, 7000),
+        ]);
+        expect(await store.loadCompletions('kid')).toEqual({ 1: 1000, 2: 7000 });
+      });
+
+      it('latches levels independently, and a later level does not disturb an earlier', async () => {
+        const store = fresh();
+        await store.markLevelComplete('kid', 1, 1000);
+        await store.markLevelComplete('kid', 2, 2000);
+        expect(await store.loadCompletions('kid')).toEqual({ 1: 1000, 2: 2000 });
+      });
+
+      it('reads back with the level as a number key, whatever the storage does to it', async () => {
+        const store = fresh();
+        await store.markLevelComplete('kid', 1, 1000);
+        expect((await store.loadCompletions('kid'))[1]).toBe(1000);
+      });
+
+      it('keeps completions per profile', async () => {
+        const store = fresh();
+        await store.markLevelComplete('a', 1, 1000);
+        expect(await store.loadCompletions('b')).toEqual({});
+        expect(await store.loadCompletions('')).toEqual({});
+      });
+
+      it('does not let one profile id shadow another that shares a prefix', async () => {
+        const store = fresh();
+        await store.markLevelComplete('kid', 1, 1000);
+        expect(await store.loadCompletions('kid2')).toEqual({});
+        expect(await store.loadCompletions('ki')).toEqual({});
+      });
+
+      it('is not changed by mutating a loaded copy', async () => {
+        const store = fresh();
+        await store.markLevelComplete('kid', 1, 1000);
+        const loaded = await store.loadCompletions('kid');
+        loaded[1] = 99;
+        loaded[2] = 99;
+        expect(await store.loadCompletions('kid')).toEqual({ 1: 1000 });
+      });
+
+      it('never un-completes a level, however much else is saved afterwards', async () => {
+        // The badge is independent of everything the live calculation reads.
+        // Resetting or replacing mastery, clearing a quest, adding attempts and
+        // scores must all leave it alone.
+        const store = fresh();
+        await store.markLevelComplete('kid', 1, 1000);
+        await store.saveMastery('kid', {});
+        await store.saveConfusions('kid', {});
+        await store.appendAttempt('kid', attempt({ correct: false }));
+        await store.saveActiveSession('kid', sessionFor([], 0));
+        await store.saveActiveSession('kid', null);
+        await store.saveHighScore('kid', { level: 1, stars: 1, cleanRun: false, at: NOW });
+        await store.markPlayedOn('kid', '2026-10-10');
+        expect(await store.loadCompletions('kid')).toEqual({ 1: 1000 });
+      });
+
+      it('keeps a level complete after the live calculation says it is not', async () => {
+        // The reason this exists. Strength decays, so a level that was complete
+        // reads as incomplete later; the latch has to outlive that.
+        const store = fresh();
+        const mastery = masteredLevelOne();
+        expect(levelProgress(1, mastery, NOW).complete).toBe(true);
+        await store.saveMastery('kid', mastery);
+        await store.markLevelComplete('kid', 1, NOW);
+
+        const muchLater = NOW + 5000 * HOUR;
+        expect(levelProgress(1, await store.loadMastery('kid'), muchLater).complete).toBe(false);
+        expect(await store.loadCompletions('kid')).toEqual({ 1: NOW });
+      });
+    });
+
+    describe('days played', () => {
+      it('has no played dates for a new child', async () => {
+        const store = fresh();
+        expect(await store.loadPlayedDates('kid')).toEqual([]);
+      });
+
+      it('records each day played once', async () => {
+        const store = fresh();
+        await store.markPlayedOn('kid', '2026-10-10');
+        await store.markPlayedOn('kid', '2026-10-10');
+        await store.markPlayedOn('kid', '2026-10-11');
+        expect(await store.loadPlayedDates('kid')).toEqual(['2026-10-10', '2026-10-11']);
+      });
+
+      it('returns played dates in order whatever order they arrive in', async () => {
+        const store = fresh();
+        await store.markPlayedOn('kid', '2026-10-11');
+        await store.markPlayedOn('kid', '2026-10-09');
+        await store.markPlayedOn('kid', '2026-10-10');
+        expect(await store.loadPlayedDates('kid')).toEqual(['2026-10-09', '2026-10-10', '2026-10-11']);
+      });
+
+      it('orders across month and year boundaries', async () => {
+        const store = fresh();
+        for (const d of ['2027-01-01', '2026-12-31', '2026-11-02', '2026-10-31']) await store.markPlayedOn('kid', d);
+        expect(await store.loadPlayedDates('kid')).toEqual(['2026-10-31', '2026-11-02', '2026-12-31', '2027-01-01']);
+      });
+
+      it('keeps every day when several are recorded at once, each once', async () => {
+        const store = fresh();
+        await Promise.all(
+          ['2026-10-03', '2026-10-01', '2026-10-03', '2026-10-02', '2026-10-01'].map((d) => store.markPlayedOn('kid', d)),
+        );
+        expect(await store.loadPlayedDates('kid')).toEqual(['2026-10-01', '2026-10-02', '2026-10-03']);
+      });
+
+      it('keeps played dates per profile', async () => {
+        const store = fresh();
+        await store.markPlayedOn('a', '2026-10-10');
+        expect(await store.loadPlayedDates('b')).toEqual([]);
+        expect(await store.loadPlayedDates('a2')).toEqual([]);
+      });
+
+      it('is not changed by mutating a loaded copy', async () => {
+        const store = fresh();
+        await store.markPlayedOn('kid', '2026-10-10');
+        const loaded = await store.loadPlayedDates('kid');
+        loaded.push('2030-01-01');
+        loaded[0] = 'tampered';
+        expect(await store.loadPlayedDates('kid')).toEqual(['2026-10-10']);
+      });
+
+      it('does not disturb completions, which live beside it', async () => {
+        const store = fresh();
+        await Promise.all([store.markPlayedOn('kid', '2026-10-10'), store.markLevelComplete('kid', 1, 1000)]);
+        expect(await store.loadPlayedDates('kid')).toEqual(['2026-10-10']);
+        expect(await store.loadCompletions('kid')).toEqual({ 1: 1000 });
       });
     });
   });

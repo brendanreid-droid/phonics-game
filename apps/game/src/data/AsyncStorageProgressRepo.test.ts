@@ -85,6 +85,31 @@ describe('AsyncStorageProgressRepo on a device', () => {
     expect((await second.loadHighScores('kid'))[0].stars).toBe(2);
   });
 
+  it('survives a restart for latched levels and days played', async () => {
+    const first = new AsyncStorageProgressRepo();
+    await first.markLevelComplete('kid', 1, 1000);
+    await first.markPlayedOn('kid', '2026-10-11');
+    await first.markPlayedOn('kid', '2026-10-10');
+
+    const second = new AsyncStorageProgressRepo();
+    expect(await second.loadCompletions('kid')).toEqual({ 1: 1000 });
+    expect(await second.loadPlayedDates('kid')).toEqual(['2026-10-10', '2026-10-11']);
+
+    // First still wins after a restart: a second instance cannot overwrite it.
+    await second.markLevelComplete('kid', 1, 9999);
+    expect(await new AsyncStorageProgressRepo().loadCompletions('kid')).toEqual({ 1: 1000 });
+  });
+
+  it('two instances over one store do not lose each other\'s completions or days when run in turn', async () => {
+    await new AsyncStorageProgressRepo().markLevelComplete('kid', 1, 1000);
+    await new AsyncStorageProgressRepo().markLevelComplete('kid', 2, 2000);
+    await new AsyncStorageProgressRepo().markPlayedOn('kid', '2026-10-10');
+    await new AsyncStorageProgressRepo().markPlayedOn('kid', '2026-10-11');
+    const repo = new AsyncStorageProgressRepo();
+    expect(await repo.loadCompletions('kid')).toEqual({ 1: 1000, 2: 2000 });
+    expect(await repo.loadPlayedDates('kid')).toEqual(['2026-10-10', '2026-10-11']);
+  });
+
   it('removes the stored key when the session is cleared, rather than storing "null"', async () => {
     const repo = new AsyncStorageProgressRepo();
     await repo.saveActiveSession('kid', { sessionId: 'q', level: 1, plan: [], index: 0, stars: 0, startedAt: NOW });
@@ -154,6 +179,76 @@ describe('AsyncStorageProgressRepo on a device', () => {
         repo.saveActiveSession('kid', { sessionId: 'q', level: 1, plan: [], index: 0, stars: 0, startedAt: NOW }),
       ).resolves.toBeUndefined();
       await expect(repo.saveHighScore('kid', { level: 1, stars: 1, cleanRun: false, at: NOW })).resolves.toBeUndefined();
+    });
+
+    it('never destroys latched levels when a read fails: the latch is skipped instead', async () => {
+      const repo = new AsyncStorageProgressRepo();
+      await repo.markLevelComplete('kid', 1, 1000);
+      const before = fake.state.data.get('soundlings/kid/completions');
+
+      fake.state.failGet = (key) => key.endsWith('/completions');
+      await expect(repo.markLevelComplete('kid', 2, 2000)).resolves.toBeUndefined();
+      expect(fake.state.data.get('soundlings/kid/completions')).toBe(before);
+
+      fake.state.failGet = () => false;
+      expect(await repo.loadCompletions('kid')).toEqual({ 1: 1000 });
+      await repo.markLevelComplete('kid', 2, 3000);
+      expect(await repo.loadCompletions('kid')).toEqual({ 1: 1000, 2: 3000 });
+    });
+
+    it('never destroys the played days when a read fails: the day is skipped instead', async () => {
+      const repo = new AsyncStorageProgressRepo();
+      await repo.markPlayedOn('kid', '2026-10-10');
+      const before = fake.state.data.get('soundlings/kid/playedDates');
+
+      fake.state.failGet = (key) => key.endsWith('/playedDates');
+      await expect(repo.markPlayedOn('kid', '2026-10-11')).resolves.toBeUndefined();
+      expect(fake.state.data.get('soundlings/kid/playedDates')).toBe(before);
+
+      fake.state.failGet = () => false;
+      expect(await repo.loadPlayedDates('kid')).toEqual(['2026-10-10']);
+    });
+
+    it('quarantines damaged completions and played days instead of overwriting them', async () => {
+      fake.state.data.set('soundlings/kid/completions', '{"1":170');
+      fake.state.data.set('soundlings/kid/playedDates', '["2026-10-1');
+      const repo = new AsyncStorageProgressRepo();
+
+      expect(await repo.loadCompletions('kid')).toEqual({});
+      expect(await repo.loadPlayedDates('kid')).toEqual([]);
+      await repo.markLevelComplete('kid', 1, 1000);
+      await repo.markPlayedOn('kid', '2026-10-10');
+
+      expect(await repo.loadCompletions('kid')).toEqual({ 1: 1000 });
+      expect(await repo.loadPlayedDates('kid')).toEqual(['2026-10-10']);
+      expect(fake.state.data.get('soundlings/kid/completions.corrupt')).toBe('{"1":170');
+      expect(fake.state.data.get('soundlings/kid/playedDates.corrupt')).toBe('["2026-10-1');
+    });
+
+    it('treats valid JSON of the wrong shape as damaged, not as data', async () => {
+      fake.state.data.set('soundlings/kid/completions', '[1,2,3]');
+      fake.state.data.set('soundlings/kid2/completions', '{"1":"yesterday"}');
+      fake.state.data.set('soundlings/kid/playedDates', '{"0":"2026-10-10"}');
+      fake.state.data.set('soundlings/kid2/playedDates', '["2026-10-10",7]');
+      const repo = new AsyncStorageProgressRepo();
+      expect(await repo.loadCompletions('kid')).toEqual({});
+      expect(await repo.loadCompletions('kid2')).toEqual({});
+      expect(await repo.loadPlayedDates('kid')).toEqual([]);
+      expect(await repo.loadPlayedDates('kid2')).toEqual([]);
+    });
+
+    it('does not throw from the new loads when storage is unreadable, or the new saves when it is full', async () => {
+      const repo = new AsyncStorageProgressRepo();
+      fake.state.failGet = () => true;
+      expect(await repo.loadCompletions('kid')).toEqual({});
+      expect(await repo.loadPlayedDates('kid')).toEqual([]);
+      await expect(repo.markLevelComplete('kid', 1, 1000)).resolves.toBeUndefined();
+      await expect(repo.markPlayedOn('kid', '2026-10-10')).resolves.toBeUndefined();
+
+      fake.state.failGet = () => false;
+      fake.state.failSet = () => true;
+      await expect(repo.markLevelComplete('kid', 1, 1000)).resolves.toBeUndefined();
+      await expect(repo.markPlayedOn('kid', '2026-10-10')).resolves.toBeUndefined();
     });
 
     it('keeps working after a failed operation: one failure does not wedge the queue', async () => {

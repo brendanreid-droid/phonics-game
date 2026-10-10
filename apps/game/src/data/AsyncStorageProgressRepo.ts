@@ -20,6 +20,9 @@ type ReadResult<T> =
 const isArray = (value: unknown): value is unknown[] => Array.isArray(value);
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+const isCompletions = (value: unknown): boolean =>
+  isPlainObject(value) && Object.values(value).every((at) => typeof at === 'number' && Number.isFinite(at));
+const isDateList = (value: unknown): boolean => isArray(value) && value.every((d) => typeof d === 'string');
 
 /**
  * Device-backed ProgressRepo. JSON in AsyncStorage is more than adequate at
@@ -123,6 +126,48 @@ export class AsyncStorageProgressRepo implements ProgressRepo {
       if (result.kind === 'corrupt') await this.quarantine(key, result.raw);
       const existing = result.kind === 'ok' ? result.value : [];
       await this.write(key, mergeHighScore(existing, score));
+    });
+  }
+
+  loadCompletions(profileId: string): Promise<Record<number, number>> {
+    return this.serial(async () => {
+      const result = await this.read<Record<number, number>>(this.key(profileId, 'completions'), isCompletions);
+      return result.kind === 'ok' ? result.value : {};
+    });
+  }
+
+  markLevelComplete(profileId: string, level: number, at: number): Promise<void> {
+    // Reads and writes inside one queued step: calling loadCompletions from in
+    // here would queue behind this very step and never return.
+    return this.serial(async () => {
+      const key = this.key(profileId, 'completions');
+      const result = await this.read<Record<number, number>>(key, isCompletions);
+      // Could not read what is already latched; writing now would replace every
+      // badge the child has with this one.
+      if (result.kind === 'io') return;
+      if (result.kind === 'corrupt') await this.quarantine(key, result.raw);
+      const existing = result.kind === 'ok' ? result.value : {};
+      if (existing[level] !== undefined) return;
+      await this.write(key, { ...existing, [level]: at });
+    });
+  }
+
+  loadPlayedDates(profileId: string): Promise<string[]> {
+    return this.serial(async () => {
+      const result = await this.read<string[]>(this.key(profileId, 'playedDates'), isDateList);
+      return result.kind === 'ok' ? result.value : [];
+    });
+  }
+
+  markPlayedOn(profileId: string, date: string): Promise<void> {
+    return this.serial(async () => {
+      const key = this.key(profileId, 'playedDates');
+      const result = await this.read<string[]>(key, isDateList);
+      if (result.kind === 'io') return;
+      if (result.kind === 'corrupt') await this.quarantine(key, result.raw);
+      const existing = result.kind === 'ok' ? result.value : [];
+      if (existing.includes(date)) return;
+      await this.write(key, [...existing, date].sort());
     });
   }
 

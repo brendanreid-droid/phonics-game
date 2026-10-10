@@ -8,6 +8,8 @@ interface ProfileState {
   confusions: ConfusionMap;
   activeSession: ActiveSession | null;
   highScores: HighScore[];
+  completions: Record<number, number>;
+  playedDates: string[];
 }
 
 /**
@@ -72,6 +74,28 @@ export class MemoryProgressRepo implements ProgressRepo {
     state.highScores = mergeHighScore(state.highScores, copy(score));
   }
 
+  async loadCompletions(profileId: string): Promise<Record<number, number>> {
+    return copy(this.state(profileId).completions);
+  }
+
+  async markLevelComplete(profileId: string, level: number, at: number): Promise<void> {
+    const completions = this.state(profileId).completions;
+    // First wins: the badge records when they did it, not when we last noticed.
+    if (completions[level] === undefined) completions[level] = at;
+  }
+
+  async loadPlayedDates(profileId: string): Promise<string[]> {
+    return copy(this.state(profileId).playedDates);
+  }
+
+  async markPlayedOn(profileId: string, date: string): Promise<void> {
+    const state = this.state(profileId);
+    if (!state.playedDates.includes(date)) {
+      state.playedDates.push(date);
+      state.playedDates.sort();
+    }
+  }
+
   private state(profileId: string): ProfileState {
     const existing = this.profiles.get(profileId);
     if (existing) return existing;
@@ -81,6 +105,8 @@ export class MemoryProgressRepo implements ProgressRepo {
       confusions: {},
       activeSession: null,
       highScores: [],
+      completions: {},
+      playedDates: [],
     };
     this.profiles.set(profileId, created);
     return created;

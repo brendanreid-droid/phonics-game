@@ -55,6 +55,24 @@ export interface ProgressRepo {
 
   loadHighScores(profileId: string): Promise<HighScore[]>;
   saveHighScore(profileId: string, score: HighScore): Promise<void>;
+
+  /** Level number → epoch ms of the FIRST time it was completed. */
+  loadCompletions(profileId: string): Promise<Record<number, number>>;
+  /**
+   * Latches a level as complete. Idempotent, and keeps the earliest time.
+   *
+   * Required by spec §5.7: `levelProgress` is evaluated at `now`, so a level
+   * finished yesterday reads as unfinished today once strength decays, and a
+   * single wrong answer un-masters a target. The live calculation is correct
+   * and stays as it is — it answers "what can they do right now?", which the
+   * island home and the session builder both need. This is the badge, and a
+   * child must never lose a level they have finished.
+   */
+  markLevelComplete(profileId: string, level: number, at: number): Promise<void>;
+
+  /** Local YYYY-MM-DD dates on which a quest was finished, ascending, each once. */
+  loadPlayedDates(profileId: string): Promise<string[]>;
+  markPlayedOn(profileId: string, date: string): Promise<void>;
 }
 
 /** Merges a score in, keeping the best per level. Shared by all implementations. */

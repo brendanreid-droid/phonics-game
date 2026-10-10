@@ -231,8 +231,10 @@ interface MasteryRecord {
 Strength is not stored as a current value; it is computed on read:
 
 ```
-strength(now) = e^( -(now - lastSeenAt) / halfLifeHours )
+strength(now) = 0.5 ^ ( (now - lastSeenAt) / halfLifeHours )
 ```
+
+An earlier draft of this spec wrote this as `e^(-elapsed / halfLifeHours)`, which is wrong: that reaches 1/e ≈ 0.368 after one half-life, not 0.5, so the parameter was not a half-life at all and the model decayed by a factor of 1/ln2 ≈ 1.44 too fast. The equivalent correct form is `e^(-elapsed · ln2 / halfLifeHours)`. Any pacing intuition formed against the old formula is void — §5.7's quest estimates are calibrated by the simulation harness (§11) precisely so that an error like this surfaces as a failing test rather than as a child being asked the same sound for a fortnight.
 
 On a correct, unscaffolded, non-slow attempt: `halfLifeHours *= growthFactor` (start 1.9, tapering as `correctCount` rises).
 On an error: `halfLifeHours = max(minHalfLife, halfLifeHours * 0.4)` and `consecutiveCorrect = 0`.

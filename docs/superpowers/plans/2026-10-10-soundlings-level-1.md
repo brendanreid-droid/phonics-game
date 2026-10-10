@@ -1343,6 +1343,10 @@ function sourceFiles(): string[] {
 }
 ```
 
+**Amended after review.** The version above is too weak and was replaced. It reads only the top level of `src`, so a file in a subdirectory escapes every check, and its banned-pattern list would not catch an undeclared cross-package import — which is this package's realistic failure mode, since `engine` may import `@soundlings/curriculum` and nothing else.
+
+The committed version matches the curriculum package's approach: walk `src` recursively, and require every import specifier to be either relative and resolving inside `src`, or present in an explicit allowlist (here `['@soundlings/curriculum']`). It also keeps two sanity tests that exist because each check could otherwise pass vacuously — one asserting the file walk finds known files, one asserting specifier extraction returns specifiers.
+
 - [ ] **Step 9: Run the tests to verify they pass**
 
 Run: `npm install && npx vitest run packages/engine`
@@ -1471,7 +1475,10 @@ export function emptyRecord(targetId: TargetId, skill: Skill, config: EngineConf
 export function strengthAt(record: MasteryRecord, now: number): number {
   if (record.attemptCount === 0) return 0;
   const elapsedHours = Math.max(0, now - record.lastSeenAt) / MS_PER_HOUR;
-  return Math.exp(-elapsedHours / record.halfLifeHours);
+  // 0.5^(t/h), not e^(-t/h). The latter reaches 1/e after one half-life, not
+  // a half, so it would decay 1/ln2 times too fast and "half-life" would be
+  // a lie. The tests below pin the correct behaviour.
+  return Math.pow(0.5, elapsedHours / record.halfLifeHours);
 }
 ```
 
@@ -3706,7 +3713,11 @@ export function applyTaskOutcome(args: {
 Run: `npx vitest run packages/engine/src/simulate.test.ts`
 Expected: PASS, 7 tests.
 
-If a range assertion fails, tune `DEFAULT_CONFIG` — most likely `masteryCorrect`, `secondaryWeight`, or `initialHalfLifeHours` — and re-run. Record what you changed in the commit message. Do not widen the test's range: the ranges are the product promise.
+**Expect this to fail on the first run, and expect to do real tuning here.** `DEFAULT_CONFIG` has never been calibrated against a working engine — the numbers in it were chosen by eye when the plan was written, and the decay formula has since been corrected (it was decaying 1/ln2 ≈ 1.44 times too fast, see Task 7). This task is where the real numbers get found, not where previous guesses get confirmed.
+
+If a range assertion fails, tune `DEFAULT_CONFIG` — most likely `masteryCorrect`, `secondaryWeight`, `initialHalfLifeHours` or `growthFactor` — and re-run. Record what you changed, and to what, in the commit message, because those values are the product's pacing promise and someone will want to know why they are what they are.
+
+Do **not** widen the test's range to make it pass. The ranges encode the claim that a strong child finishes Level 1 in materially less work than the 40-game competitor while a struggling child gets more practice; if the engine cannot deliver that, the config is wrong, or the design is, and either is worth knowing.
 
 - [ ] **Step 5: Export the harness and run everything**
 

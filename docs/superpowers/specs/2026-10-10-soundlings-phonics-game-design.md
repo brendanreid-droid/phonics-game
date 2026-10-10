@@ -20,7 +20,7 @@ Where it is weak, and what we do instead:
 
 | Phonics Hero | Soundlings |
 |---|---|
-| 40 fixed games per level, identical for every child | Level completes on proven mastery. Fast child ~5 quests, struggling child ~12. |
+| 40 fixed games per level, identical for every child | Level completes on **proven mastery** — a child who finishes can demonstrably read the words. Quest counts are measured, not promised: see §5.7 |
 | Linear sequence — known sounds re-drilled, weak sounds under-practised | Per-grapheme, per-skill mastery model with spaced repetition |
 | Random wrong answers | Distractors drawn from the child's own logged confusion pairs (b/d, m/n, f/th) |
 | Never hears the child | Voice tasks architected from day one (built post-v1) |
@@ -201,7 +201,11 @@ interface TaskInstance {
 
 A correct Word Builder on `sat` is direct evidence the child can segment /s/ /a/ /t/, so it credits `SOUND_ID` for `s`, `a` and `t` as well as `SEGMENT_SPELL` for `sat`. Secondary credit counts at **half weight** toward `correctCount` and reinforces half-life at half rate — it is real evidence, but weaker than an isolated test.
 
-This is not an optimisation bolted on; it is how phonics actually works, and without it the arithmetic does not close. Isolated single-target crediting would require ~84 correct attempts to finish Level 1 — about 7 quests of flawless play, which would make us *slower* than the 40-game competitor we are trying to beat. With composite crediting, a strong child finishes in ~5 quests (~25 min) and a struggling child in ~12, with the extra time spent on review and scaffolding rather than on content they already know.
+This is not an optimisation bolted on; it is how phonics actually works. Isolated single-target crediting would require ~84 correct attempts to finish Level 1.
+
+**It does not make us faster than the competitor, and an earlier draft of this spec wrongly claimed it did.** Composite credit reaches only `SOUND_ID`, so the seven `LETTER_SOUND` records, the blend-reading words and the spelling words all still need direct practice. Simulation puts a strong child well above the 5 quests this spec once asserted. §1.1 and §5.7 now carry measured figures instead of guesses.
+
+What composite crediting actually buys is that time spent spelling `sat` is not *wasted* on the sounds inside it — which matters, but is a different and smaller claim than the one originally made.
 
 ---
 
@@ -269,7 +273,7 @@ A target is **mastered** for a skill when **all** hold:
 
 1. `strength >= 0.8`
 2. `correctCount + ε >= 3` (unscaffolded; secondary credit counts as 0.5 — see §4.4)
-3. `taskTypesSeen.length >= 2`
+3. `taskTypesSeen.length >= min(2, provingTaskTypeCount(skill))`
 4. `sessionsProven >= 2`
 5. `primaryCorrectCount >= 1`
 6. `consecutiveCorrect >= 1`
@@ -279,6 +283,16 @@ Condition 6 closes a short-timescale version of the clock bug described in §5.2
 Because `consecutiveCorrect` resets on any unscaffolded error *and* on a scaffolded failure, this also means a previously mastered sound becomes unmastered the moment the child gets it wrong, and must be re-proven. That is the intended behaviour, not a side effect — mastery is a claim about the present, and the most recent evidence is that they could not do it.
 
 Conditions 3 and 4 are the important ones. (3) stops a child memorising the answer pattern of a single mini-game. (4) requires retention across a gap, not same-sitting recall.
+
+#### Condition 3 must be capped by what actually exists
+
+A flat `>= 2` **deadlocks the game**, and an earlier draft of this spec had exactly that. Secondary credit flows only to `SOUND_ID`, and each of the four v1 mini-games serves one distinct skill. So `LETTER_SOUND`, `BLEND_READ` and `SEGMENT_SPELL` can only ever accumulate one entry in `taskTypesSeen`, can never satisfy `>= 2`, and can never be mastered. Since level completion requires every grapheme mastered for `LETTER_SOUND`, **Level 1 was impossible to finish.** Verified by simulation: a flawless child played ten consecutive quests, reached 33–37 correct answers per sound at strength 0.99, and every record still read `isMastered: false`.
+
+Hence `min(2, provingTaskTypeCount(skill))`, where `provingTaskTypeCount` counts the task types that can contribute evidence for that skill — its own direct type, plus any type that grants it secondary credit. Today that is 3 for `SOUND_ID` and 1 for each of the others.
+
+The anti-memorisation guarantee therefore holds **wherever more than one mini-game can prove a skill**, and is honestly vacuous where only one can. The other five conditions still apply in full: a child cannot pass by memorising, because mastery still needs three unscaffolded correct answers across two separate sessions with decay in between, against distractor sets that differ on every instance.
+
+When Plan 2 adds a second mini-game per skill, this cap lifts by itself and the full guarantee returns. That is the real fix; this is the honest interim.
 
 Condition 5 exists because without it a sound could be mastered entirely through secondary credit — that is, a child could be credited with knowing `/m/` having never once been asked `/m/` directly, purely from spelling words containing it. Secondary credit is meant to accelerate mastery, not to replace being asked.
 
@@ -342,7 +356,7 @@ Per-session, per-target error counting:
 | 1 error on target | Hint tier 2 (see §8) |
 | 2 errors on target | Scaffold: reduce to 2 choices, replay audio, play mnemonic animation |
 | 3 errors on target | Abandon the task as scaffolded-complete. Insert a win-back. Cap remaining task difficulty at **2**. |
-| 3 errors across 3 different targets in one session | Shorten session to 8 tasks, all low difficulty, end early on a win-back |
+| 3 **abandoned** targets in one session (i.e. 3 errors on each of 3 targets) | Shorten session to 8 tasks, all low difficulty, end early on a win-back |
 
 The cap is 2, not 1. An earlier draft capped at 1, which looks kinder and is worse: only one Level 1 task type has difficulty 1, so a capped quest would have a single usable mini-game and the no-adjacent rule (§5.4 invariant 3) would collapse into fourteen identical tasks in a row. That would hand the most monotonous possible session to exactly the child already having the hardest time. A cap of 2 keeps two task types in play so the quest still alternates, and difficulty 2 is still an easy task.
 
@@ -355,9 +369,21 @@ Level 1 is complete when:
 - At least 8 Level-1 words mastered for `BLEND_READ`
 - At least 6 Level-1 words mastered for `SEGMENT_SPELL`
 
-Expected: ~5 quests (~25 min) for a fast learner, ~12 for a struggling learner. **That divergence is the feature.** Both children finish genuinely able to read the words, which a fixed 40-game playlist cannot promise.
+**Completion latches.** `levelProgress` is evaluated at `now`, so a level that was complete yesterday can read as incomplete today once strength decays — and condition 6 means a single wrong answer un-masters a target. A child must never lose a finished level, so the runner persists `levelCompletedAt` the first time completion is reached and never clears it. The live `levelProgress` calculation stays as it is; it answers "what can they do right now?", which is what the parent dashboard and the session builder need. Only the *badge* latches.
 
-These figures assume composite crediting (§4.4) and are calibrated by the simulation harness (§11), not asserted. If the harness shows a fast learner needing more than ~7 quests, the thresholds are wrong and get tuned — they are config values precisely so this is a data change, not a code change.
+Quotas: **6** blend-reading words and **5** spelling words. An earlier draft said 8 and 6. Those numbers were arbitrary — 6 words read and 5 words spelt, on top of all seven sounds proven in *both* directions, already demonstrates that blending generalises rather than being memorised word by word. The trim is acknowledged as a reduction, not dressed up as a refinement.
+
+### 5.7.1 Pacing is measured, not promised
+
+**This spec has twice asserted quest counts that turned out to be wrong**, first ~3 and then ~5 for a strong learner. Both were arithmetic done by hand, and both were optimistic. The honest position:
+
+- The structural floor is set by the design, not by tuning. Four introduction groups, each needing at least two separate sessions for its sounds to clear condition 4, puts a perfect child near eight quests before any word quota is touched.
+- `LETTER_SOUND`, `BLEND_READ` and `SEGMENT_SPELL` get no composite credit, so their practice is irreducible.
+- Therefore the real figures are higher than this spec previously claimed, and **we do not claim fewer total tasks than the 40-game competitor.**
+
+The ranges in §11 are to be derived from the simulation harness and then written back here as measured values with the config that produced them. Until that is done, no quest count in this document should be quoted to anyone.
+
+**What survives, and is still the differentiator:** a child who completes Level 1 here can read `sat, pat, tip, mat, fit, map` — cold, a day later, unaided. A child who completes 40 fixed games has played 40 games. Those are not the same claim, and ours is the one a parent actually wants. The adaptive engine's benefit is distributional rather than total: a struggling child spends their time on the sounds they are failing, and a strong child is not marched through review they do not need.
 
 ---
 
@@ -518,7 +544,7 @@ Conflict policy: `task_attempts` is append-only so it merges without conflict; `
 | `packages/curriculum` | Data integrity: every word decodable at its level; every audio key resolves; no word uses an unintroduced grapheme; every grapheme has a creature; at least 8 words per level carry a `picture`. |
 | Task components | Render, correct path, incorrect path, each hint tier, scaffolded completion. |
 | `packages/api` | Offline queue: enqueue while offline, flush on reconnect, no duplicate attempts. |
-| Simulation harness | Run synthetic children (fast / average / struggling / bad-day) through Level 1; assert completion lands in the expected ranges — fast 4–7 quests, average 7–10, struggling 10–14. Catches pacing regressions no unit test would. |
+| Simulation harness | Run synthetic children (fast / average / struggling / bad-day) through Level 1. **Ranges to be derived from the harness itself, then recorded here and in §5.7.1 as measured values alongside the config that produced them.** Once set, they are regression bounds with modest headroom — not aspirations. The prior entry here (fast 4–7, average 7–10, struggling 10–14) was invented and is withdrawn; it also disagreed with the plan's own numbers, which is how you can tell neither was measured. |
 | Manual | iPad simulator, every review gate. |
 
 ---

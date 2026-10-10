@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { getWord } from '@soundlings/curriculum';
 import { tokens } from '@soundlings/ui';
+import { dimmedFor } from '../quest/dimming';
 import { TaskFrame } from './TaskFrame';
 import { useHintLadder } from './useHintLadder';
 import { PICTURE_MATCH_PROMPT_KEYS, soundOutKeys } from './pictureMatchAudio';
@@ -17,7 +18,7 @@ import type { TaskProps } from './TaskProps';
  * instruction, and the tier-2 hint sounds out the graphemes one at a time, which
  * is the actual skill being taught. The child still has to blend them.
  */
-export function PictureMatch({ task, audio, externalTier, dimmed, onAnswer, position }: TaskProps) {
+export function PictureMatch({ task, audio, externalTier, onAnswer, position }: TaskProps) {
   const word = getWord(task.correctChoice);
   const [soundingIndex, setSoundingIndex] = useState<number | null>(null);
   /** Bumped to abandon a sounding-out in progress, so it cannot talk over the next thing. */
@@ -49,6 +50,7 @@ export function PictureMatch({ task, audio, externalTier, dimmed, onAnswer, posi
     playPrompt();
   }, [task.id, playPrompt]);
 
+  const dimmed = dimmedFor(task, tier);
   const soundingHint = tier >= 2;
   useEffect(() => {
     if (soundingHint) void soundItOut();

@@ -1,32 +1,44 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { getGrapheme } from '@soundlings/curriculum';
 import { tokens } from '@soundlings/ui';
+import { dimmedFor } from '../quest/dimming';
 import { TaskFrame } from './TaskFrame';
 import { useHintLadder } from './useHintLadder';
 import { appearanceFor } from './tileAppearance';
+import { freshSinger, tapSpeaker, visibleSelection } from './singerLogic';
+import type { SingerState } from './singerLogic';
 import type { TaskProps } from './TaskProps';
 
 /**
- * LETTER_SOUND: the child sees a letter and taps which of several voice
+ * LETTER_SOUND: the child sees a letter and picks which of several voice
  * buttons says it.
  *
  * This is the mirror of Sound Hunt, and both are needed: recognising `s` on
  * sight and recalling `s` from the sound /s/ are different abilities, and
  * reading requires both. Mastery of a grapheme therefore needs both skills.
+ *
+ * Hear, then confirm. The buttons are told apart only by their sound, so if a
+ * tap both played a sound and answered, a child who was unsure could only
+ * guess. Instead the first tap plays the sound and selects the button, and a
+ * second tap on the selected button is the answer (see singerLogic.ts).
  */
-export function SoundSinger({ task, audio, externalTier, dimmed, onAnswer, position }: TaskProps) {
+export function SoundSinger({ task, audio, externalTier, onAnswer, position }: TaskProps) {
   const grapheme = getGrapheme(task.correctChoice);
 
-  // The placeholder pack has no "which sound does it make?" clip. `ui.find_letter`
-  // ("Find the letter that says") describes Sound Hunt and would send the child
-  // looking for a letter when one is already on screen, so this uses the neutral
-  // "Try this one" until a proper clip is recorded.
+  // The selection belongs to a task and a hint tier. A new task starts clean,
+  // and so does a wrong answer, because the runner answers one by raising the
+  // tier: the button just rejected must not still be selected, or the next tap
+  // on it would commit to it again.
+  const key = `${task.id}|${externalTier}`;
+  const [stored, setStored] = useState<SingerState>(() => freshSinger(key));
+  const singer = stored.key === key ? stored : freshSinger(key);
+
   const playPrompt = useCallback(() => {
-    void audio.say('ui.try_this_one');
+    void audio.say('ui.which_sound');
   }, [audio]);
 
-  const { tier, bumpToTier } = useHintLadder({
+  const { tier, bumpToTier, noteActivity } = useHintLadder({
     taskId: task.id,
     externalTier,
     onIdleNudge: playPrompt,
@@ -37,6 +49,21 @@ export function SoundSinger({ task, audio, externalTier, dimmed, onAnswer, posit
   }, [task.id, playPrompt]);
 
   const mnemonicShown = tier >= 2;
+
+  // Narrowing follows the merged tier, so an idle pause narrows the choices as
+  // well as an error does.
+  const dimmed = dimmedFor(task, tier);
+  const available = task.choices.filter((choice) => !dimmed.includes(choice));
+  const selected = visibleSelection(singer, available);
+
+  const onTap = (choice: string) => {
+    const tap = tapSpeaker(singer, choice, Date.now(), available);
+    if (tap.state === singer) return;
+    setStored(tap.state);
+    noteActivity();
+    if (tap.play !== null) void audio.interrupt(getGrapheme(tap.play).audio.phoneme);
+    if (tap.answer !== null) onAnswer(tap.answer);
+  };
 
   return (
     <TaskFrame position={position} tier={tier} onReplay={playPrompt} onAskForHelp={() => bumpToTier(2)}>
@@ -59,11 +86,15 @@ export function SoundSinger({ task, audio, externalTier, dimmed, onAnswer, posit
               ? 'revealed'
               : 'idle';
           const look = appearanceFor(state);
+          const isSelected = selected === choice;
           return (
             <Pressable
               key={choice}
               accessibilityRole="button"
-              accessibilityLabel={`Play sound ${choice}`}
+              accessibilityLabel={
+                isSelected ? `Sound ${choice}, selected. Tap again to choose it.` : `Play sound ${choice}`
+              }
+              accessibilityState={{ selected: isSelected, disabled: !look.interactive }}
               disabled={!look.interactive}
               style={[
                 styles.speaker,
@@ -72,19 +103,18 @@ export function SoundSinger({ task, audio, externalTier, dimmed, onAnswer, posit
                   borderBottomColor: look.borderBottomColor,
                   opacity: look.opacity,
                 },
+                isSelected && styles.speakerSelected,
               ]}
-              onPress={() => {
-                // Hearing the candidate is the task, so play it, then record
-                // the tap as the answer.
-                void audio.interrupt(getGrapheme(choice).audio.phoneme);
-                onAnswer(choice);
-              }}
+              onPress={() => onTap(choice)}
             >
               <Text style={styles.speakerIcon}>🔊</Text>
             </Pressable>
           );
         })}
       </View>
+
+      {/* For the grown-up beside the child; the buttons say it without words. */}
+      <Text style={styles.cue}>{selected === null ? 'Tap to listen' : 'Tap it again to choose it'}</Text>
     </TaskFrame>
   );
 }
@@ -107,5 +137,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderBottomWidth: 4,
   },
+  // Selected is a solid accent fill with a full dark ring, and a little larger.
+  // Three cues at once, so it reads at a glance and not by colour alone.
+  speakerSelected: {
+    backgroundColor: tokens.color.accent,
+    borderWidth: 4,
+    borderColor: tokens.color.ink,
+    transform: [{ scale: 1.08 }],
+  },
   speakerIcon: { fontSize: 44 },
+  cue: { fontFamily: tokens.font.ui, fontSize: tokens.type.caption, color: tokens.color.inkSoft },
 });

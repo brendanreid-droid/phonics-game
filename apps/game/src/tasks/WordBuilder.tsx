@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { getWord } from '@soundlings/curriculum';
 import { tokens } from '@soundlings/ui';
+import { dimmedFor } from '../quest/dimming';
 import { LetterTile } from './LetterTile';
 import { TaskFrame } from './TaskFrame';
 import { useHintLadder } from './useHintLadder';
@@ -21,7 +22,7 @@ import type { TaskProps } from './TaskProps';
  * wordBuilderLogic.ts, where it is tested against the engine's real tasks. This
  * component only wires it to the screen and the audio.
  */
-export function WordBuilder({ task, audio, externalTier, dimmed, onAnswer, position }: TaskProps) {
+export function WordBuilder({ task, audio, externalTier, onAnswer, position }: TaskProps) {
   const word = getWord(task.correctChoice);
   const slotCount = word.graphemes.length;
   const tiles = useMemo(() => tilesFrom(task.choices), [task.choices]);
@@ -49,6 +50,7 @@ export function WordBuilder({ task, audio, externalTier, dimmed, onAnswer, posit
     playPrompt();
   }, [task.id, playPrompt]);
 
+  const dimmed = dimmedFor(task, tier);
   const segmentingHint = tier >= 2;
   useEffect(() => {
     if (segmentingHint) {

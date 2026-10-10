@@ -2,6 +2,7 @@ import { useCallback, useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { getGrapheme } from '@soundlings/curriculum';
 import { tokens } from '@soundlings/ui';
+import { dimmedFor } from '../quest/dimming';
 import { LetterTile } from './LetterTile';
 import { TaskFrame } from './TaskFrame';
 import { useHintLadder } from './useHintLadder';
@@ -16,10 +17,10 @@ import type { TaskProps } from './TaskProps';
  *
  * Hint tiers: 1 replays the instruction and nudges the owl. It does not
  * highlight the answer, because that would leave tier 2's narrowing to two
- * choices with nothing left to do. 2 plays the mnemonic and the runner dims
- * the distractors. 3 (errors only) shimmers the correct letter.
+ * choices with nothing left to do. 2 plays the mnemonic and dims the
+ * distractors. 3 (errors only) shimmers the correct letter.
  */
-export function SoundHunt({ task, audio, externalTier, dimmed, onAnswer, position }: TaskProps) {
+export function SoundHunt({ task, audio, externalTier, onAnswer, position }: TaskProps) {
   const grapheme = getGrapheme(task.correctChoice);
   const phonemeAudio = grapheme.audio.phoneme;
 
@@ -40,6 +41,8 @@ export function SoundHunt({ task, audio, externalTier, dimmed, onAnswer, positio
   }, [task.id, playPrompt]);
 
   const mnemonicShown = tier >= 2;
+  // Follows the merged tier, so a nine-second pause narrows the choices as well as an error does.
+  const dimmed = dimmedFor(task, tier);
   useEffect(() => {
     if (mnemonicShown) void audio.say(phonemeAudio);
   }, [mnemonicShown, task.id, audio, phonemeAudio]);

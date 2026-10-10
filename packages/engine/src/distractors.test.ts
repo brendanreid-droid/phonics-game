@@ -204,6 +204,24 @@ describe('pickGraphemeDistractors', () => {
     }
   });
 
+  it('throws, naming the grapheme, when `allowed` contains an unknown id', () => {
+    expect(() =>
+      pickGraphemeDistractors({
+        target: 's', count: 3, level: 1, confusions: {}, rng: makeRng(1), allowed: ['s', 'a', 'zz'],
+      }),
+    ).toThrow(/unknown grapheme: zz/i);
+  });
+
+  it('silently drops an allowed grapheme introduced after the requested level', () => {
+    // Every real grapheme is Level 1, so level 0 puts all of them "in the future".
+    // The two-level case is covered in metGraphemes.earlier.test.ts.
+    expect(
+      pickGraphemeDistractors({
+        target: 's', count: 3, level: 0, confusions: {}, rng: makeRng(1), allowed: ['s', 'a', 't'],
+      }),
+    ).toEqual([]);
+  });
+
   it('returns nothing when the child has met only the target', () => {
     expect(
       pickGraphemeDistractors({
@@ -316,6 +334,93 @@ describe('pickWordDistractors', () => {
     expect(picks.slice().sort()).toEqual(['map', 'pat']);
   });
 
+  it('puts words the child has actually confused with the target first, ahead of minimal pairs', () => {
+    // pit is two graphemes from mat, so only the child's own history can rank it first.
+    const confusions = { [confusionKey('mat', 'pit')]: 2 };
+    for (const seed of SEEDS) {
+      const picks = pickWordDistractors({ target: 'mat', count: 1, level: 1, rng: makeRng(seed), confusions });
+      expect(picks, `seed ${seed}`).toEqual(['pit']);
+    }
+  });
+
+  it('orders the child\'s own word confusions by count, then falls back to minimal pairs', () => {
+    const confusions = { [confusionKey('mat', 'pit')]: 2, [confusionKey('mat', 'tap')]: 5 };
+    for (const seed of SEEDS) {
+      const picks = pickWordDistractors({ target: 'mat', count: 4, level: 1, rng: makeRng(seed), confusions });
+      expect(picks.slice(0, 2), `seed ${seed}`).toEqual(['tap', 'pit']);
+      expect(picks.slice(2).sort(), `seed ${seed}`).toEqual(['map', 'pat']);
+    }
+  });
+
+  it('shows a pair the child reliably mixes up even when it is not a closer match than the rest', () => {
+    const confusions = { [confusionKey('mat', 'map')]: 4 };
+    for (const seed of SEEDS) {
+      expect(
+        pickWordDistractors({ target: 'mat', count: 1, level: 1, rng: makeRng(seed), confusions }),
+      ).toEqual(['map']);
+    }
+  });
+
+  it('only counts a word confusion in the direction it happened, and only when the count is positive', () => {
+    const confusions = { [confusionKey('pit', 'mat')]: 9, [confusionKey('mat', 'sip')]: 0 };
+    for (const seed of SEEDS) {
+      const picks = pickWordDistractors({ target: 'mat', count: 2, level: 1, rng: makeRng(seed), confusions });
+      expect(picks.slice().sort(), `seed ${seed}`).toEqual(['map', 'pat']);
+    }
+  });
+
+  it('ignores a logged confusion with a word that is not eligible to be shown', () => {
+    // sat has no picture; fit contains an f the child has not met.
+    const confusions = { [confusionKey('mat', 'sat')]: 9, [confusionKey('mat', 'fit')]: 9 };
+    for (const seed of SEEDS) {
+      const picks = pickWordDistractors({
+        target: 'mat', count: 99, level: 1, rng: makeRng(seed), confusions,
+        metGraphemes: ['m', 'a', 't', 'p', 'i', 's'],
+      });
+      expect(picks).not.toContain('sat');
+      expect(picks).not.toContain('fit');
+    }
+  });
+
+  it('never offers a word built from a grapheme the child has not met', () => {
+    // sit with i, s, t, p met: mat and map need an unmet a and m; fit needs f.
+    for (const seed of SEEDS) {
+      const picks = pickWordDistractors({
+        target: 'sit', count: 99, level: 1, rng: makeRng(seed), metGraphemes: ['s', 'i', 't', 'p'],
+      });
+      expect(picks.slice().sort(), `seed ${seed}`).toEqual(['pip', 'pit', 'sip']);
+    }
+  });
+
+  it('offers those words when no restriction is given, which is why the session builder must pass one', () => {
+    const seen = new Set<string>();
+    for (const seed of SEEDS) {
+      for (const id of pickWordDistractors({ target: 'sit', count: 99, level: 1, rng: makeRng(seed) })) seen.add(id);
+    }
+    expect(seen.has('mat')).toBe(true);
+  });
+
+  it('applies the met-grapheme restriction to allowedWords too', () => {
+    const picks = pickWordDistractors({
+      target: 'sit', count: 5, level: 1, rng: makeRng(1),
+      allowedWords: ['sip', 'mat', 'pit'], metGraphemes: ['s', 'i', 't', 'p'],
+    });
+    expect(picks.slice().sort()).toEqual(['pit', 'sip']);
+  });
+
+  it('throws, naming the grapheme, when metGraphemes contains an unknown id', () => {
+    expect(() =>
+      pickWordDistractors({ target: 'sit', count: 1, level: 1, rng: makeRng(1), metGraphemes: ['s', 'zz'] }),
+    ).toThrow(/unknown grapheme: zz/i);
+  });
+
+  it('never offers a word from beyond the requested level, even if allowedWords lists it', () => {
+    // Every real word is Level 1, so level 0 puts all of them in the future.
+    expect(
+      pickWordDistractors({ target: 'mat', count: 3, level: 0, rng: makeRng(1), allowedWords: ['map', 'pat'] }),
+    ).toEqual([]);
+  });
+
   it('draws only from allowedWords when given', () => {
     for (const seed of SEEDS) {
       const picks = pickWordDistractors({
@@ -424,6 +529,95 @@ describe('pickTileDistractors', () => {
         `count ${count}`,
       ).toEqual([]);
     }
+  });
+
+  it('excludes every grapheme of a word with a repeated letter, not just its distinct tiles', () => {
+    // pip needs two p tiles and an i; none of those may come back as an "extra".
+    for (const seed of SEEDS) {
+      const picks = pickTileDistractors({
+        target: 'pip', count: 99, level: 1, confusions: {}, rng: makeRng(seed),
+      });
+      expect(picks).not.toContain('p');
+      expect(picks).not.toContain('i');
+      expect(picks.slice().sort(), `seed ${seed}`).toEqual(['a', 'f', 'm', 's', 't']);
+    }
+  });
+
+  it('puts letters this child has confused with the word ahead of every generally-confusable one', () => {
+    // sat: f, i and p are generally confusable; m is not. Only the child's history can put m first.
+    const confusions = { [confusionKey('a', 'm')]: 1 };
+    for (const seed of SEEDS) {
+      const picks = pickTileDistractors({ target: 'sat', count: 1, level: 1, confusions, rng: makeRng(seed) });
+      expect(picks, `seed ${seed}`).toEqual(['m']);
+    }
+  });
+
+  it('orders the child\'s own tile confusions by their summed count across the word\'s graphemes', () => {
+    // m totals 4 (2 + 2) and p totals 3; a per-grapheme maximum would rank p first.
+    const confusions = {
+      [confusionKey('s', 'm')]: 2,
+      [confusionKey('a', 'm')]: 2,
+      [confusionKey('t', 'p')]: 3,
+    };
+    for (const seed of SEEDS) {
+      const picks = pickTileDistractors({ target: 'sat', count: 3, level: 1, confusions, rng: makeRng(seed) });
+      expect(picks.slice(0, 2), `seed ${seed}`).toEqual(['m', 'p']);
+    }
+  });
+
+  it('only counts a tile confusion in the direction it happened', () => {
+    // The child answered s when asked for m. That says nothing about m as a wrong tile for sip.
+    const confusions = { [confusionKey('m', 's')]: 9 };
+    const firsts = new Set(
+      SEEDS.map((seed) =>
+        pickTileDistractors({ target: 'sip', count: 1, level: 1, confusions, rng: makeRng(seed) })[0],
+      ),
+    );
+    expect(firsts.size).toBeGreaterThan(1);
+  });
+
+  it('varies which of several generally-confusable tiles is chosen', () => {
+    // sat: f, i and p are all on its letters\' confusable lists.
+    const firsts = new Set(
+      SEEDS.map((seed) =>
+        pickTileDistractors({ target: 'sat', count: 1, level: 1, confusions: {}, rng: makeRng(seed) })[0],
+      ),
+    );
+    expect([...firsts].sort()).toEqual(['f', 'i', 'p']);
+  });
+
+  it('puts generally-confusable tiles ahead of unrelated ones on every seed', () => {
+    for (const seed of SEEDS) {
+      const picks = pickTileDistractors({ target: 'sat', count: 3, level: 1, confusions: {}, rng: makeRng(seed) });
+      expect(picks.slice().sort(), `seed ${seed}`).toEqual(['f', 'i', 'p']);
+    }
+  });
+
+  it('shuffles the unrelated remainder so the same extras do not always appear', () => {
+    // am: only i is a taught confusion of a or m, so the second tile comes from s, t, p, f.
+    const seconds = new Set<string>();
+    for (const seed of SEEDS) {
+      const picks = pickTileDistractors({ target: 'am', count: 2, level: 1, confusions: {}, rng: makeRng(seed) });
+      expect(picks[0]).toBe('i');
+      seconds.add(picks[1]);
+    }
+    expect(seconds.size).toBeGreaterThan(2);
+  });
+
+  it('throws, naming the grapheme, when `allowed` contains an unknown id', () => {
+    expect(() =>
+      pickTileDistractors({
+        target: 'sit', count: 3, level: 1, confusions: {}, rng: makeRng(1), allowed: ['s', 'i', 'zz'],
+      }),
+    ).toThrow(/unknown grapheme: zz/i);
+  });
+
+  it('silently drops an allowed grapheme introduced after the requested level', () => {
+    expect(
+      pickTileDistractors({
+        target: 'sit', count: 3, level: 0, confusions: {}, rng: makeRng(1), allowed: ['a', 'm'],
+      }),
+    ).toEqual([]);
   });
 
   it('is deterministic for a given seed', () => {

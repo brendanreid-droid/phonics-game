@@ -51,9 +51,10 @@ const styles = StyleSheet.create({
     borderRadius: tokens.radius.pill,
     backgroundColor: tokens.color.hint,
   },
-  bannerText: { fontSize: tokens.type.caption, color: tokens.color.ink },
-  title: { fontSize: tokens.type.title, color: tokens.color.ink, fontWeight: '700' },
-  subtitle: { fontSize: tokens.type.body, color: tokens.color.inkSoft },
+  bannerText: { fontFamily: tokens.font.ui, fontSize: tokens.type.caption, color: tokens.color.ink },
+  // No fontWeight on any of these: the weight is part of the family name.
+  title: { fontFamily: tokens.font.ui, fontSize: tokens.type.title, color: tokens.color.ink },
+  subtitle: { fontFamily: tokens.font.ui, fontSize: tokens.type.body, color: tokens.color.inkSoft },
   play: {
     width: tokens.tap.primary,
     height: tokens.tap.primary,
@@ -63,5 +64,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   playPressed: { transform: [{ scale: 0.96 }] },
-  playText: { fontSize: tokens.type.word, color: tokens.color.onAccent, fontWeight: '700' },
+  playText: { fontFamily: tokens.font.ui, fontSize: tokens.type.word, color: tokens.color.onAccent },
 });

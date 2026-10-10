@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_CONFIG } from './config';
+import { DEFAULT_CONFIG, withDefaults } from './config';
 import { applyAttempt, emptyRecord, getRecord, isMastered, recordAttempt } from './mastery';
 import { masteryKey } from './types';
 import type { Attempt, MasteryMap } from './types';
@@ -75,6 +75,60 @@ describe('isMastered', () => {
     record = applyAttempt(record, attempt({ sessionId: 'two', taskTypeId: 'picture-match', weight: half }), DEFAULT_CONFIG);
     expect(record.correctCount).toBe(1);
     expect(isMastered(record, 2 * HOUR, DEFAULT_CONFIG)).toBe(false);
+  });
+});
+
+describe('isMastered: being asked directly, and float safety', () => {
+  it('rejects secondary credit alone, however much of it and however spread out', () => {
+    // masteryStrength 0 isolates the primaryCorrectCount rule from strengthAt,
+    // which already returns 0 for an unproven target.
+    const config = withDefaults({ masteryStrength: 0 });
+    const half = config.secondaryWeight;
+    let record = emptyRecord('m', 'SOUND_ID', config);
+    for (let i = 0; i < 8; i += 1) {
+      record = applyAttempt(
+        record,
+        attempt({ targetId: 'm', sessionId: `s${i % 2}`, taskTypeId: i % 2 ? 'word-builder' : 'picture-match', weight: half, at: (i + 1) * HOUR }),
+        config,
+      );
+    }
+    expect(record.correctCount).toBeGreaterThanOrEqual(config.masteryCorrect);
+    expect(record.taskTypesSeen.length).toBeGreaterThanOrEqual(config.masteryTaskTypes);
+    expect(record.sessionsProven).toBeGreaterThanOrEqual(config.masterySessions);
+    expect(record.primaryCorrectCount).toBe(0);
+    expect(isMastered(record, 8 * HOUR, config)).toBe(false);
+  });
+
+  it('is not denied by float error when secondaryWeight is retuned to 0.3', () => {
+    const config = withDefaults({ secondaryWeight: 0.3, masteryCorrect: 3 });
+    let record = emptyRecord('s', 'SOUND_ID', config);
+    for (let i = 0; i < 10; i += 1) {
+      record = applyAttempt(
+        record,
+        attempt({ sessionId: `s${i % 2}`, taskTypeId: i % 2 ? 'word-builder' : 'picture-match', weight: 0.3, at: (i + 1) * HOUR }),
+        config,
+      );
+    }
+    // Ten credits of 0.3 are exactly the required 3, but not in binary.
+    expect(record.correctCount).toBeLessThan(3);
+    expect(record.correctCount).toBeCloseTo(3, 9);
+    // Give it the direct evidence the rule demands, so only the sum is in question.
+    const asked = { ...record, primaryCorrectCount: 1 };
+    expect(isMastered(asked, 10 * HOUR, config)).toBe(true);
+  });
+
+  it('still rejects a genuinely short count', () => {
+    const config = withDefaults({ secondaryWeight: 0.3, masteryCorrect: 3 });
+    let record = emptyRecord('s', 'SOUND_ID', config);
+    for (let i = 0; i < 9; i += 1) {
+      record = applyAttempt(
+        record,
+        attempt({ sessionId: `s${i % 2}`, taskTypeId: i % 2 ? 'word-builder' : 'picture-match', weight: 0.3, at: (i + 1) * HOUR }),
+        config,
+      );
+    }
+    const asked = { ...record, primaryCorrectCount: 1 };
+    expect(isMastered(asked, 9 * HOUR, config)).toBe(false);
   });
 });
 

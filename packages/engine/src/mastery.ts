@@ -5,6 +5,12 @@ import type { Attempt, MasteryMap, MasteryRecord } from './types';
 
 const MS_PER_HOUR = 3_600_000;
 
+/**
+ * Slack for comparing a sum of fractional credits against a whole-number
+ * threshold. Ten credits of 0.3 sum to 2.9999999999999996, not 3.
+ */
+const COUNT_EPSILON = 1e-9;
+
 export function emptyRecord(targetId: TargetId, skill: Skill, config: EngineConfig): MasteryRecord {
   return {
     targetId,
@@ -87,6 +93,17 @@ export function applyAttempt(
   attempt: Attempt,
   config: EngineConfig,
 ): MasteryRecord {
+  if (!(attempt.weight > 0 && attempt.weight <= 1)) {
+    throw new RangeError(`attempt weight must be in (0, 1], got ${attempt.weight}`);
+  }
+  if (!Number.isFinite(attempt.latencyMs) || attempt.latencyMs < 0) {
+    throw new RangeError(`attempt latencyMs must be finite and non-negative, got ${attempt.latencyMs}`);
+  }
+  if (!Number.isFinite(attempt.at)) {
+    throw new RangeError(`attempt.at must be a finite timestamp, got ${attempt.at}`);
+  }
+  const halfLifeHours = usableHalfLife(record, config);
+
   const next: MasteryRecord = {
     ...record,
     taskTypesSeen: [...record.taskTypesSeen],
@@ -107,7 +124,7 @@ export function applyAttempt(
     // A weaker piece of evidence is a weaker accusation: missing a word is not
     // as strong a signal against each of its sounds as missing the sound itself.
     const shrink = 1 - (1 - config.errorShrink) * attempt.weight;
-    next.halfLifeHours = Math.max(config.minHalfLifeHours, record.halfLifeHours * shrink);
+    next.halfLifeHours = Math.max(config.minHalfLifeHours, halfLifeHours * shrink);
     next.consecutiveCorrect = 0;
     return next;
   }
@@ -116,7 +133,7 @@ export function applyAttempt(
   const rate = attempt.weight * (slow ? config.slowReinforceFactor : 1);
   const growth = 1 + (config.growthFactor - 1) * rate;
 
-  next.halfLifeHours = Math.min(config.maxHalfLifeHours, record.halfLifeHours * growth);
+  next.halfLifeHours = Math.min(config.maxHalfLifeHours, halfLifeHours * growth);
   next.correctCount = record.correctCount + attempt.weight;
   if (attempt.weight === 1) next.primaryCorrectCount = record.primaryCorrectCount + 1;
   next.consecutiveCorrect = record.consecutiveCorrect + 1;
@@ -143,11 +160,17 @@ export function applyAttempt(
  * of one mini-game. `masterySessions` requires retention across a gap rather
  * than same-sitting recall; only sessions containing unscaffolded correct
  * evidence count (see `MasteryRecord.sessionsProven`).
+ *
+ * `primaryCorrectCount >= 1` means the child has been asked this target
+ * directly: secondary credit is meant to accelerate mastery, never replace
+ * being asked. (Today `strengthAt` already returns 0 without it; the explicit
+ * check keeps the rule true even if the strength threshold is ever 0.)
  */
 export function isMastered(record: MasteryRecord, now: number, config: EngineConfig): boolean {
   return (
     strengthAt(record, now, config) >= config.masteryStrength &&
-    record.correctCount >= config.masteryCorrect &&
+    record.correctCount + COUNT_EPSILON >= config.masteryCorrect &&
+    record.primaryCorrectCount >= 1 &&
     record.taskTypesSeen.length >= config.masteryTaskTypes &&
     record.sessionsProven >= config.masterySessions
   );
@@ -164,19 +187,27 @@ export function getRecord(
 
 /** Returns a new map with this attempt folded in. Does not mutate `map`. */
 export function recordAttempt(map: MasteryMap, attempt: Attempt, config: EngineConfig): MasteryMap {
-  const key = masteryKey(attempt.targetId, attempt.skill);
-  const current = map[key] ?? emptyRecord(attempt.targetId, attempt.skill, config);
-  return { ...map, [key]: applyAttempt(current, attempt, config) };
+  return recordAttempts(map, [attempt], config);
 }
 
 /**
  * Folds a task's primary and secondary attempts into the map in one call.
  * Mastery only: the confusion map is updated separately.
+ *
+ * Pure from the caller's side: `map` is never mutated. Internally it takes a
+ * single shallow copy and folds into that, because this is the hot call and
+ * copying the whole map once per attempt is wasted work.
  */
 export function recordAttempts(
   map: MasteryMap,
-  attempts: Attempt[],
+  attempts: readonly Attempt[],
   config: EngineConfig,
 ): MasteryMap {
-  return attempts.reduce((acc, attempt) => recordAttempt(acc, attempt, config), map);
+  const result: MasteryMap = { ...map };
+  for (const attempt of attempts) {
+    const key = masteryKey(attempt.targetId, attempt.skill);
+    const current = result[key] ?? emptyRecord(attempt.targetId, attempt.skill, config);
+    result[key] = applyAttempt(current, attempt, config);
+  }
+  return result;
 }

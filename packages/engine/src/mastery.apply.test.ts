@@ -218,3 +218,52 @@ describe('applyAttempt error shrink scales with evidence weight', () => {
     expect(next.halfLifeHours).toBe(DEFAULT_CONFIG.minHalfLifeHours);
   });
 });
+
+describe('applyAttempt input validation', () => {
+  const fresh = () => emptyRecord('s', 'SOUND_ID', DEFAULT_CONFIG);
+
+  it.each([0, -0.5, 1.5, Number.NaN, Infinity])('rejects weight %s, outside (0, 1]', (weight) => {
+    expect(() => applyAttempt(fresh(), attempt({ weight }), DEFAULT_CONFIG)).toThrow(/weight/);
+  });
+
+  it('accepts the weight range boundaries: just above 0, and exactly 1', () => {
+    expect(() => applyAttempt(fresh(), attempt({ weight: 1e-6 }), DEFAULT_CONFIG)).not.toThrow();
+    expect(() => applyAttempt(fresh(), attempt({ weight: 1 }), DEFAULT_CONFIG)).not.toThrow();
+  });
+
+  it('a rejected weight leaves no trace of the attempt', () => {
+    const record = fresh();
+    expect(() => applyAttempt(record, attempt({ weight: 0 }), DEFAULT_CONFIG)).toThrow();
+    expect(record.taskTypesSeen).toEqual([]);
+    expect(record.attemptCount).toBe(0);
+  });
+
+  it.each([-1, Number.NaN, Infinity])('rejects latency %s', (latencyMs) => {
+    expect(() => applyAttempt(fresh(), attempt({ latencyMs }), DEFAULT_CONFIG)).toThrow(/latencyMs/);
+  });
+
+  it('accepts a latency of exactly 0', () => {
+    expect(() => applyAttempt(fresh(), attempt({ latencyMs: 0 }), DEFAULT_CONFIG)).not.toThrow();
+  });
+
+  it.each([Number.NaN, Infinity])('rejects a non-finite timestamp %s', (at) => {
+    expect(() => applyAttempt(fresh(), attempt({ at }), DEFAULT_CONFIG)).toThrow(/attempt\.at/);
+  });
+
+  it('refuses a record whose half-life is NaN rather than propagating it', () => {
+    const corrupt = { ...fresh(), halfLifeHours: Number.NaN };
+    expect(() => applyAttempt(corrupt, attempt(), DEFAULT_CONFIG)).toThrow(/halfLifeHours/);
+  });
+
+  it('grows from the floor when a record arrives with a half-life below it', () => {
+    const corrupt = { ...fresh(), halfLifeHours: 0 };
+    const next = applyAttempt(corrupt, attempt(), DEFAULT_CONFIG);
+    expect(next.halfLifeHours).toBeCloseTo(DEFAULT_CONFIG.minHalfLifeHours * 1.9, 9);
+  });
+
+  it('caps a record that arrives above the ceiling', () => {
+    const corrupt = { ...fresh(), halfLifeHours: DEFAULT_CONFIG.maxHalfLifeHours * 10 };
+    const next = applyAttempt(corrupt, attempt({ correct: false }), DEFAULT_CONFIG);
+    expect(next.halfLifeHours).toBeCloseTo(DEFAULT_CONFIG.maxHalfLifeHours * 0.4, 6);
+  });
+});

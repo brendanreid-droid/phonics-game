@@ -250,7 +250,7 @@ describe('pickGraphemeDistractors', () => {
 describe('pickWordDistractors', () => {
   it('never includes the target and only uses picturable words', () => {
     const picks = pickWordDistractors({
-      target: 'mat', count: 2, level: 1, rng: makeRng(1),
+      target: 'mat', count: 2, level: 1, confusions: {}, rng: makeRng(1),
     });
     expect(picks).not.toContain('mat');
     // 'sat' has no picture, so it can never appear in Picture Match.
@@ -259,7 +259,7 @@ describe('pickWordDistractors', () => {
 
   it('never includes the target, or a picture-less word, whatever is asked for', () => {
     for (const seed of SEEDS) {
-      const picks = pickWordDistractors({ target: 'mat', count: 99, level: 1, rng: makeRng(seed) });
+      const picks = pickWordDistractors({ target: 'mat', count: 99, level: 1, confusions: {}, rng: makeRng(seed) });
       expect(picks).not.toContain('mat');
       expect(new Set(picks).size).toBe(picks.length);
       for (const id of picks) expect(WORDS[id].picture, id).toBeDefined();
@@ -268,14 +268,14 @@ describe('pickWordDistractors', () => {
 
   it('never includes the target even when allowedWords contains it', () => {
     const picks = pickWordDistractors({
-      target: 'mat', count: 5, level: 1, rng: makeRng(1), allowedWords: ['mat', 'map', 'pat'],
+      target: 'mat', count: 5, level: 1, confusions: {}, rng: makeRng(1), allowedWords: ['mat', 'map', 'pat'],
     });
     expect(picks.sort()).toEqual(['map', 'pat']);
   });
 
   it('prefers minimal pairs — words differing from the target by one grapheme', () => {
     const picks = pickWordDistractors({
-      target: 'mat', count: 2, level: 1, rng: makeRng(9),
+      target: 'mat', count: 2, level: 1, confusions: {}, rng: makeRng(9),
     });
     // map differs only in the final grapheme; pat only in the first.
     expect(picks).toContain('map');
@@ -284,19 +284,19 @@ describe('pickWordDistractors', () => {
   it('returns exactly the minimal pairs first, on every seed', () => {
     // Picturable one-grapheme neighbours of mat are map and pat; nothing else is that close.
     for (const seed of SEEDS) {
-      const picks = pickWordDistractors({ target: 'mat', count: 2, level: 1, rng: makeRng(seed) });
+      const picks = pickWordDistractors({ target: 'mat', count: 2, level: 1, confusions: {}, rng: makeRng(seed) });
       expect(picks.slice().sort(), `seed ${seed}`).toEqual(['map', 'pat']);
     }
     // sit's neighbours are sip (last), fit (first) and pit (first).
     for (const seed of SEEDS) {
-      const picks = pickWordDistractors({ target: 'sit', count: 3, level: 1, rng: makeRng(seed) });
+      const picks = pickWordDistractors({ target: 'sit', count: 3, level: 1, confusions: {}, rng: makeRng(seed) });
       expect(picks.slice().sort(), `seed ${seed}`).toEqual(['fit', 'pit', 'sip']);
     }
   });
 
   it('fills the rest from the next-closest words once the minimal pairs run out', () => {
     for (const seed of SEEDS) {
-      const picks = pickWordDistractors({ target: 'mat', count: 3, level: 1, rng: makeRng(seed) });
+      const picks = pickWordDistractors({ target: 'mat', count: 3, level: 1, confusions: {}, rng: makeRng(seed) });
       expect(picks.slice(0, 2).sort()).toEqual(['map', 'pat']);
       const differing = WORDS[picks[2]].graphemes.filter((g, i) => g !== WORDS.mat.graphemes[i]).length;
       expect(differing, `seed ${seed}: ${picks[2]}`).toBe(2);
@@ -305,7 +305,7 @@ describe('pickWordDistractors', () => {
 
   it('breaks ties by seed, so equally-close words are not always the same two', () => {
     const firsts = new Set(
-      SEEDS.map((seed) => pickWordDistractors({ target: 'mat', count: 1, level: 1, rng: makeRng(seed) })[0]),
+      SEEDS.map((seed) => pickWordDistractors({ target: 'mat', count: 1, level: 1, confusions: {}, rng: makeRng(seed) })[0]),
     );
     expect([...firsts].sort()).toEqual(['map', 'pat']);
   });
@@ -314,14 +314,14 @@ describe('pickWordDistractors', () => {
     // 'sat' and 'it' have no picture; offered as a wrong answer they would be a blank card.
     for (const seed of SEEDS) {
       const picks = pickWordDistractors({
-        target: 'mat', count: 5, level: 1, rng: makeRng(seed), allowedWords: ['sat', 'it', 'map', 'sip'],
+        target: 'mat', count: 5, level: 1, confusions: {}, rng: makeRng(seed), allowedWords: ['sat', 'it', 'map', 'sip'],
       });
       expect(picks.slice().sort(), `seed ${seed}`).toEqual(['map', 'sip']);
     }
   });
 
   it('can still be asked about a picture-less target, offering only picturable words', () => {
-    const picks = pickWordDistractors({ target: 'sat', count: 99, level: 1, rng: makeRng(1) });
+    const picks = pickWordDistractors({ target: 'sat', count: 99, level: 1, confusions: {}, rng: makeRng(1) });
     expect(picks).not.toContain('sat');
     expect(picks.length).toBeGreaterThan(0);
     for (const id of picks) expect(WORDS[id].picture, id).toBeDefined();
@@ -329,7 +329,7 @@ describe('pickWordDistractors', () => {
 
   it('does not offer the same word twice if allowedWords repeats it', () => {
     const picks = pickWordDistractors({
-      target: 'mat', count: 5, level: 1, rng: makeRng(1), allowedWords: ['map', 'map', 'pat', 'map'],
+      target: 'mat', count: 5, level: 1, confusions: {}, rng: makeRng(1), allowedWords: ['map', 'map', 'pat', 'map'],
     });
     expect(picks.slice().sort()).toEqual(['map', 'pat']);
   });
@@ -386,7 +386,7 @@ describe('pickWordDistractors', () => {
     // sit with i, s, t, p met: mat and map need an unmet a and m; fit needs f.
     for (const seed of SEEDS) {
       const picks = pickWordDistractors({
-        target: 'sit', count: 99, level: 1, rng: makeRng(seed), metGraphemes: ['s', 'i', 't', 'p'],
+        target: 'sit', count: 99, level: 1, confusions: {}, rng: makeRng(seed), metGraphemes: ['s', 'i', 't', 'p'],
       });
       expect(picks.slice().sort(), `seed ${seed}`).toEqual(['pip', 'pit', 'sip']);
     }
@@ -395,14 +395,14 @@ describe('pickWordDistractors', () => {
   it('offers those words when no restriction is given, which is why the session builder must pass one', () => {
     const seen = new Set<string>();
     for (const seed of SEEDS) {
-      for (const id of pickWordDistractors({ target: 'sit', count: 99, level: 1, rng: makeRng(seed) })) seen.add(id);
+      for (const id of pickWordDistractors({ target: 'sit', count: 99, level: 1, confusions: {}, rng: makeRng(seed) })) seen.add(id);
     }
     expect(seen.has('mat')).toBe(true);
   });
 
   it('applies the met-grapheme restriction to allowedWords too', () => {
     const picks = pickWordDistractors({
-      target: 'sit', count: 5, level: 1, rng: makeRng(1),
+      target: 'sit', count: 5, level: 1, confusions: {}, rng: makeRng(1),
       allowedWords: ['sip', 'mat', 'pit'], metGraphemes: ['s', 'i', 't', 'p'],
     });
     expect(picks.slice().sort()).toEqual(['pit', 'sip']);
@@ -410,21 +410,21 @@ describe('pickWordDistractors', () => {
 
   it('throws, naming the grapheme, when metGraphemes contains an unknown id', () => {
     expect(() =>
-      pickWordDistractors({ target: 'sit', count: 1, level: 1, rng: makeRng(1), metGraphemes: ['s', 'zz'] }),
+      pickWordDistractors({ target: 'sit', count: 1, level: 1, confusions: {}, rng: makeRng(1), metGraphemes: ['s', 'zz'] }),
     ).toThrow(/unknown grapheme: zz/i);
   });
 
   it('never offers a word from beyond the requested level, even if allowedWords lists it', () => {
     // Every real word is Level 1, so level 0 puts all of them in the future.
     expect(
-      pickWordDistractors({ target: 'mat', count: 3, level: 0, rng: makeRng(1), allowedWords: ['map', 'pat'] }),
+      pickWordDistractors({ target: 'mat', count: 3, level: 0, confusions: {}, rng: makeRng(1), allowedWords: ['map', 'pat'] }),
     ).toEqual([]);
   });
 
   it('draws only from allowedWords when given', () => {
     for (const seed of SEEDS) {
       const picks = pickWordDistractors({
-        target: 'mat', count: 5, level: 1, rng: makeRng(seed), allowedWords: ['sip', 'tap', 'map'],
+        target: 'mat', count: 5, level: 1, confusions: {}, rng: makeRng(seed), allowedWords: ['sip', 'tap', 'map'],
       });
       expect(picks.slice().sort()).toEqual(['map', 'sip', 'tap']);
     }
@@ -432,19 +432,19 @@ describe('pickWordDistractors', () => {
 
   it('returns nothing for a zero or negative count, rather than slicing from the end', () => {
     for (const count of [0, -1, -5]) {
-      expect(pickWordDistractors({ target: 'mat', count, level: 1, rng: makeRng(1) }), `count ${count}`).toEqual([]);
+      expect(pickWordDistractors({ target: 'mat', count, level: 1, confusions: {}, rng: makeRng(1) }), `count ${count}`).toEqual([]);
     }
   });
 
   it('throws, naming the word, when the target is not a real word', () => {
     expect(() =>
-      pickWordDistractors({ target: 'zzz', count: 1, level: 1, rng: makeRng(1) }),
+      pickWordDistractors({ target: 'zzz', count: 1, level: 1, confusions: {}, rng: makeRng(1) }),
     ).toThrow(/unknown word: zzz/i);
   });
 
   it('is deterministic for a given seed', () => {
-    const first = pickWordDistractors({ target: 'sit', count: 2, level: 1, rng: makeRng(11) });
-    const second = pickWordDistractors({ target: 'sit', count: 2, level: 1, rng: makeRng(11) });
+    const first = pickWordDistractors({ target: 'sit', count: 2, level: 1, confusions: {}, rng: makeRng(11) });
+    const second = pickWordDistractors({ target: 'sit', count: 2, level: 1, confusions: {}, rng: makeRng(11) });
     expect(first).toEqual(second);
   });
 });

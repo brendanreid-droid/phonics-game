@@ -89,10 +89,12 @@ export interface WordDistractorArgs {
   rng: Rng;
   /**
    * What this child has mixed up, as logged by `recordConfusion`. Word
-   * confusions are keyed `${target}>${chosen}`. Omitted means no history; the
-   * session builder should always pass the child's map.
+   * confusions are keyed `${target}>${chosen}`. Required, as it is for the
+   * other two pickers: leaving it optional let a caller forget it and silently
+   * lose the adaptive behaviour, with nothing to say so. A child with no
+   * history passes `{}` on purpose.
    */
-  confusions?: ConfusionMap;
+  confusions: ConfusionMap;
   /** Restricts the pool to words the child can actually decode. */
   allowedWords?: WordId[];
   /**
@@ -120,8 +122,7 @@ export interface WordDistractorArgs {
  * the caller shuffles the final choices and checks `length`.
  */
 export function pickWordDistractors(args: WordDistractorArgs): WordId[] {
-  const { target, count, level, rng } = args;
-  const confusions = args.confusions ?? {};
+  const { target, count, level, confusions, rng } = args;
   const targetGraphemes = getWord(target).graphemes;
   const met = args.metGraphemes ? new Set(args.metGraphemes.map((g) => getGrapheme(g).id)) : undefined;
 

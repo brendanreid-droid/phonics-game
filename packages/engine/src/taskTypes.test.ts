@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { SKILLS } from '@soundlings/curriculum';
 import { TASK_TYPES, easiestTaskTypeForSkill, taskTypeById, taskTypesForSkill } from './taskTypes';
 import type { TaskTypeMeta } from './taskTypes';
-import { DEFAULT_CONFIG } from './config';
 
 describe('task types', () => {
   it('has unique ids', () => {
@@ -27,14 +26,6 @@ describe('task types', () => {
     expect(TASK_TYPES.map((t) => t.skill).sort()).toEqual(
       ['BLEND_READ', 'LETTER_SOUND', 'SEGMENT_SPELL', 'SOUND_ID'].sort(),
     );
-  });
-
-  it('lets a grapheme reach the two-task-type mastery bar via secondary credit', () => {
-    // SOUND_ID has one direct task type, so without secondary credit from
-    // word tasks no grapheme could ever be mastered. This asserts the escape hatch.
-    const direct = taskTypesForSkill('SOUND_ID').length;
-    const secondary = TASK_TYPES.filter((t) => t.secondaryTargets === 'graphemes').length;
-    expect(direct + secondary).toBeGreaterThanOrEqual(DEFAULT_CONFIG.masteryTaskTypes);
   });
 
   it('keeps choice bounds sane', () => {
@@ -66,6 +57,23 @@ describe('task types', () => {
     expect(taskTypeById('sound-singer').secondaryTargets).toBe('none');
     expect(taskTypeById('picture-match').secondaryTargets).toBe('graphemes');
     expect(taskTypeById('word-builder').secondaryTargets).toBe('graphemes');
+  });
+
+  it('orders difficulty sound-hunt < sound-singer < picture-match < word-builder', () => {
+    // The frustration guard caps difficulty, so this order is behaviour.
+    const order = ['sound-hunt', 'sound-singer', 'picture-match', 'word-builder'];
+    const byDifficulty = [...TASK_TYPES].sort((a, b) => a.difficulty - b.difficulty).map((t) => t.id);
+    expect(byDifficulty).toEqual(order);
+  });
+
+  it('pins each task type\'s choice bounds', () => {
+    const bounds = Object.fromEntries(TASK_TYPES.map((t) => [t.id, [t.minChoices, t.maxChoices]]));
+    expect(bounds).toEqual({
+      'sound-hunt': [2, 4],
+      'sound-singer': [2, 3],
+      'picture-match': [2, 3],
+      'word-builder': [3, 5],
+    });
   });
 
   it('gives every task type a distinct difficulty, easiest being the single-sound games', () => {

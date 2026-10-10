@@ -44,7 +44,7 @@ describe('audio manifest', () => {
   });
 
   it('provides every instruction clip the four mini-games need', () => {
-    for (const key of ['ui.which_says', 'ui.find_letter', 'ui.build_word', 'ui.tap_picture', 'ui.listen_again']) {
+    for (const key of ['ui.which_says', 'ui.which_sound', 'ui.find_letter', 'ui.build_word', 'ui.tap_picture', 'ui.listen_again']) {
       expect(hasAudio(key), key).toBe(true);
     }
   });

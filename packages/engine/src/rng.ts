@@ -5,6 +5,11 @@ export type Rng = () => number;
  * mulberry32. Chosen over Math.random because every task instance must be
  * reproducible from a seed: that makes a parent's bug report replayable and
  * lets the simulation harness run deterministically in CI.
+ *
+ * The seed is coerced with `>>> 0`, so any number is accepted and silently
+ * reduced to an unsigned 32-bit integer: floats are truncated (1.9 -> 1) and
+ * negatives wrap (-1 -> 4294967295). Two seeds that coerce alike give the same
+ * stream.
  */
 export function makeRng(seed: number): Rng {
   let state = seed >>> 0;
@@ -38,4 +43,18 @@ export function seedFromString(value: string): number {
     hash = Math.imul(hash, 16777619);
   }
   return hash >>> 0;
+}
+
+/**
+ * A child seed for the `index`th item drawn from `seed`. Use this rather than
+ * `seed + index`: with addition, (seed 5, item 1) and (seed 6, item 0) collide,
+ * so neighbouring sessions would replay each other's tasks. This mixes both
+ * inputs through a 32-bit avalanche (the murmur3 finalizer), and is a bijection
+ * in `seed` for a fixed `index`.
+ */
+export function deriveSeed(seed: number, index: number): number {
+  let h = (seed >>> 0) ^ Math.imul((index >>> 0) + 1, 0x9e3779b1);
+  h = Math.imul(h ^ (h >>> 16), 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  return (h ^ (h >>> 16)) >>> 0;
 }

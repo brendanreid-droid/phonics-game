@@ -60,9 +60,22 @@ export default function Trophies() {
 
       <ScrollView contentContainerStyle={styles.grid}>
         {tiles.map((tile) => (
-          <View key={tile.key} accessible accessibilityLabel={`${tile.label}: ${tile.value}`} style={styles.tile}>
-            <Text style={styles.emoji}>{tile.emoji}</Text>
-            <Text style={[styles.value, tile.key === 'stars' && styles.starValue]}>{tile.value}</Text>
+          <View
+            key={tile.key}
+            accessible
+            accessibilityLabel={`${tile.label}: ${tile.value}`}
+            style={[styles.tile, !tile.earned && styles.tileUnearned]}
+          >
+            <Text style={[styles.emoji, !tile.earned && styles.emojiUnearned]}>{tile.emoji}</Text>
+            <Text
+              style={[
+                styles.value,
+                tile.key === 'stars' && tile.earned && styles.starValue,
+                !tile.earned && styles.valueUnearned,
+              ]}
+            >
+              {tile.value}
+            </Text>
             <Text style={styles.label}>{tile.label}</Text>
           </View>
         ))}
@@ -100,7 +113,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: tokens.space.xs,
   },
+  // Unearned: a flat dashed hollow, like the island's eggs, so the earned
+  // tiles are what the eye lands on.
+  tileUnearned: { backgroundColor: 'transparent', borderBottomWidth: 0, borderWidth: 2, borderStyle: 'dashed', borderColor: tokens.color.tileEdge },
   emoji: { fontSize: 40 },
+  emojiUnearned: { opacity: 0.3 },
+  valueUnearned: { fontSize: tokens.type.body + 2, color: tokens.color.inkSoft, opacity: 0.8 },
   value: { fontFamily: tokens.font.ui, fontSize: tokens.type.title + 4, color: tokens.color.ink },
   starValue: { color: tokens.color.gold },
   label: { fontFamily: tokens.font.ui, fontSize: tokens.type.body, color: tokens.color.inkSoft },

@@ -24,7 +24,10 @@ export interface LevelCard {
  * calculation: `levelProgress` is judged at `now`, so a level finished last
  * month reads as unfinished once its evidence decays, and a child must never
  * lose a level they have finished. The live fraction is used only to show how
- * far along a level in progress is.
+ * far along a level in progress is. The island, by contrast, deliberately reads
+ * the live calculation ("what can they do now?"), so the two can disagree after
+ * a long gap: that is intended, and neither should be changed to match the
+ * other (see island.ts).
  *
  * A level is open once the one before it is latched complete. Locked cards
  * carry nothing but their state: no date, no detail.

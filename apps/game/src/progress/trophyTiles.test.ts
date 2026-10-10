@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { trophyTilesFrom } from './trophyTiles';
+import { NOT_YET, trophyTilesFrom } from './trophyTiles';
 import type { Trophies } from './trophies';
 
 const none: Trophies = {
@@ -32,9 +32,31 @@ describe('trophyTilesFrom', () => {
     expect(tile({ ...none, longestStreak: 2 }, 'streak').value).toBe('2 days');
   });
 
-  it('shows a dash, never "0 days" or "1 day", where there is no streak yet', () => {
-    expect(tile({ ...none, longestStreak: 0 }, 'streak').value).toBe('—');
-    expect(tile({ ...none, longestStreak: 1 }, 'streak').value).toBe('—');
+  it('reads "Not yet", never "0 days" or "1 day", where there is no streak yet', () => {
+    expect(tile({ ...none, longestStreak: 0 }, 'streak').value).toBe(NOT_YET);
+    expect(tile({ ...none, longestStreak: 1 }, 'streak').value).toBe(NOT_YET);
+  });
+
+  it('never renders a bare 0 for an unearned trophy: it reads Not yet, and is marked unearned', () => {
+    const tiles = trophyTilesFrom(none);
+    for (const t of tiles) {
+      expect(t.value).not.toMatch(/(^|\D)0(\D|$)/);
+      expect(t.value).not.toBe('');
+    }
+    for (const key of ['sounds', 'read', 'spelled', 'perfect', 'streak']) {
+      expect(tiles.find((t) => t.key === key)).toMatchObject({ value: NOT_YET, earned: false });
+    }
+    // The stars keep their outline: the shape of what is possible.
+    expect(tiles.find((t) => t.key === 'stars')).toMatchObject({ value: '☆☆☆', earned: false });
+  });
+
+  it('keeps every tile, earned or not: the gaps are the map', () => {
+    expect(trophyTilesFrom(none)).toHaveLength(6);
+  });
+
+  it('marks a trophy earned as soon as there is something in it', () => {
+    const tiles = trophyTilesFrom({ ...none, soundsLearned: 1, wordsRead: 1, wordsSpelled: 1, bestStars: 1, cleanRuns: 1, longestStreak: 2 });
+    expect(tiles.every((t) => t.earned)).toBe(true);
   });
 
   it('has the six tiles, in a fixed order', () => {
@@ -42,7 +64,9 @@ describe('trophyTilesFrom', () => {
   });
 
   it('shows NO failure of any kind: no errors, no accuracy, no misses', () => {
-    const everything = JSON.stringify(trophyTilesFrom({ ...none, soundsLearned: 3, wordsRead: 2, bestStars: 1, cleanRuns: 1, longestStreak: 3 }));
-    expect(everything).not.toMatch(/error|wrong|mistake|accura|incorrect|miss|fail|%/i);
+    const earned = { ...none, soundsLearned: 3, wordsRead: 2, bestStars: 1, cleanRuns: 1, longestStreak: 3 };
+    for (const t of [earned, none]) {
+      expect(JSON.stringify(trophyTilesFrom(t))).not.toMatch(/error|wrong|mistake|accura|incorrect|miss|fail|%/i);
+    }
   });
 });

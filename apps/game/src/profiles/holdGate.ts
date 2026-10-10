@@ -5,6 +5,11 @@
  * Plan 3, and two different gates would be worse than one. Two seconds is
  * beyond an idle five-year-old's patience and trivial for an adult who means
  * it. It guards creating and deleting profiles; choosing one is never gated.
+ *
+ * TODO(Plan 3): a hold cannot be completed from a keyboard or a screen reader,
+ * and a grown-up gate is exactly where an adult using assistive technology
+ * will hit that. Not fixed here on purpose: the parent area introduces a PIN,
+ * and the right fix is one accessible gate rather than two inaccessible ones.
  */
 export const HOLD_MS = 2000;
 

@@ -20,6 +20,8 @@ export interface IslandView {
  * The creature collection *is* the progress bar. It reads the live
  * calculation, because the island answers "what can they do right now?"; the
  * level-complete badge, which never un-earns, is the level select's business.
+ * The two can disagree after a long gap, and that is intended: do not "fix"
+ * one to match the other (see levelCards.ts).
  *
  * The streak line appears only for a run that is alive and at least two days
  * long. The island is not where a child is told what they have failed to do,

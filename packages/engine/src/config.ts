@@ -36,6 +36,14 @@ export interface EngineConfig {
   abandonAfterErrors: number;
   badDayDistinctTargets: number;
   badDaySessionLength: number;
+  /**
+   * Difficulty ceiling applied to the rest of a quest after the guard abandons
+   * a task. Must be at least 2: only one Level 1 task type has difficulty 1, so
+   * a cap of 1 leaves the session builder a single mini-game, collapses its
+   * no-adjacent-repeats rule, and hands a struggling child a quest of identical
+   * tasks. 2 keeps two types alternating and is still easy.
+   */
+  cappedDifficulty: number;
 
   // Level completion
   blendWordsRequired: number;
@@ -75,6 +83,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   abandonAfterErrors: 3,
   badDayDistinctTargets: 3,
   badDaySessionLength: 8,
+  cappedDifficulty: 2,
 
   blendWordsRequired: 8,
   segmentWordsRequired: 6,

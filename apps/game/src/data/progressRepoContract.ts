@@ -534,5 +534,96 @@ export function describeProgressRepo(name: string, fresh: () => ProgressRepo): v
         expect(await store.loadCompletions('kid')).toEqual({ 1: 1000 });
       });
     });
+
+    describe('clearing a profile', () => {
+      async function fillEverything(store: ProgressRepo, id: string): Promise<void> {
+        await store.saveMastery(id, { 's::SOUND_ID': emptyRecord('s', 'SOUND_ID', DEFAULT_CONFIG) });
+        await store.appendAttempt(id, attempt());
+        await store.saveConfusions(id, { 'm>a': 1 });
+        await store.saveHighScore(id, { level: 1, stars: 3, cleanRun: true, at: 1 });
+        await store.markLevelComplete(id, 1, 1);
+        await store.markPlayedOn(id, '2026-10-10');
+        await store.saveActiveSession(id, { sessionId: 's1', level: 1, plan: [], index: 0, stars: 0, startedAt: 1 });
+      }
+
+      it('clears every trace of one profile', async () => {
+        const store = fresh();
+        await fillEverything(store, 'kid');
+
+        await store.clear('kid');
+
+        expect(await store.loadMastery('kid')).toEqual({});
+        expect(await store.loadAttempts('kid')).toEqual([]);
+        expect(await store.loadConfusions('kid')).toEqual({});
+        expect(await store.loadHighScores('kid')).toEqual([]);
+        expect(await store.loadCompletions('kid')).toEqual({});
+        expect(await store.loadPlayedDates('kid')).toEqual([]);
+        expect(await store.loadActiveSession('kid')).toBeNull();
+      });
+
+      it('leaves other profiles untouched when clearing one', async () => {
+        const store = fresh();
+        await store.saveConfusions('a', { 'm>a': 1 });
+        await store.saveConfusions('b', { 'm>a': 2 });
+        await store.clear('a');
+        expect(await store.loadConfusions('b')).toEqual({ 'm>a': 2 });
+      });
+
+      it('leaves a profile whose id merely begins with the cleared id completely untouched', async () => {
+        const store = fresh();
+        await fillEverything(store, 'kid');
+        await fillEverything(store, 'kid2');
+        await fillEverything(store, 'kid-2');
+
+        await store.clear('kid');
+
+        for (const other of ['kid2', 'kid-2']) {
+          expect(Object.keys(await store.loadMastery(other))).toEqual(['s::SOUND_ID']);
+          expect(await store.loadAttempts(other)).toHaveLength(1);
+          expect(await store.loadConfusions(other)).toEqual({ 'm>a': 1 });
+          expect(await store.loadHighScores(other)).toHaveLength(1);
+          expect(await store.loadCompletions(other)).toEqual({ 1: 1 });
+          expect(await store.loadPlayedDates(other)).toEqual(['2026-10-10']);
+          expect(await store.loadActiveSession(other)).not.toBeNull();
+        }
+      });
+
+      it('leaves a profile whose id ends with the cleared id untouched', async () => {
+        const store = fresh();
+        await fillEverything(store, 'kid');
+        await fillEverything(store, 'big-kid');
+        await store.clear('kid');
+        expect(await store.loadAttempts('big-kid')).toHaveLength(1);
+        expect(await store.loadCompletions('big-kid')).toEqual({ 1: 1 });
+      });
+
+      it('is harmless for a profile that has no data, and when repeated', async () => {
+        const store = fresh();
+        await store.clear('nobody');
+        await fillEverything(store, 'kid');
+        await store.clear('kid');
+        await store.clear('kid');
+        expect(await store.loadAttempts('kid')).toEqual([]);
+      });
+
+      it('lets a profile start again from nothing after being cleared', async () => {
+        const store = fresh();
+        await fillEverything(store, 'kid');
+        await store.clear('kid');
+        await store.appendAttempt('kid', attempt());
+        await store.markLevelComplete('kid', 1, 50);
+        expect(await store.loadAttempts('kid')).toHaveLength(1);
+        expect(await store.loadCompletions('kid')).toEqual({ 1: 50 });
+      });
+
+      it('waits for writes already queued, so a late append cannot resurrect cleared data', async () => {
+        const store = fresh();
+        await fillEverything(store, 'kid');
+        const pending = store.appendAttempt('kid', attempt());
+        await store.clear('kid');
+        await pending;
+        expect(await store.loadAttempts('kid')).toEqual([]);
+      });
+    });
   });
 }

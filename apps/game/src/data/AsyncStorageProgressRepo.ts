@@ -25,6 +25,29 @@ const isCompletions = (value: unknown): boolean =>
 const isDateList = (value: unknown): boolean => isArray(value) && value.every((d) => typeof d === 'string');
 
 /**
+ * Every record kept per profile, under `soundlings/<profileId>/<name>`.
+ *
+ * The single source of truth for key names: `key()` only accepts one of these,
+ * and `clear()` removes exactly these. Adding a record to the repo means adding
+ * it here, which makes it deleted with the profile for free. The test that
+ * asserts no key remains under a cleared profile is what catches a record
+ * written some other way.
+ */
+const RECORDS = [
+  'mastery',
+  'attempts',
+  'confusions',
+  'activeSession',
+  'highScores',
+  'completions',
+  'playedDates',
+] as const;
+type RecordName = (typeof RECORDS)[number];
+
+/** Suffix of the copy set aside by `quarantine` when a stored value is unreadable. */
+const CORRUPT_SUFFIX = '.corrupt';
+
+/**
  * Device-backed ProgressRepo. JSON in AsyncStorage is more than adequate at
  * this data volume — a Level 1 child accumulates a few hundred attempts — and
  * it keeps the review gate free of any native database setup.
@@ -171,13 +194,28 @@ export class AsyncStorageProgressRepo implements ProgressRepo {
     });
   }
 
+  clear(profileId: string): Promise<void> {
+    return this.serial(async () => {
+      // An explicit list of exact keys - NOT getAllKeys() filtered by prefix.
+      // A prefix match for id "kid" also catches "kid2", and deleting the wrong
+      // child's progress cannot be undone. Quarantined copies are included:
+      // they are the same child's data, set aside.
+      const keys = RECORDS.flatMap((name) => [
+        this.key(profileId, name),
+        this.key(profileId, name) + CORRUPT_SUFFIX,
+      ]);
+      // Deliberately not caught. See ProgressRepo.clear.
+      await AsyncStorage.multiRemove(keys);
+    });
+  }
+
   private serial<T>(operation: () => Promise<T>): Promise<T> {
     const run = this.tail.then(operation);
     this.tail = run.catch(() => undefined);
     return run;
   }
 
-  private key(profileId: string, name: string): string {
+  private key(profileId: string, name: RecordName): string {
     return `soundlings/${profileId}/${name}`;
   }
 
@@ -214,7 +252,7 @@ export class AsyncStorageProgressRepo implements ProgressRepo {
 
   private async quarantine(key: string, raw: string): Promise<void> {
     try {
-      await AsyncStorage.setItem(`${key}.corrupt`, raw);
+      await AsyncStorage.setItem(`${key}${CORRUPT_SUFFIX}`, raw);
     } catch {
       // Best effort only.
     }

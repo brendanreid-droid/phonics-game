@@ -13,6 +13,7 @@ const fake = vi.hoisted(() => {
     data: new Map<string, string>(),
     failGet: (_key: string): boolean => false,
     failSet: (_key: string): boolean => false,
+    failRemove: (_key: string): boolean => false,
   };
   const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
   return {
@@ -31,6 +32,21 @@ const fake = vi.hoisted(() => {
       removeItem: async (key: string) => {
         await tick();
         state.data.delete(key);
+      },
+      // The real multiRemove removes nothing it is not given; and, like the
+      // real one, a failure part-way leaves earlier keys removed.
+      multiRemove: async (keys: readonly string[]) => {
+        await tick();
+        for (const key of keys) {
+          if (state.failRemove(key)) throw new Error('storage unavailable');
+          state.data.delete(key);
+        }
+      },
+      // Present so that an implementation which enumerates keys and filters by
+      // prefix can run here at all - and be caught by the tests below.
+      getAllKeys: async () => {
+        await tick();
+        return [...state.data.keys()];
       },
     },
   };
@@ -54,6 +70,7 @@ beforeEach(() => {
   fake.state.data.clear();
   fake.state.failGet = () => false;
   fake.state.failSet = () => false;
+  fake.state.failRemove = () => false;
 });
 
 describeProgressRepo('AsyncStorageProgressRepo', () => new AsyncStorageProgressRepo());
@@ -288,5 +305,80 @@ describe('AsyncStorageProgressRepo on a device', () => {
       fake.state.data.set('soundlings/kid/activeSession', '{"sessionId":"q1","plan":[{"id":');
       expect(await new AsyncStorageProgressRepo().loadActiveSession('kid')).toBeNull();
     });
+  });
+});
+
+describe('AsyncStorageProgressRepo.clear', () => {
+  async function fillEverything(repo: AsyncStorageProgressRepo, id: string): Promise<void> {
+    await repo.saveMastery(id, { 's::SOUND_ID': emptyRecord('s', 'SOUND_ID', DEFAULT_CONFIG) });
+    await repo.appendAttempt(id, attempt(NOW));
+    await repo.saveConfusions(id, { 'm>a': 1 });
+    await repo.saveHighScore(id, { level: 1, stars: 3, cleanRun: true, at: NOW });
+    await repo.markLevelComplete(id, 1, NOW);
+    await repo.markPlayedOn(id, '2026-10-10');
+    await repo.saveActiveSession(id, { sessionId: 'q', level: 1, plan: [], index: 0, stars: 0, startedAt: NOW });
+  }
+
+  const keysOf = (id: string) => [...fake.state.data.keys()].filter((k) => k.startsWith(`soundlings/${id}/`));
+
+  it('leaves no key at all under the cleared profile', async () => {
+    const repo = new AsyncStorageProgressRepo();
+    await fillEverything(repo, 'kid');
+    expect(keysOf('kid').length).toBeGreaterThanOrEqual(7);
+    await repo.clear('kid');
+    expect(keysOf('kid')).toEqual([]);
+  });
+
+  it('also removes data that was set aside as corrupt, which is still the child\'s', async () => {
+    const repo = new AsyncStorageProgressRepo();
+    fake.state.data.set('soundlings/kid/attempts', '{not json');
+    await repo.appendAttempt('kid', attempt(NOW)); // quarantines the unreadable log
+    expect(fake.state.data.has('soundlings/kid/attempts.corrupt')).toBe(true);
+    await repo.clear('kid');
+    expect(keysOf('kid')).toEqual([]);
+  });
+
+  it('removes only that profile\'s keys: every other key in storage is byte-identical afterwards', async () => {
+    const repo = new AsyncStorageProgressRepo();
+    await fillEverything(repo, 'kid');
+    // Ids that share a prefix with, or contain, the cleared one - and the
+    // household-level keys the profile repo owns.
+    for (const other of ['kid2', 'kid-2', 'kid2/x', 'big-kid', 'ki']) await fillEverything(repo, other);
+    fake.state.data.set('soundlings/profiles', '[{"id":"kid"}]');
+    fake.state.data.set('soundlings/selectedProfile', 'kid');
+    fake.state.data.set('somethingElse', 'x');
+    const before = new Map(fake.state.data);
+
+    await repo.clear('kid');
+
+    const expected = new Map([...before].filter(([k]) => !k.startsWith('soundlings/kid/')));
+    expect(fake.state.data).toEqual(expected);
+  });
+
+  it('rejects when storage fails, rather than reporting a delete that did not happen', async () => {
+    const repo = new AsyncStorageProgressRepo();
+    await fillEverything(repo, 'kid');
+    fake.state.failRemove = () => true;
+    await expect(repo.clear('kid')).rejects.toThrow();
+    expect(keysOf('kid').length).toBeGreaterThan(0);
+  });
+
+  it('keeps working after a failed clear, and a retry finishes the job', async () => {
+    const repo = new AsyncStorageProgressRepo();
+    await fillEverything(repo, 'kid');
+    fake.state.failRemove = () => true;
+    await expect(repo.clear('kid')).rejects.toThrow();
+    fake.state.failRemove = () => false;
+    await repo.clear('kid');
+    expect(keysOf('kid')).toEqual([]);
+  });
+
+  it('runs in the queue: an append already in flight cannot land after the clear', async () => {
+    const repo = new AsyncStorageProgressRepo();
+    await fillEverything(repo, 'kid');
+    const late = repo.appendAttempt('kid', attempt(NOW + 1));
+    const cleared = repo.clear('kid');
+    await Promise.all([late, cleared]);
+    expect(keysOf('kid')).toEqual([]);
   });
 });

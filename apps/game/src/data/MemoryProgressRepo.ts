@@ -96,6 +96,10 @@ export class MemoryProgressRepo implements ProgressRepo {
     }
   }
 
+  async clear(profileId: string): Promise<void> {
+    this.profiles.delete(profileId);
+  }
+
   private state(profileId: string): ProfileState {
     const existing = this.profiles.get(profileId);
     if (existing) return existing;

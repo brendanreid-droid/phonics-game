@@ -73,6 +73,17 @@ export interface ProgressRepo {
   /** Local YYYY-MM-DD dates on which a quest was finished, ascending, each once. */
   loadPlayedDates(profileId: string): Promise<string[]>;
   markPlayedOn(profileId: string, date: string): Promise<void>;
+
+  /**
+   * Deletes every trace of ONE profile's progress and nothing belonging to any
+   * other. Used when a grown-up deletes a child's profile.
+   *
+   * Unlike every other write here it must REJECT when it cannot finish: the
+   * caller removes the profile only after this succeeds, and a clear that
+   * failed quietly would leave the learning record orphaned with no id left to
+   * find it by. Idempotent, so a failed delete can simply be retried.
+   */
+  clear(profileId: string): Promise<void>;
 }
 
 /** Merges a score in, keeping the best per level. Shared by all implementations. */

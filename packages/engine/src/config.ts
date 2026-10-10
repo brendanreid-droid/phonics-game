@@ -85,8 +85,10 @@ export const DEFAULT_CONFIG: EngineConfig = {
   badDaySessionLength: 8,
   cappedDifficulty: 2,
 
-  blendWordsRequired: 8,
-  segmentWordsRequired: 6,
+  // Six words read and five spelt, on top of all seven sounds proven in both
+  // directions. Reduced from 8 and 6, which were arbitrary.
+  blendWordsRequired: 6,
+  segmentWordsRequired: 5,
 };
 
 export function withDefaults(partial?: Partial<EngineConfig>): EngineConfig {

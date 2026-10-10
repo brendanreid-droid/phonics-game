@@ -47,9 +47,9 @@ const GRAPHEMES = ['s', 'a', 't', 'p', 'i', 'm', 'f'];
 const graphemeEntries = (ids: string[] = GRAPHEMES): Entry[] =>
   ids.flatMap((g) => [mastered(g, 'SOUND_ID'), mastered(g, 'LETTER_SOUND')]);
 
-// Eight of the nine picturable words, and six spellable ones.
-const BLEND_WORDS = ['pat', 'tap', 'pit', 'sit', 'sip', 'pip', 'fit', 'mat'];
-const SPELL_WORDS = ['sat', 'tip', 'sap', 'mat', 'map', 'at'];
+// Exactly the quota: six of the nine picturable words, and five spellable ones.
+const BLEND_WORDS = ['pat', 'tap', 'pit', 'sit', 'sip', 'pip'];
+const SPELL_WORDS = ['sat', 'tip', 'sap', 'mat', 'map'];
 const blendEntries = (ids: string[]): Entry[] => ids.map((w) => mastered(w, 'BLEND_READ'));
 const spellEntries = (ids: string[]): Entry[] => ids.map((w) => mastered(w, 'SEGMENT_SPELL'));
 
@@ -136,8 +136,8 @@ describe('the three completion quotas', () => {
     const entries = [...allGraphemes, ...blendEntries(BLEND_WORDS), ...spellEntries(SPELL_WORDS)];
     const progress = levelProgress(1, mapOf(entries), NOW);
     expect(progress.graphemesMastered).toBe(7);
-    expect(progress.blendWordsMastered).toBe(8);
-    expect(progress.segmentWordsMastered).toBe(6);
+    expect(progress.blendWordsMastered).toBe(6);
+    expect(progress.segmentWordsMastered).toBe(5);
     expect(progress.complete).toBe(true);
   });
 
@@ -153,16 +153,16 @@ describe('the three completion quotas', () => {
   });
 
   it('is not complete one blend word short', () => {
-    const entries = [...allGraphemes, ...blendEntries(BLEND_WORDS.slice(0, 7)), ...spellEntries(SPELL_WORDS)];
+    const entries = [...allGraphemes, ...blendEntries(BLEND_WORDS.slice(0, 5)), ...spellEntries(SPELL_WORDS)];
     const progress = levelProgress(1, mapOf(entries), NOW);
-    expect(progress.blendWordsMastered).toBe(7);
+    expect(progress.blendWordsMastered).toBe(5);
     expect(progress.complete).toBe(false);
   });
 
   it('is not complete one spelling word short', () => {
-    const entries = [...allGraphemes, ...blendEntries(BLEND_WORDS), ...spellEntries(SPELL_WORDS.slice(0, 5))];
+    const entries = [...allGraphemes, ...blendEntries(BLEND_WORDS), ...spellEntries(SPELL_WORDS.slice(0, 4))];
     const progress = levelProgress(1, mapOf(entries), NOW);
-    expect(progress.segmentWordsMastered).toBe(5);
+    expect(progress.segmentWordsMastered).toBe(4);
     expect(progress.complete).toBe(false);
   });
 
@@ -174,12 +174,12 @@ describe('the three completion quotas', () => {
   it('still counts words beyond the quota', () => {
     const entries = [
       ...allGraphemes,
-      ...blendEntries([...BLEND_WORDS, 'map']),
+      ...blendEntries([...BLEND_WORDS, 'fit', 'mat', 'map']),
       ...spellEntries([...SPELL_WORDS, 'sam', 'pam', 'fat']),
     ];
     const progress = levelProgress(1, mapOf(entries), NOW);
     expect(progress.blendWordsMastered).toBe(9);
-    expect(progress.segmentWordsMastered).toBe(9);
+    expect(progress.segmentWordsMastered).toBe(8);
     expect(progress.complete).toBe(true);
   });
 
@@ -286,24 +286,24 @@ describe('fraction', () => {
     const one = levelProgress(1, mapOf(graphemeEntries(['s'])), NOW);
     expect(one.fraction).toBeCloseTo(1 / 7 / 3, 10);
 
-    const blendHalf = levelProgress(1, mapOf(blendEntries(BLEND_WORDS.slice(0, 4))), NOW);
+    const blendHalf = levelProgress(1, mapOf(blendEntries(BLEND_WORDS.slice(0, 3))), NOW);
     expect(blendHalf.fraction).toBeCloseTo(0.5 / 3, 10);
 
-    const spellThird = levelProgress(1, mapOf(spellEntries(SPELL_WORDS.slice(0, 3))), NOW);
-    expect(spellThird.fraction).toBeCloseTo(0.5 / 3, 10);
+    const spellFifth = levelProgress(1, mapOf(spellEntries(SPELL_WORDS.slice(0, 1))), NOW);
+    expect(spellFifth.fraction).toBeCloseTo(0.2 / 3, 10);
   });
 
   it('is exactly 1 when complete, and never exceeds 1 with surplus words', () => {
     const entries = [
       ...graphemeEntries(),
-      ...blendEntries([...BLEND_WORDS, 'map']),
+      ...blendEntries([...BLEND_WORDS, 'fit', 'mat', 'map']),
       ...spellEntries([...SPELL_WORDS, 'sam', 'pam', 'fat']),
     ];
     expect(levelProgress(1, mapOf(entries), NOW).fraction).toBe(1);
   });
 
   it('is below 1 whenever the level is not complete', () => {
-    const entries = [...graphemeEntries(), ...blendEntries(BLEND_WORDS), ...spellEntries(SPELL_WORDS.slice(0, 5))];
+    const entries = [...graphemeEntries(), ...blendEntries(BLEND_WORDS), ...spellEntries(SPELL_WORDS.slice(0, 4))];
     const progress = levelProgress(1, mapOf(entries), NOW);
     expect(progress.complete).toBe(false);
     expect(progress.fraction).toBeGreaterThan(0.9);

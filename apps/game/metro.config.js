@@ -13,6 +13,12 @@ config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, 'node_modules'),
   path.resolve(workspaceRoot, 'node_modules'),
 ];
-config.resolver.disableHierarchicalLookup = true;
+
+// Deliberately NOT setting `resolver.disableHierarchicalLookup = true`.
+// npm nests some packages' own dependencies (react-native-reanimated needs
+// semver 7, while the hoisted copy is 6), and with hierarchical lookup off
+// Metro cannot see them: "Unable to resolve module semver/functions/satisfies"
+// the moment anything imports reanimated, on every platform. Duplicate copies
+// of react are prevented by the root `overrides` instead.
 
 module.exports = config;

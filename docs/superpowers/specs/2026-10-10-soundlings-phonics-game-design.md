@@ -348,7 +348,9 @@ Four task types is the minimum that satisfies the ≥2-task-types mastery rule f
 
 ### 6.2 Creatures
 
-One Soundling per grapheme, named using its own sound: /s/ → Sisi, /a/ → Ada, /t/ → Tito, /p/ → Pip, /i/ → Indi, /m/ → Mo, /f/ → Fifi. Hatches on mastery. Lives on the island home screen, which doubles as the progress map.
+One Soundling per grapheme, named so that saying the name rehearses the sound: /s/ → Sisi, /a/ → Annie, /t/ → Tito, /p/ → Popo, /i/ → Indi, /m/ → Momo, /f/ → Fifi. Hatches on mastery. Lives on the island home screen, which doubles as the progress map.
+
+The test is the name's **leading sound**, not its leading letter. An earlier draft of this spec had `/a/ → Ada`, which fails: "Ada" is AY-da, the letter *name*, which is the exact confusion phonics teaching exists to prevent. No automated test can check pronunciation, so any new creature name needs a human to say it aloud. `Pip` and `Mo` were also renamed — `Pip` collided with the decodable word `pip`, and both were too short to read as characters.
 
 ---
 

@@ -73,3 +73,29 @@ export function easiestTaskTypeForSkill(
   if (candidates.length === 0) throw new Error(`No task type for skill: ${skill}`);
   return candidates.reduce((best, t) => (t.difficulty < best.difficulty ? t : best));
 }
+
+/**
+ * The skill that receives composite credit when a word task is answered. Must
+ * match the skill `attemptsForTask` records secondary attempts under; a test
+ * compares the two against the evidence actually emitted.
+ */
+const SECONDARY_CREDIT_SKILL: Skill = 'SOUND_ID';
+
+/**
+ * How many distinct task types can contribute evidence for this skill: its own
+ * direct types, plus (for the skill that receives it) every type that grants
+ * secondary credit. Derived from the pool, so adding a mini-game raises it
+ * without anyone remembering to.
+ *
+ * `isMastered` caps its task-type condition by this number. Without the cap a
+ * skill that only one mini-game can prove could never reach two task types,
+ * and could never be mastered.
+ */
+export function provingTaskTypeCount(skill: Skill, pool: readonly TaskTypeMeta[] = TASK_TYPES): number {
+  const ids = new Set<string>();
+  for (const type of pool) {
+    if (type.skill === skill) ids.add(type.id);
+    else if (skill === SECONDARY_CREDIT_SKILL && type.secondaryTargets === 'graphemes') ids.add(type.id);
+  }
+  return ids.size;
+}

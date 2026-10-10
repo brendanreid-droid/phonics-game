@@ -1,5 +1,6 @@
 import type { Skill, TargetId } from '@soundlings/curriculum';
 import type { EngineConfig } from './config';
+import { provingTaskTypeCount } from './taskTypes';
 import { masteryKey } from './types';
 import type { Attempt, MasteryMap, MasteryRecord } from './types';
 
@@ -190,8 +191,12 @@ export function applyAttempt(
  *
  * The two conditions people try to remove are the two that matter.
  * `masteryTaskTypes` stops a child "mastering" a sound by memorising the shape
- * of one mini-game. `masterySessions` requires retention across a gap rather
- * than same-sitting recall; only sessions containing unscaffolded correct
+ * of one mini-game. It is capped by `provingTaskTypeCount(skill)`: a skill that
+ * only one mini-game can prove could otherwise never reach two types and could
+ * never be mastered, which made Level 1 impossible to finish. Where several
+ * mini-games can prove a skill the full requirement still applies.
+ * `masterySessions` requires retention across a gap rather than same-sitting
+ * recall; only sessions containing unscaffolded correct
  * evidence count (see `MasteryRecord.sessionsProven`).
  *
  * `primaryCorrectCount >= 1` means the child has been asked this target
@@ -212,7 +217,8 @@ export function isMastered(record: MasteryRecord, now: number, config: EngineCon
     record.correctCount + COUNT_EPSILON >= config.masteryCorrect &&
     record.primaryCorrectCount >= 1 &&
     record.consecutiveCorrect >= 1 &&
-    record.taskTypesSeen.length >= config.masteryTaskTypes &&
+    record.taskTypesSeen.length >=
+      Math.min(config.masteryTaskTypes, provingTaskTypeCount(record.skill)) &&
     record.sessionsProven >= config.masterySessions
   );
 }

@@ -53,7 +53,7 @@ describe('engine purity', () => {
   it('extracts the specifiers a file really imports, so the import check cannot pass vacuously', () => {
     const read = (name: string) => readFileSync(join(SRC, name), 'utf8');
     expect(specifiers(read('mastery.ts')).sort()).toEqual(
-      ['./config', './types', './types', '@soundlings/curriculum'],
+      ['./config', './taskTypes', './types', './types', '@soundlings/curriculum'],
     );
     expect(specifiers(read('types.ts'))).toEqual(['@soundlings/curriculum']);
     // Forms no real file uses today but the check must still see.

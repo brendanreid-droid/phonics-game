@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { SKILLS } from '@soundlings/curriculum';
-import { TASK_TYPES, easiestTaskTypeForSkill, taskTypeById, taskTypesForSkill } from './taskTypes';
+import { DEFAULT_CONFIG } from './config';
+import { TASK_TYPES, easiestTaskTypeForSkill, provingTaskTypeCount, taskTypeById, taskTypesForSkill } from './taskTypes';
+import { attemptsForTask } from './taskOutcome';
+import type { TaskInstance } from './types';
 import type { TaskTypeMeta } from './taskTypes';
 
 describe('task types', () => {
@@ -106,5 +109,64 @@ describe('task types', () => {
     const mine: TaskTypeMeta = { id: 'mine', skill: 'BLEND_READ', difficulty: 4, minChoices: 2, maxChoices: 3, secondaryTargets: 'none' };
     expect(easiestTaskTypeForSkill('BLEND_READ', [other, mine]).id).toBe('mine');
     expect(() => easiestTaskTypeForSkill('SOUND_ID', [other, mine])).toThrow(/no task type for skill/i);
+  });
+});
+
+describe('provingTaskTypeCount', () => {
+  const type = (over: Partial<TaskTypeMeta> & { id: string }): TaskTypeMeta => ({
+    skill: 'SOUND_ID', difficulty: 1, minChoices: 2, maxChoices: 3, secondaryTargets: 'none', ...over,
+  });
+
+  it('counts a skill\'s own type plus every type that grants it secondary credit', () => {
+    // SOUND_ID: sound-hunt directly, plus picture-match and word-builder through
+    // secondary credit. The other three skills get no composite credit.
+    expect(provingTaskTypeCount('SOUND_ID')).toBe(3);
+    expect(provingTaskTypeCount('LETTER_SOUND')).toBe(1);
+    expect(provingTaskTypeCount('BLEND_READ')).toBe(1);
+    expect(provingTaskTypeCount('SEGMENT_SPELL')).toBe(1);
+  });
+
+  it('is zero for a skill nothing can prove', () => {
+    expect(provingTaskTypeCount('TRICKY_READ')).toBe(0);
+  });
+
+  it('rises on its own when a second mini-game is added for a skill', () => {
+    const pool = [...TASK_TYPES, type({ id: 'singer-two', skill: 'LETTER_SOUND', difficulty: 6 })];
+    expect(provingTaskTypeCount('LETTER_SOUND', pool)).toBe(2);
+    expect(provingTaskTypeCount('LETTER_SOUND', TASK_TYPES)).toBe(1);
+  });
+
+  it('counts secondary-credit types only for the skill that receives the credit', () => {
+    const pool = [
+      type({ id: 'direct', skill: 'SOUND_ID' }),
+      type({ id: 'composite', skill: 'BLEND_READ', secondaryTargets: 'graphemes' }),
+      type({ id: 'plain', skill: 'BLEND_READ', secondaryTargets: 'none' }),
+    ];
+    expect(provingTaskTypeCount('SOUND_ID', pool)).toBe(2);
+    expect(provingTaskTypeCount('BLEND_READ', pool)).toBe(2);
+    expect(provingTaskTypeCount('LETTER_SOUND', pool)).toBe(0);
+  });
+
+  it('does not count a SOUND_ID type twice when it also grants secondary credit', () => {
+    const pool = [type({ id: 'both', skill: 'SOUND_ID', secondaryTargets: 'graphemes' })];
+    expect(provingTaskTypeCount('SOUND_ID', pool)).toBe(1);
+  });
+
+  it('agrees with the evidence taskOutcome actually emits, so the two cannot drift apart', () => {
+    for (const skill of ['SOUND_ID', 'LETTER_SOUND', 'BLEND_READ', 'SEGMENT_SPELL'] as const) {
+      const emitted = new Set<string>();
+      for (const meta of TASK_TYPES) {
+        const task: TaskInstance = {
+          id: 't', taskTypeId: meta.id, skill: meta.skill, primaryTarget: 'pat',
+          secondaryTargets: meta.secondaryTargets === 'graphemes' ? ['p', 'a', 't'] : [],
+          choices: [], correctChoice: 'pat', band: 'focus', anchor: false, difficulty: meta.difficulty, seed: 1,
+        };
+        const outcome = { sessionId: 's', correct: true, scaffolded: false, latencyMs: 1000, at: 1 };
+        for (const a of attemptsForTask(task, outcome, DEFAULT_CONFIG)) {
+          if (a.skill === skill) emitted.add(a.taskTypeId);
+        }
+      }
+      expect(provingTaskTypeCount(skill), skill).toBe(emitted.size);
+    }
   });
 });

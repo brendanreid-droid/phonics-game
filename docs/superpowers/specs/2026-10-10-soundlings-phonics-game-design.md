@@ -263,7 +263,11 @@ So: `strengthAt` reads `lastReinforcedAt`, and returns 0 when `primaryCorrectCou
 
 The same reasoning governs `sessionsProven`: it counts sessions containing unscaffolded correct evidence, not sessions containing an attempt. A session in which the child only failed or was only helped proves nothing and must not advance it.
 
-"Slow" = latency above a per-task-type threshold. A slow correct answer reinforces at half rate. Recognition that is correct but effortful is not yet automatic, and automaticity is the actual goal of phonics practice.
+"Slow" = latency above `slowLatencyMs`. A slow correct answer reinforces at half rate. Recognition that is correct but effortful is not yet automatic, and automaticity is the actual goal of phonics practice.
+
+**The threshold was set at 4 seconds and that was wrong.** A five-year-old who takes five seconds to decode a word is reading, not failing — and the consequence was severe: a simulated struggling child averaging 5.2s had *every* answer penalised at half rate, which was a major reason that profile could never finish a level. The threshold is **7 seconds**, which still distinguishes automatic recognition from laborious decoding without classifying normal five-year-old pace as a deficit.
+
+Note what was *not* done here. Simulation found that deleting the slow penalty entirely (`slowReinforceFactor: 1`) improved the measured quest counts. That is rejected. The penalty encodes the difference between a child who knows a sound and a child who works it out, which is the whole point of the exercise; a threshold set at the wrong value is a calibration bug, and the fix is the threshold, not the removal of the rule.
 
 ### 5.3 Mastery predicate
 
@@ -389,7 +393,15 @@ The ranges in §11 are to be derived from the simulation harness and then writte
 
 ## 6. Level 1 content
 
-Australian synthetic phonics sequence, Level 1: **s, a, t, p, i, m, f** — introduced two at a time (s,a → t,p → i,m → f).
+Australian synthetic phonics sequence, Level 1: **s, a, t, p, i, m, f** — introduced in groups of **s,a,t → p,i → m,f**.
+
+An earlier draft introduced them two at a time (s,a → t,p → i,m → f), and that was wrong for a reason worth recording. From `s` and `a` alone **no Level 1 word is buildable**, so the first group supported no word task at all. That deadlocked the game: with no word task, `sound-hunt` was the only thing that could prove `SOUND_ID`, mastery needs two proving task types, and so the opening focus could never graduate — a flawless child was measured stuck after six quests with 21 correct answers per sound and 99% recall.
+
+It also defeated the reason this sequence was chosen in the first place. The whole argument for `s,a,t,p,i,m,f` over other orders was that it yields real words almost immediately; a first group that cannot spell a single word throws that away. With `s,a,t` the child can build **at** and **sat** in their first session, which is both the pedagogical point and the mechanical unblock.
+
+Note this is why the fix is grouping rather than cross-crediting `LETTER_SOUND` into `SOUND_ID`. That alternative was measured and performs similarly, but it would blur the distinction between recognising a letter and recalling it from its sound — and requiring both directions is the strongest part of the completion rule (§5.7). Fixing a content problem by weakening an evidence rule is the wrong trade.
+
+Blend-reading necessarily starts at the second group, because no `s,a,t` word has a picture. That is fine: the requirement is that each skill be *reachable*, not that all four start on day one.
 
 **Decodable words:** at, as, am, if, it, is, sat, pat, tap, sap, pit, sit, tip, sip, pip, fat, fit, mat, map, Sam, Pam
 **Tricky words:** I, the, a
@@ -545,6 +557,16 @@ Conflict policy: `task_attempts` is append-only so it merges without conflict; `
 | Task components | Render, correct path, incorrect path, each hint tier, scaffolded completion. |
 | `packages/api` | Offline queue: enqueue while offline, flush on reconnect, no duplicate attempts. |
 | Simulation harness | Run synthetic children (fast / average / struggling / bad-day) through Level 1. **Ranges to be derived from the harness itself, then recorded here and in §5.7.1 as measured values alongside the config that produced them.** Once set, they are regression bounds with modest headroom — not aspirations. The prior entry here (fast 4–7, average 7–10, struggling 10–14) was invented and is withdrawn; it also disagreed with the plan's own numbers, which is how you can tell neither was measured. |
+
+### 11.1 Not every child should complete Level 1 by playing more
+
+The simulated "struggling" profile answered correctly 55% of the time. On a two-choice task chance is 50%, so that profile is a child performing at barely above guessing — and no amount of additional practice should let them pass a mastery gate, because they have not learned the material. An engine that eventually passed them would be lying to their parent.
+
+So the struggling profile is redefined to **70%**: a child finding it genuinely hard but learning. That is the case the adaptive engine exists to serve, and it must complete, with materially more practice than a strong learner.
+
+A child at or near chance is a different case, and the correct product response is not a longer quest. It is to tell the grown-up. Plan 2 adds a "needs a hand" signal to the parent area, raised when a child's accuracy on current-focus material stays near chance across several sessions. That is a feature, not a failure mode: a five-year-old stuck at guessing needs a person sitting with them, and the most useful thing the app can do is say so plainly instead of grinding them through another fourteen tasks.
+
+Accordingly the harness asserts completion for fast and average and the redefined struggling profile, and asserts for a near-chance profile that it does **not** complete — pinning the guarantee that mastery cannot be reached by volume alone.
 | Manual | iPad simulator, every review gate. |
 
 ---

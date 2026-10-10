@@ -45,6 +45,13 @@ export interface EngineConfig {
    */
   cappedDifficulty: number;
 
+  // Word readiness (spec §5.4 invariant 5a)
+  /**
+   * Unscaffolded correct answers, in total on SOUND_ID and LETTER_SOUND, that a
+   * grapheme needs before any word containing it may be asked (read or spelt).
+   */
+  wordReadinessCorrect: number;
+
   // Level completion
   blendWordsRequired: number;
   segmentWordsRequired: number;
@@ -95,6 +102,12 @@ export const DEFAULT_CONFIG: EngineConfig = {
   badDayDistinctTargets: 3,
   badDaySessionLength: 8,
   cappedDifficulty: 2,
+
+  // Two correct answers means "they can do it", not "they have mastered it".
+  // Mastery needs two separate sessions, and gating words on that would make a
+  // child wait days before reading anything. The sounds that unlock words are
+  // the sounds a sounds-only first quest asks about, so this cannot deadlock.
+  wordReadinessCorrect: 2,
 
   // Six words read and five spelt, on top of all seven sounds proven in both
   // directions. Reduced from 8 and 6, which were arbitrary.

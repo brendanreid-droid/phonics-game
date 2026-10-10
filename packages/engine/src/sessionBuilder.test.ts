@@ -238,8 +238,9 @@ describe('buildSession invariants', () => {
   });
 
   it('supplies two tiles for a word that repeats a letter', () => {
-    // pip = p-i-p. Find one by sweeping seeds over a state where it is in play.
-    const mastery = masteredGraphemes(['s', 'a', 't', 'p']);
+    // pip = p-i-p. Find one by sweeping seeds over a state where it is in play: p is mastered
+    // and i, the focus, has been answered twice, so every sound in pip is known (invariant 5a).
+    const mastery = { ...masteredGraphemes(['s', 'a', 't', 'p']), ...heard({ i: 2 }) };
     const pip = SEEDS.flatMap((seed) => build(mastery, seed)).find(
       (t) => t.taskTypeId === 'word-builder' && t.correctChoice === 'pip',
     );
@@ -342,25 +343,22 @@ describe('buildSession for a brand-new child', () => {
     }
   });
 
-  it('has three task types on day one, because at and sat are buildable from s, a and t', () => {
-    // No picture word is buildable from s, a, t, so reading is not available yet, but
-    // spelling is: that second proving type for SOUND_ID is what lets the first focus
-    // graduate at all. A first group with no buildable word deadlocked the game.
+  it('has two task types on day one, because words wait until the sounds are known', () => {
+    // Before invariant 5a this asserted three, with spelling credited for s, a and t. See
+    // 'sounds before words' below, which also holds the anti-deadlock property.
     for (const seed of SEEDS) {
       const plan = build({}, seed);
-      expect(new Set(plan.map((t) => t.taskTypeId)), seed).toEqual(
-        new Set(['sound-hunt', 'sound-singer', 'word-builder']),
-      );
+      expect(new Set(plan.map((t) => t.taskTypeId)), seed).toEqual(new Set(['sound-hunt', 'sound-singer']));
       expect(plan[0].taskTypeId, seed).toBe('sound-hunt');
-      for (let i = 1; i < plan.length; i += 1) {
-        expect(plan[i].taskTypeId, `${seed} slot ${i}`).not.toBe(plan[i - 1].taskTypeId);
-      }
     }
   });
 
-  it('gives every sound in the first group a second task type that can prove it', () => {
-    // The anti-deadlock property itself: on day one, spelling must credit s, a and t.
-    const spelled = SEEDS.flatMap((seed) => build({}, seed)).filter((t) => t.skill === 'SEGMENT_SPELL');
+  it('once s, a and t are known, spelling credits all three, giving each a second task type to be proven by', () => {
+    // The anti-deadlock property. SOUND_ID mastery needs two task types, and sound-hunt is the only
+    // direct one, so word tasks must supply the second. Invariant 5a delays them until s, a and t
+    // have been answered twice; it must not prevent them. (This used to assert it on day one.)
+    const mastery = heard({ s: 2, a: 2, t: 2 });
+    const spelled = SEEDS.flatMap((seed) => build(mastery, seed)).filter((t) => t.skill === 'SEGMENT_SPELL');
     expect(spelled.length).toBeGreaterThan(0);
     const credited = new Set(spelled.flatMap((t) => t.secondaryTargets));
     expect(credited).toEqual(new Set(['s', 'a', 't']));
@@ -423,9 +421,17 @@ describe('buildSession for a brand-new child', () => {
     }
   });
 
-  it('spells only at and sat, and never offers a reading task, since no picture word is buildable', () => {
+  it('asks only sound tasks, whatever the seed', () => {
+    // Was "spells only at and sat". Spelling is no longer possible on day one.
     for (const seed of SEEDS) {
-      for (const task of build({}, seed)) {
+      for (const task of build({}, seed)) expect(['SOUND_ID', 'LETTER_SOUND'], seed).toContain(task.skill);
+    }
+  });
+
+  it('once s, a and t are known, spells only at and sat and never reads, since no picture word is buildable', () => {
+    const mastery = heard({ s: 2, a: 2, t: 2 });
+    for (const seed of SEEDS) {
+      for (const task of build(mastery, seed)) {
         expect(['SOUND_ID', 'LETTER_SOUND', 'SEGMENT_SPELL'], seed).toContain(task.skill);
         if (task.skill === 'SEGMENT_SPELL') expect(['at', 'sat'], seed).toContain(task.primaryTarget);
       }
@@ -643,7 +649,8 @@ describe('buildSession composition', () => {
 
   it('shows a picture the child keeps mistaking for the target, even when it is not a close match', () => {
     // sip is two letters from mat, behind the minimal pairs map and pat, so only history ranks it first.
-    const mastery = masteredGraphemes(['s', 'a', 't', 'p', 'i']);
+    // m has been answered twice, so mat is a word the child is ready for (invariant 5a).
+    const mastery = { ...masteredGraphemes(['s', 'a', 't', 'p', 'i']), ...heard({ m: 2 }) };
     const confusions = { 'mat>sip': 5 };
     const reads = SEEDS.flatMap((seed) => build(mastery, seed, { confusions }))
       .filter((t) => t.skill === 'BLEND_READ' && t.correctChoice === 'mat');
@@ -652,7 +659,8 @@ describe('buildSession composition', () => {
   });
 
   it('offers a letter the child keeps confusing as an extra spelling tile', () => {
-    const mastery = masteredGraphemes(['s', 'a', 't', 'p']);
+    // i and m have been answered twice, so sit and sam are ready words that hold s but not p.
+    const mastery = { ...masteredGraphemes(['s', 'a', 't', 'p']), ...heard({ i: 2, m: 2 }) };
     const confusions = { 's>p': 5 };
     const spelled = SEEDS.flatMap((seed) => build(mastery, seed, { confusions })).filter((t) => {
       const letters = isSpelling(t) ? getWord(t.correctChoice).graphemes : [];
@@ -668,7 +676,8 @@ describe('buildSession composition', () => {
   });
 
   it('shuffles the pictures in a reading task too', () => {
-    const mastery = masteredGraphemes(['s', 'a']);
+    // t, p and i are the focus and have each been answered twice: the picture words are ready (invariant 5a).
+    const mastery = { ...masteredGraphemes(['s', 'a']), ...heard({ t: 2, p: 2, i: 2 }) };
     const positions = new Set<number>();
     for (const seed of SEEDS) {
       for (const task of build(mastery, seed)) {
@@ -680,7 +689,7 @@ describe('buildSession composition', () => {
   });
 
   it('credits a repeated letter once: pip is p and i, not p, i and p', () => {
-    const mastery = masteredGraphemes(['s', 'a', 't', 'p']);
+    const mastery = { ...masteredGraphemes(['s', 'a', 't', 'p']), ...heard({ i: 2 }) };
     const pips = SEEDS.flatMap((seed) => build(mastery, seed)).filter((t) => t.correctChoice === 'pip');
     expect(pips.length).toBeGreaterThan(0);
     for (const task of pips) expect(task.secondaryTargets).toEqual(['p', 'i']);
@@ -702,7 +711,9 @@ describe('buildSession composition', () => {
     // s, a and t are mastered, and so are the spellings that do not touch the focus. p, i
     // and m are the focus; f is met but outside it, so it is the only review.
     // f/SOUND_ID has just been failed, f/LETTER_SOUND is nearly known.
-    const base = reviewBase();
+    // p, i and m, the focus, have been answered twice, so the focus has words in it as it did before
+    // invariant 5a, and the review slot is a real choice between sounds rather than a forced spelling.
+    const base = { ...reviewBase(), ...heard({ p: 2, i: 2, m: 2 }) };
     const answer = (skill: Skill, correct: boolean, at: number, id: string): Attempt => ({
       sessionId: id, targetId: 'f', skill, taskTypeId: 'sound-hunt', correct, scaffolded: false, latencyMs: 900, weight: 1, at,
     });
@@ -724,7 +735,9 @@ describe('buildSession composition', () => {
     // seen again with a hint a moment ago, which moves lastSeenAt but proves nothing, while
     // f/LETTER_SOUND has gone untouched. Only the overdue term separates them, and
     // f/SOUND_ID would win a tie because it comes first in teaching order.
-    const base = reviewBase();
+    // p, i and m, the focus, have been answered twice, so the focus has words in it as it did before
+    // invariant 5a, and the review slot is a real choice between sounds rather than a forced spelling.
+    const base = { ...reviewBase(), ...heard({ p: 2, i: 2, m: 2 }) };
     const correct = (skill: Skill, id: string): Attempt => ({
       sessionId: id, targetId: 'f', skill, taskTypeId: 'sound-hunt', correct: true, scaffolded: false, latencyMs: 900, weight: 1, at: NOW - 2 * HOUR,
     });
@@ -882,6 +895,207 @@ describe('buildSession across a whole first week', () => {
           }
         }
       }
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Spec invariant 5a: sounds before words. A word task (BLEND_READ or
+// SEGMENT_SPELL) is eligible only once every grapheme in it has at least
+// `wordReadinessCorrect` unscaffolded correct answers on SOUND_ID or LETTER_SOUND.
+// ---------------------------------------------------------------------------
+
+/** One attempt on a sound skill, in a single session, with the given flags. */
+function soundAttempts(
+  id: string,
+  count: number,
+  options: { skill?: Skill; scaffolded?: boolean; correct?: boolean; weight?: number } = {},
+): MasteryMap {
+  const skill = options.skill ?? 'SOUND_ID';
+  let record = emptyRecord(id, skill, DEFAULT_CONFIG);
+  for (let i = 0; i < count; i += 1) {
+    record = applyAttempt(
+      record,
+      {
+        sessionId: 'earlier', targetId: id, skill, taskTypeId: skill === 'SOUND_ID' ? 'sound-hunt' : 'sound-singer',
+        correct: options.correct ?? true, scaffolded: options.scaffolded ?? false,
+        latencyMs: 900, weight: options.weight ?? 1, at: NOW - HOUR,
+      },
+      DEFAULT_CONFIG,
+    );
+  }
+  return { [masteryKey(id, skill)]: record };
+}
+
+/** `count` unscaffolded correct answers on each grapheme: known, but nowhere near mastered. */
+function heard(counts: Record<string, number>): MasteryMap {
+  return Object.assign({}, ...Object.entries(counts).map(([id, n]) => soundAttempts(id, n)));
+}
+
+const isWordTask = (t: TaskInstance) => t.skill === 'BLEND_READ' || t.skill === 'SEGMENT_SPELL';
+const wordTasks = (plan: TaskInstance[]) => plan.filter(isWordTask);
+const wordsAcross = (mastery: MasteryMap, extra: Partial<BuildSessionArgs> = {}) =>
+  new Set(SEEDS.flatMap((seed) => wordTasks(build(mastery, seed, extra)).map((t) => t.primaryTarget)));
+
+describe('buildSession: sounds before words (invariant 5a)', () => {
+  it('asks a brand-new child no word task at all, across many seeds', () => {
+    for (const seed of SEEDS) {
+      const plan = build({}, seed);
+      expect(wordTasks(plan).map((t) => t.id), seed).toEqual([]);
+      for (const task of plan) expect(['SOUND_ID', 'LETTER_SOUND'], `${seed}: ${task.id}`).toContain(task.skill);
+    }
+  });
+
+  it('gives a brand-new child a quest of sound tasks across all three graphemes of the first group', () => {
+    const asked = new Set(SEEDS.flatMap((seed) => build({}, seed).map((t) => t.primaryTarget)));
+    expect(asked).toEqual(new Set(['s', 'a', 't']));
+  });
+
+  it('still arranges a brand-new quest: two types alternating, open on the easiest, close on the second-easiest', () => {
+    // With words excluded only sound-hunt and sound-singer remain, so the no-adjacent-repeat
+    // rule forces strict alternation. This is the situation amended invariant 7 exists for.
+    for (const seed of SEEDS) {
+      const plan = build({}, seed);
+      expect(plan.length, seed).toBe(DEFAULT_CONFIG.sessionLength);
+      expect(new Set(plan.map((t) => t.taskTypeId)), seed).toEqual(new Set(['sound-hunt', 'sound-singer']));
+      expect(plan[0].taskTypeId, seed).toBe('sound-hunt');
+      expect(plan[plan.length - 1].taskTypeId, seed).toBe('sound-singer');
+      expect(plan.filter((t) => t.anchor).length, seed).toBe(DEFAULT_CONFIG.winbackCount);
+      for (let i = 1; i < plan.length; i += 1) {
+        expect(plan[i].taskTypeId, `${seed} slot ${i}`).not.toBe(plan[i - 1].taskTypeId);
+      }
+      const closing = plan[plan.length - 1];
+      expect(plan.slice(0, -1).some((t) => t.primaryTarget === closing.primaryTarget), seed).toBe(true);
+    }
+  });
+
+  it('gives word tasks to a child with the required correct answers on each of s, a and t', () => {
+    const mastery = heard({ s: 2, a: 2, t: 2 });
+    for (const seed of SEEDS) {
+      expect(wordTasks(build(mastery, seed)).length, seed).toBeGreaterThan(0);
+    }
+    // and only the words those three sounds make
+    expect([...wordsAcross(mastery)].sort()).toEqual(['at', 'sat']);
+  });
+
+  it('gives no word task while a sound every available word needs is short of the threshold', () => {
+    // at and sat both need a and t; sat also needs s. Short of either a or t: nothing.
+    for (const mastery of [heard({ s: 2, a: 2, t: 1 }), heard({ s: 2, a: 1, t: 2 }), heard({ s: 2, a: 0, t: 2 })]) {
+      for (const seed of SEEDS) expect(wordTasks(build(mastery, seed)).map((t) => t.id), seed).toEqual([]);
+    }
+  });
+
+  it('with a and t known but not s, asks for at but never for sat: every grapheme must be known, not some', () => {
+    const mastery = heard({ s: 1, a: 2, t: 2 });
+    expect(wordsAcross(mastery)).toEqual(new Set(['at']));
+  });
+
+  it('with s and a known but not t, asks no word at all: at and sat both need t', () => {
+    const mastery = heard({ s: 2, a: 2 });
+    expect(wordsAcross(mastery)).toEqual(new Set());
+  });
+
+  it('asks only for words whose every grapheme is known, when some of a later group are', () => {
+    // s, a, t are mastered, so focus is p and i. p has been answered twice; i not at all.
+    // Of the words the child has met, pat, tap and sap need only s, a, t, p. Anything with i must wait.
+    const mastery = { ...masteredGraphemes(['s', 'a', 't']), ...heard({ p: 2 }) };
+    const words = wordsAcross(mastery);
+    expect(words.size).toBeGreaterThan(0);
+    for (const word of words) {
+      for (const g of getWord(word).graphemes) expect(['s', 'a', 't', 'p'], `${word} needs ${g}`).toContain(g);
+    }
+    expect([...words].some((w) => getWord(w).graphemes.includes('p')), 'a word using the known p never came up').toBe(true);
+    for (const waiting of ['pit', 'sip', 'pip', 'sit', 'tip']) expect(words).not.toContain(waiting);
+  });
+
+  it('does not offer a word as a wrong answer if it holds a sound the child is not ready for', () => {
+    const mastery = { ...masteredGraphemes(['s', 'a', 't']), ...heard({ p: 2 }) };
+    for (const seed of SEEDS) {
+      for (const task of build(mastery, seed).filter((t) => t.skill === 'BLEND_READ')) {
+        for (const choice of task.choices) {
+          for (const g of getWord(choice).graphemes) expect(['s', 'a', 't', 'p'], `${seed}: ${choice}`).toContain(g);
+        }
+      }
+    }
+  });
+
+  it('counts a LETTER_SOUND answer as readiness as well as a SOUND_ID one', () => {
+    const mastery = {
+      ...soundAttempts('s', 1), ...soundAttempts('s', 1, { skill: 'LETTER_SOUND' }),
+      ...soundAttempts('a', 2, { skill: 'LETTER_SOUND' }),
+      ...soundAttempts('t', 2),
+    };
+    expect(wordsAcross(mastery).size).toBeGreaterThan(0);
+  });
+
+  it('does not count answers the child was shown, however many', () => {
+    const mastery = {
+      ...soundAttempts('s', 9, { scaffolded: true }),
+      ...soundAttempts('a', 9, { scaffolded: true }),
+      ...soundAttempts('t', 9, { scaffolded: true }),
+    };
+    expect(wordsAcross(mastery)).toEqual(new Set());
+  });
+
+  it('does not let shown answers top up a child who is one honest answer short', () => {
+    // One real correct answer on each sound, then five more that were shown: 1 + 5 must not reach 2.
+    const mastery: MasteryMap = {};
+    for (const id of ['s', 'a', 't']) {
+      let record = soundAttempts(id, 1)[masteryKey(id, 'SOUND_ID')];
+      for (let i = 0; i < 5; i += 1) {
+        record = applyAttempt(
+          record,
+          { sessionId: 'earlier', targetId: id, skill: 'SOUND_ID', taskTypeId: 'sound-hunt', correct: true, scaffolded: true, latencyMs: 900, weight: 1, at: NOW - HOUR },
+          DEFAULT_CONFIG,
+        );
+      }
+      mastery[masteryKey(id, 'SOUND_ID')] = record;
+    }
+    expect(wordsAcross(mastery)).toEqual(new Set());
+  });
+
+  it('does not count wrong answers', () => {
+    const mastery = {
+      ...soundAttempts('s', 9, { correct: false }),
+      ...soundAttempts('a', 9, { correct: false }),
+      ...soundAttempts('t', 9, { correct: false }),
+    };
+    expect(wordsAcross(mastery)).toEqual(new Set());
+  });
+
+  it('does not count secondary credit or aided answers: only a direct, unaided answer shows the sound is known', () => {
+    // Half-weight evidence is what a word task, or an answer given after the choices were narrowed, earns.
+    const mastery = {
+      ...soundAttempts('s', 9, { weight: 0.5 }),
+      ...soundAttempts('a', 9, { weight: 0.5 }),
+      ...soundAttempts('t', 9, { weight: 0.5 }),
+    };
+    expect(wordsAcross(mastery)).toEqual(new Set());
+  });
+
+  it('reads the threshold from config, not a literal', () => {
+    const oneEach = heard({ s: 1, a: 1, t: 1 });
+    const threeEach = heard({ s: 3, a: 3, t: 3 });
+    // Default is 2: one each is not enough.
+    expect(wordsAcross(oneEach)).toEqual(new Set());
+    // Lower it and the same child is ready.
+    expect(wordsAcross(oneEach, { config: { wordReadinessCorrect: 1 } }).size).toBeGreaterThan(0);
+    // Raise it and a child with three each, who is ready by default, is not.
+    expect(wordsAcross(threeEach).size).toBeGreaterThan(0);
+    expect(wordsAcross(threeEach, { config: { wordReadinessCorrect: 4 } })).toEqual(new Set());
+  });
+
+  it('ships a threshold of two', () => {
+    expect(DEFAULT_CONFIG.wordReadinessCorrect).toBe(2);
+  });
+
+  it('holds the other invariants for a child who is partly ready', () => {
+    const mastery = heard({ s: 2, a: 2, t: 1 });
+    for (const seed of SEEDS) {
+      const plan = build(mastery, seed);
+      expect(plan.length).toBe(DEFAULT_CONFIG.sessionLength);
+      expect(plan[0].anchor && plan[plan.length - 1].anchor, seed).toBe(true);
+      for (let i = 1; i < plan.length; i += 1) expect(plan[i].taskTypeId).not.toBe(plan[i - 1].taskTypeId);
     }
   });
 });

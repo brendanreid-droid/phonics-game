@@ -11,11 +11,13 @@ import type { TaskInstance } from './types';
  * Level 1 costs a child; find out why before touching a bound. Do not widen a bound
  * to get green.
  *
- * Measured (quests, min/mean/max; tasks mean), seeds 1 to 30, cap 100:
- *   fast         11 / 13.6 / 19    tasks 191
- *   average      12 / 18.8 / 31    tasks 264
- *   struggling   16 / 29.4 / 65    tasks 411   (70% accurate)
- *   nearChance   cap 40: 3 of 30 finished, mean 38.8 quests   (55% accurate)
+ * Measured (quests, min/mean/max; tasks mean), seeds 1 to 30, cap 100, with words gated
+ * on known sounds (spec invariant 5a, wordReadinessCorrect 2):
+ *   fast         12 / 14.7 / 19    tasks 206   (was 11 / 13.6 / 19, 191 before 5a)
+ *   average      15 / 21.5 / 33    tasks 301   (was 12 / 18.8 / 31, 264)
+ *   struggling   17 / 29.6 / 45    tasks 414   (was 16 / 29.4 / 65, 411)   (70% accurate)
+ *   nearChance   cap 40: 3 of 30 finished, mean 39.7 quests (was 38.8)   (55% accurate)
+ * The bounds below were not changed for 5a: they held with their original headroom.
  *
  * One quest per simulated day, so these are also days.
  */
@@ -46,7 +48,7 @@ describe('pacing simulation', { timeout: 60_000 }, () => {
   const nearChance = measure('nearChance', 40);
   const strugglingAtCap = measure('struggling', 40);
 
-  it('finishes Level 1 for every strong learner, in about 14 quests', () => {
+  it('finishes Level 1 for every strong learner, in about 15 quests', () => {
     expect(fast.completed).toBe(SEED_COUNT);
     expect(fast.meanQuests).toBeGreaterThanOrEqual(11);
     expect(fast.meanQuests).toBeLessThanOrEqual(16);
@@ -54,7 +56,7 @@ describe('pacing simulation', { timeout: 60_000 }, () => {
     expect(fast.meanTasks).toBeLessThanOrEqual(240);
   });
 
-  it('finishes Level 1 for every average learner, in about 19 quests', () => {
+  it('finishes Level 1 for every average learner, in about 22 quests', () => {
     expect(average.completed).toBe(SEED_COUNT);
     expect(average.meanQuests).toBeGreaterThanOrEqual(15);
     expect(average.meanQuests).toBeLessThanOrEqual(23);
@@ -62,7 +64,7 @@ describe('pacing simulation', { timeout: 60_000 }, () => {
     expect(average.meanTasks).toBeLessThanOrEqual(330);
   });
 
-  it('finishes Level 1 for every struggling learner (70% accurate), in about 29 quests', () => {
+  it('finishes Level 1 for every struggling learner (70% accurate), in about 30 quests', () => {
     // 70% on a two-choice task is a child finding it genuinely hard but learning. This
     // is the case the adaptive engine exists for, and it must complete.
     expect(struggling.completed).toBe(SEED_COUNT);

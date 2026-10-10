@@ -65,6 +65,10 @@ const isWordSkill = (skill: Skill): boolean => skill === 'BLEND_READ' || skill =
  *  4. There is an anchor in the middle third.
  *  5. Only graphemes and words the child has been introduced to appear, as
  *     targets and as wrong answers.
+ *  5a. Sounds before words: a word task is eligible only once every grapheme in
+ *      it has `config.wordReadinessCorrect` unscaffolded correct answers on
+ *      SOUND_ID or LETTER_SOUND (see `knownGraphemes`). Words shown as wrong
+ *      answers are held to the same rule.
  *  6. The length is `config.sessionLength`.
  *  7. With fewer than two win-back candidates, anchors come from the focus:
  *     the opening and middle anchors use the lowest-difficulty task type
@@ -75,8 +79,9 @@ const isWordSkill = (skill: Skill): boolean => skill === 'BLEND_READ' || skill =
  * task types are usable (a child under the frustration cap, or one whose focus
  * has only two skills available), invariant 3 forces them to alternate, and in
  * an even-length session the first and last slots then hold different types.
- * Invariant 3 wins: it is the one a child notices. (On day one three types are
- * usable, since at and sat are buildable from the first group, s a t.) Adding a
+ * Invariant 3 wins: it is the one a child notices. (A brand-new
+ * child is in this situation: invariant 5a leaves only sound tasks, so
+ * sound-hunt and sound-singer alternate.) Adding a
  * second task type per skill (Plan 2) removes the conflict; revisit the rule then.
  *
  * "Already asked about" is all a plan can promise. Whether the child answered
@@ -108,7 +113,7 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
   // first day has been introduced to two letters, not all seven. Scheduling
   // "review" of a letter they have never seen is not review, it is a trick
   // question, and it is the fastest way to make a five-year-old give up.
-  const { pairings, blendWordIds } = teachable(level, metGraphemeIds, usableSkills);
+  const { pairings, blendWordIds } = teachable(level, metGraphemeIds, usableSkills, mastery, config);
   if (pairings.length === 0) throw new Error(`No teachable pairings at level ${level}`);
 
   const unmastered = pairings.filter((p) => !masteredPair(p));
@@ -390,9 +395,15 @@ function teachable(
   level: number,
   metGraphemeIds: readonly GraphemeId[],
   usableSkills: ReadonlySet<Skill>,
+  mastery: MasteryMap,
+  config: EngineConfig,
 ): { pairings: Pairing[]; blendWordIds: WordId[] } {
   const met = new Set(metGraphemeIds);
-  const decodable = new Set(wordsDecodableFrom(level, metGraphemeIds));
+  // Invariant 5a: met is not enough for a word, the sounds must be KNOWN.
+  const known = knownGraphemes(metGraphemeIds, mastery, config);
+  const decodable = new Set(
+    wordsDecodableFrom(level, metGraphemeIds).filter((id) => getWord(id).graphemes.every((g) => known.has(g))),
+  );
   const picturable = picturableWordsForLevel(level).filter((w) => decodable.has(w.id)).map((w) => w.id);
   // A picture-matching question needs a wrong answer to be a question at all.
   const blendWordIds = picturable.length >= 2 ? picturable : [];
@@ -405,6 +416,32 @@ function teachable(
     return met.has(p.targetId);
   });
   return { pairings, blendWordIds };
+}
+
+/**
+ * Graphemes with at least `config.wordReadinessCorrect` unscaffolded correct
+ * answers in total across SOUND_ID and LETTER_SOUND.
+ *
+ * Counts `primaryCorrectCount`: answers to the grapheme itself, at full weight.
+ * That excludes by construction every answer the child was shown (scaffolded
+ * attempts return before touching it), wrong answers, and half-weight evidence:
+ * secondary credit from a word task, and a correct answer given only after the
+ * choices were narrowed. It is a count, not a strength, so it does not decay:
+ * a child who learned /s/ and returns after a month is still ready to blend it.
+ */
+function knownGraphemes(
+  graphemeIds: readonly GraphemeId[],
+  mastery: MasteryMap,
+  config: EngineConfig,
+): Set<GraphemeId> {
+  const known = new Set<GraphemeId>();
+  for (const id of graphemeIds) {
+    const correct =
+      getRecord(mastery, id, 'SOUND_ID', config).primaryCorrectCount +
+      getRecord(mastery, id, 'LETTER_SOUND', config).primaryCorrectCount;
+    if (correct >= config.wordReadinessCorrect) known.add(id);
+  }
+  return known;
 }
 
 /**

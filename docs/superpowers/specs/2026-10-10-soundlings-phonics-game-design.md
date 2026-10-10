@@ -341,8 +341,10 @@ Per-session, per-target error counting:
 |---|---|
 | 1 error on target | Hint tier 2 (see §8) |
 | 2 errors on target | Scaffold: reduce to 2 choices, replay audio, play mnemonic animation |
-| 3 errors on target | Abandon the task as scaffolded-complete. Insert a win-back. Cap remaining session difficulty at the child's demonstrated level. |
+| 3 errors on target | Abandon the task as scaffolded-complete. Insert a win-back. Cap remaining task difficulty at **2**. |
 | 3 errors across 3 different targets in one session | Shorten session to 8 tasks, all low difficulty, end early on a win-back |
+
+The cap is 2, not 1. An earlier draft capped at 1, which looks kinder and is worse: only one Level 1 task type has difficulty 1, so a capped quest would have a single usable mini-game and the no-adjacent rule (§5.4 invariant 3) would collapse into fourteen identical tasks in a row. That would hand the most monotonous possible session to exactly the child already having the hardest time. A cap of 2 keeps two task types in play so the quest still alternates, and difficulty 2 is still an easy task.
 
 The last row is the "bad day" case — tired, unwell, distracted. The right response is a short, kind session, not a full quest of failure. Importantly, attempts in a degraded session still record normally, so the mastery data stays honest; we simply stop asking.
 

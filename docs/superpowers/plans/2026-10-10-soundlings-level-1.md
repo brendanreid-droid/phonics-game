@@ -3207,7 +3207,14 @@ describe('FrustrationGuard', () => {
     guard.record('s', false);
     const directive = guard.record('s', false);
     expect(directive.abandon).toBe(true);
-    expect(directive.capDifficulty).toBe(1);
+    expect(directive.capDifficulty).toBe(DEFAULT_CONFIG.cappedDifficulty);
+  });
+
+  it('caps at a difficulty that still leaves two mini-games playable', () => {
+    // Capping at 1 looks kinder and is worse: only one Level 1 task type has
+    // difficulty 1, so the session builder's no-adjacent rule collapses and a
+    // struggling child gets fourteen identical tasks in a row.
+    expect(DEFAULT_CONFIG.cappedDifficulty).toBeGreaterThanOrEqual(2);
   });
 
   it('counts errors per target, not across the session', () => {
@@ -3303,8 +3310,13 @@ export class FrustrationGuard {
         hintTier: 3,
         scaffold: true,
         abandon: true,
-        // Drop to the easiest task type for whatever remains.
-        capDifficulty: 1,
+        // Drop to easy task types for whatever remains — but NOT to difficulty
+        // 1. Only one Level 1 task type is that easy, so capping there would
+        // leave the session builder a single usable mini-game and collapse its
+        // no-adjacent rule into fourteen identical tasks in a row. That would
+        // hand the most monotonous possible quest to the child already having
+        // the worst time. Add `cappedDifficulty: 2` to EngineConfig.
+        capDifficulty: this.config.cappedDifficulty,
         // A tired or unwell child gets a short, kind session rather than a
         // full quest of failure. Attempts still record normally, so the
         // mastery data stays honest; we simply stop asking.
@@ -6419,6 +6431,10 @@ git commit -m "feat(game): add Word Builder with tap-to-place input and task reg
 - Test: `apps/game/src/quest/useQuest.test.ts`
 
 The orchestrator. All the judgement lives in `judgeAnswer` and `advance`, which are plain functions so they can be tested without rendering.
+
+**One requirement the session builder cannot meet on its own.** The builder guarantees the closing anchor's target was *asked* earlier in the quest, because that is all it can know at planning time. It cannot guarantee the child got it *right* — only the runner knows that.
+
+So the runner must enforce the stronger promise: when it reaches the final task, if the child answered that target incorrectly earlier in this quest, swap the close for another target they did answer correctly, or failing that for the easiest available task. The whole point of the closing anchor is that a five-year-old leaves on a success; closing on the one sound they fluffed twenty seconds ago is worse than not having an anchor at all.
 
 Critically, this applies outcomes through `recordTaskResult` from the engine — the same function the simulation uses. If the app ever folded outcomes differently, the calibrated pacing numbers would stop describing the real game. That function is the only place attempt weights are assigned, which is why it lives in the engine rather than in either caller.
 

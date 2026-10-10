@@ -38,7 +38,7 @@ export function pickGraphemeDistractors(args: GraphemeDistractorArgs): GraphemeI
   const { target, count, level, confusions, rng } = args;
   // Throws on an unknown target rather than quietly offering unranked letters.
   const confusableWith = getGrapheme(target).confusableWith;
-  const pool = args.allowed ?? graphemesForLevel(level).map((g) => g.id);
+  const pool = unique(args.allowed ?? graphemesForLevel(level).map((g) => g.id));
   const taught = pool.filter((id) => id !== target);
 
   const confusedWith = taught
@@ -55,7 +55,7 @@ export function pickGraphemeDistractors(args: GraphemeDistractorArgs): GraphemeI
     rng,
   );
 
-  return [...confusedWith, ...generallyConfusable, ...remainder].slice(0, count);
+  return [...confusedWith, ...generallyConfusable, ...remainder].slice(0, clampCount(count));
 }
 
 export interface WordDistractorArgs {
@@ -76,8 +76,10 @@ export function pickWordDistractors(args: WordDistractorArgs): WordId[] {
   const { target, count, level, rng } = args;
   const targetGraphemes = getWord(target).graphemes;
 
-  const basePool = args.allowedWords ?? picturableWordsForLevel(level).map((w) => w.id);
-  const pool = basePool.filter((id) => id !== target);
+  const basePool = unique(args.allowedWords ?? picturableWordsForLevel(level).map((w) => w.id));
+  // Whatever the caller passes, a distractor without a picture would render as
+  // a blank card in Picture Match, so it is never a candidate.
+  const pool = basePool.filter((id) => id !== target && getWord(id).picture !== undefined);
 
   // Shuffle first, then a stable sort: equally-close words keep their shuffled
   // order, so ties are broken by the seed rather than by authoring order.
@@ -87,7 +89,16 @@ export function pickWordDistractors(args: WordDistractorArgs): WordId[] {
   }));
 
   scored.sort((a, b) => a.distance - b.distance);
-  return scored.slice(0, count).map((entry) => entry.id);
+  return scored.slice(0, clampCount(count)).map((entry) => entry.id);
+}
+
+/** `slice(0, -1)` drops only the last item rather than returning nothing, so a negative count is clamped. */
+function clampCount(count: number): number {
+  return Math.max(0, count);
+}
+
+function unique<T>(items: readonly T[]): T[] {
+  return [...new Set(items)];
 }
 
 /** How many positions differ. Different lengths count as maximally distant. */
@@ -111,7 +122,7 @@ export function pickTileDistractors(args: {
 }): GraphemeId[] {
   const { target, count, level, confusions, rng } = args;
   const needed = new Set(getWord(target).graphemes);
-  const pool = args.allowed ?? graphemesForLevel(level).map((g) => g.id);
+  const pool = unique(args.allowed ?? graphemesForLevel(level).map((g) => g.id));
   const taught = pool.filter((id) => !needed.has(id));
 
   // Prefer letters confusable with any grapheme in the word — those are the
@@ -125,7 +136,7 @@ export function pickTileDistractors(args: {
   );
 
   const rest = taught.filter((id) => !confusable.includes(id));
-  return [...shuffle(confusable, rng), ...shuffle(rest, rng)].slice(0, count);
+  return [...shuffle(confusable, rng), ...shuffle(rest, rng)].slice(0, clampCount(count));
 }
 
 /** Folds one wrong answer into the confusion map. Does not mutate. */

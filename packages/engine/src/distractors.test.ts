@@ -185,6 +185,24 @@ describe('pickGraphemeDistractors', () => {
     expect(picks.length).toBe(6);
   });
 
+  it('does not offer a letter twice if `allowed` repeats it', () => {
+    for (const seed of SEEDS) {
+      const picks = pickGraphemeDistractors({
+        target: 's', count: 5, level: 1, confusions: {}, rng: makeRng(seed), allowed: ['s', 'a', 'a', 't', 'a', 't'],
+      });
+      expect(picks.slice().sort(), `seed ${seed}`).toEqual(['a', 't']);
+    }
+  });
+
+  it('returns nothing for a zero or negative count, rather than slicing from the end', () => {
+    for (const count of [0, -1, -5]) {
+      expect(
+        pickGraphemeDistractors({ target: 's', count, level: 1, confusions: {}, rng: makeRng(1) }),
+        `count ${count}`,
+      ).toEqual([]);
+    }
+  });
+
   it('returns nothing when the child has met only the target', () => {
     expect(
       pickGraphemeDistractors({
@@ -273,13 +291,28 @@ describe('pickWordDistractors', () => {
     expect([...firsts].sort()).toEqual(['map', 'pat']);
   });
 
-  it('ranks a word of a different length as far from the target', () => {
+  it('excludes a picture-less word even when allowedWords offers it', () => {
+    // 'sat' and 'it' have no picture; offered as a wrong answer they would be a blank card.
     for (const seed of SEEDS) {
       const picks = pickWordDistractors({
-        target: 'at', count: 1, level: 1, rng: makeRng(seed), allowedWords: ['mat', 'pat', 'it'],
+        target: 'mat', count: 5, level: 1, rng: makeRng(seed), allowedWords: ['sat', 'it', 'map', 'sip'],
       });
-      expect(picks, `seed ${seed}`).toEqual(['it']);
+      expect(picks.slice().sort(), `seed ${seed}`).toEqual(['map', 'sip']);
     }
+  });
+
+  it('can still be asked about a picture-less target, offering only picturable words', () => {
+    const picks = pickWordDistractors({ target: 'sat', count: 99, level: 1, rng: makeRng(1) });
+    expect(picks).not.toContain('sat');
+    expect(picks.length).toBeGreaterThan(0);
+    for (const id of picks) expect(WORDS[id].picture, id).toBeDefined();
+  });
+
+  it('does not offer the same word twice if allowedWords repeats it', () => {
+    const picks = pickWordDistractors({
+      target: 'mat', count: 5, level: 1, rng: makeRng(1), allowedWords: ['map', 'map', 'pat', 'map'],
+    });
+    expect(picks.slice().sort()).toEqual(['map', 'pat']);
   });
 
   it('draws only from allowedWords when given', () => {
@@ -288,6 +321,12 @@ describe('pickWordDistractors', () => {
         target: 'mat', count: 5, level: 1, rng: makeRng(seed), allowedWords: ['sip', 'tap', 'map'],
       });
       expect(picks.slice().sort()).toEqual(['map', 'sip', 'tap']);
+    }
+  });
+
+  it('returns nothing for a zero or negative count, rather than slicing from the end', () => {
+    for (const count of [0, -1, -5]) {
+      expect(pickWordDistractors({ target: 'mat', count, level: 1, rng: makeRng(1) }), `count ${count}`).toEqual([]);
     }
   });
 
@@ -334,6 +373,22 @@ describe('pickTileDistractors', () => {
         target: 'sat', count: 4, level: 1, confusions: { [confusionKey('a', 'm')]: 1 }, rng: makeRng(seed),
       });
       expect(byHistory.slice(0, 4).sort(), `seed ${seed}`).toEqual(['f', 'i', 'm', 'p']);
+    }
+  });
+
+  it('does not offer a tile twice if `allowed` repeats it', () => {
+    const picks = pickTileDistractors({
+      target: 'sit', count: 9, level: 1, confusions: {}, rng: makeRng(1), allowed: ['s', 'i', 'm', 'm', 'a', 'm'],
+    });
+    expect(picks.slice().sort()).toEqual(['a', 'm']);
+  });
+
+  it('returns nothing for a zero or negative count, rather than slicing from the end', () => {
+    for (const count of [0, -1, -5]) {
+      expect(
+        pickTileDistractors({ target: 'sit', count, level: 1, confusions: {}, rng: makeRng(1) }),
+        `count ${count}`,
+      ).toEqual([]);
     }
   });
 

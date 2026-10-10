@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SKILLS } from '@soundlings/curriculum';
 import { TASK_TYPES, easiestTaskTypeForSkill, taskTypeById, taskTypesForSkill } from './taskTypes';
+import type { TaskTypeMeta } from './taskTypes';
 import { DEFAULT_CONFIG } from './config';
 
 describe('task types', () => {
@@ -83,5 +84,19 @@ describe('task types', () => {
   it('picks the lowest-difficulty task type for a skill, and throws when there is none', () => {
     expect(easiestTaskTypeForSkill('SEGMENT_SPELL').id).toBe('word-builder');
     expect(() => easiestTaskTypeForSkill('TRICKY_READ')).toThrow(/no task type for skill/i);
+  });
+
+  it('picks the lowest difficulty from a pool, whichever order it is listed in', () => {
+    const easy: TaskTypeMeta = { id: 'easy', skill: 'SOUND_ID', difficulty: 1, minChoices: 2, maxChoices: 3, secondaryTargets: 'none' };
+    const hard: TaskTypeMeta = { id: 'hard', skill: 'SOUND_ID', difficulty: 5, minChoices: 2, maxChoices: 3, secondaryTargets: 'none' };
+    expect(easiestTaskTypeForSkill('SOUND_ID', [easy, hard]).id).toBe('easy');
+    expect(easiestTaskTypeForSkill('SOUND_ID', [hard, easy]).id).toBe('easy');
+  });
+
+  it('considers only the requested skill when picking the easiest from a pool', () => {
+    const other: TaskTypeMeta = { id: 'other', skill: 'LETTER_SOUND', difficulty: 1, minChoices: 2, maxChoices: 3, secondaryTargets: 'none' };
+    const mine: TaskTypeMeta = { id: 'mine', skill: 'BLEND_READ', difficulty: 4, minChoices: 2, maxChoices: 3, secondaryTargets: 'none' };
+    expect(easiestTaskTypeForSkill('BLEND_READ', [other, mine]).id).toBe('mine');
+    expect(() => easiestTaskTypeForSkill('SOUND_ID', [other, mine])).toThrow(/no task type for skill/i);
   });
 });

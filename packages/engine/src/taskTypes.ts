@@ -65,8 +65,11 @@ export function taskTypesForSkill(skill: Skill): TaskTypeMeta[] {
   return TASK_TYPES.filter((t) => t.skill === skill);
 }
 
-export function easiestTaskTypeForSkill(skill: Skill): TaskTypeMeta {
-  const candidates = taskTypesForSkill(skill);
+export function easiestTaskTypeForSkill(
+  skill: Skill,
+  pool: readonly TaskTypeMeta[] = TASK_TYPES,
+): TaskTypeMeta {
+  const candidates = pool.filter((t) => t.skill === skill);
   if (candidates.length === 0) throw new Error(`No task type for skill: ${skill}`);
   return candidates.reduce((best, t) => (t.difficulty < best.difficulty ? t : best));
 }

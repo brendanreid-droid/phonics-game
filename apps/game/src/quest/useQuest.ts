@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import type { AudioService } from '@soundlings/audio';
 import type { ProgressRepo } from '../data/ProgressRepo';
+import type { HintTier } from '../tasks/useHintLadder';
 import { QuestRunner } from './QuestRunner';
 import type { QuestView } from './QuestRunner';
 
@@ -17,7 +18,7 @@ export function useQuest(args: {
   repo: ProgressRepo;
   audio: AudioService;
   now: () => number;
-}): { state: QuestView; answer: (given: string) => void } {
+}): { state: QuestView; answer: (given: string, tier: HintTier) => void } {
   const { profileId, level, repo, audio, now } = args;
 
   const runner = useMemo(
@@ -31,7 +32,7 @@ export function useQuest(args: {
   }, [runner]);
 
   const state = useSyncExternalStore(runner.subscribe, runner.getView, runner.getView);
-  const answer = useCallback((given: string) => void runner.answer(given), [runner]);
+  const answer = useCallback((given: string, tier: HintTier) => void runner.answer(given, tier), [runner]);
 
   return { state, answer };
 }

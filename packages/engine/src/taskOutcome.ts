@@ -10,6 +10,15 @@ export interface TaskOutcome {
   /** True when the child was shown the answer. */
   scaffolded: boolean;
   latencyMs: number;
+  /**
+   * True when the child was right only after the choices had been narrowed or
+   * the mnemonic shown (hint tier 2 or more), without being shown the answer.
+   * With two choices left a correct tap is partly a coin flip, so it is real
+   * evidence but weaker. The answer was not shown, so `scaffolded` stays false;
+   * that is reserved for tier 3. Ignored unless the answer is correct and not
+   * scaffolded: an error is an error however much help preceded it.
+   */
+  aided?: boolean;
   /** What the child picked when wrong. Recorded on the primary attempt only. */
   chosen?: TargetId;
   at: number;
@@ -21,7 +30,9 @@ export interface TaskOutcome {
  * secondary skill and the `chosen` handling cannot drift apart.
  *
  * Emits the primary attempt at weight 1, then one SOUND_ID attempt per
- * distinct secondary target at `config.secondaryWeight`. A repeated secondary
+ * distinct secondary target at `config.secondaryWeight`. An `aided` correct
+ * answer scales every one of those by `config.secondaryWeight` again: half the
+ * evidence it would otherwise have been. A repeated secondary
  * ("mum" has /m/ twice) is one piece of evidence, not two, and a secondary
  * identical to the primary's own record is not credited a second time.
  */
@@ -30,6 +41,7 @@ export function attemptsForTask(
   outcome: TaskOutcome,
   config: EngineConfig,
 ): Attempt[] {
+  const scale = outcome.aided === true && outcome.correct && !outcome.scaffolded ? config.secondaryWeight : 1;
   const shared = {
     sessionId: outcome.sessionId,
     taskTypeId: task.taskTypeId,
@@ -43,7 +55,7 @@ export function attemptsForTask(
     ...shared,
     targetId: task.primaryTarget,
     skill: task.skill,
-    weight: 1,
+    weight: scale,
   };
   if (!outcome.correct && outcome.chosen !== undefined) primary.chosen = outcome.chosen;
 
@@ -53,7 +65,7 @@ export function attemptsForTask(
     if (seen.has(targetId)) continue;
     seen.add(targetId);
     if (task.skill === 'SOUND_ID' && targetId === task.primaryTarget) continue;
-    secondaries.push({ ...shared, targetId, skill: 'SOUND_ID', weight: config.secondaryWeight });
+    secondaries.push({ ...shared, targetId, skill: 'SOUND_ID', weight: config.secondaryWeight * scale });
   }
 
   return [primary, ...secondaries];

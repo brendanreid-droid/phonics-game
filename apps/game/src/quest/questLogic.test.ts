@@ -101,8 +101,26 @@ describe('starsFor', () => {
     expect(starsFor({ errors: 0, scaffolds: 0 })).toBe(3);
   });
 
-  it('awards two stars for a couple of slips', () => {
+  it('still awards three stars for a single slip', () => {
+    expect(starsFor({ errors: 1, scaffolds: 0 })).toBe(3);
+  });
+
+  it('awards two stars for a few mistakes: three errors in fourteen tasks is a good session', () => {
     expect(starsFor({ errors: 2, scaffolds: 0 })).toBe(2);
+    expect(starsFor({ errors: 3, scaffolds: 0 })).toBe(2);
+    expect(starsFor({ errors: 4, scaffolds: 0 })).toBe(2);
+    expect(starsFor({ errors: 3, scaffolds: 1 })).toBe(2);
+    expect(starsFor({ errors: 4, scaffolds: 2 })).toBe(2);
+  });
+
+  it('awards one star beyond that', () => {
+    expect(starsFor({ errors: 5, scaffolds: 0 })).toBe(1);
+    expect(starsFor({ errors: 0, scaffolds: 3 })).toBe(1);
+    expect(starsFor({ errors: 2, scaffolds: 3 })).toBe(1);
+  });
+
+  it('does not give three stars to a quest with any helped finish', () => {
+    expect(starsFor({ errors: 0, scaffolds: 1 })).toBe(2);
   });
 
   it('never awards zero stars, however hard the quest went', () => {
@@ -228,11 +246,16 @@ describe('replayQuest', () => {
     expect(tally).toEqual({ errors: 1, scaffolds: 1 });
   });
 
+  it('counts a half-weight answer given after narrowing: it is the task\'s own attempt, not secondary credit', () => {
+    const { outcomes } = replayQuest([attempt({ targetId: 'a', weight: 0.5, correct: true })], 'S');
+    expect(outcomes.get(masteryKey('a', 'SOUND_ID'))).toEqual({ right: true, failed: false });
+  });
+
   it('ignores other sessions and secondary credit', () => {
     const { outcomes, tally } = replayQuest(
       [
         attempt({ sessionId: 'OTHER', correct: false }),
-        attempt({ targetId: 'a', weight: 0.5, correct: false }),
+        attempt({ targetId: 'a', weight: 0.5, correct: false, taskTypeId: 'word-builder', skill: 'SOUND_ID' }),
       ],
       'S',
     );

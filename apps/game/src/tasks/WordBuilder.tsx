@@ -70,7 +70,7 @@ export function WordBuilder({ task, audio, externalTier, onAnswer, position }: T
 
     if (result.answer !== null && answeredKey.current !== key) {
       answeredKey.current = key;
-      onAnswer(result.answer);
+      onAnswer(result.answer, tier);
     }
   };
 

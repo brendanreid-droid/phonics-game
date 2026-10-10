@@ -245,7 +245,10 @@ describe('persistence', () => {
   it('keeps the star count across an interruption', async () => {
     const repo = new MemoryProgressRepo();
     const first = await started(repo);
-    await first.runner.answer(wrongFor(taskOf(first.runner))); // one error
+    // Two errors on different tasks: two stars.
+    await first.runner.answer(wrongFor(taskOf(first.runner)));
+    await first.runner.answer(correctFor(taskOf(first.runner)));
+    await first.runner.answer(wrongFor(taskOf(first.runner)));
     await first.runner.answer(correctFor(taskOf(first.runner)));
     const second = await started(repo);
     await finishCleanly(second.runner);
@@ -376,10 +379,10 @@ describe('a wrong answer', () => {
     expect(plan[1].anchor).toBe(true);
   });
 
-  it('remembers a helped finish: the next miss on the same sound is not a fresh start', async () => {
-    // As in the simulation, finishing with the answer shown does not clear the
-    // guard's count for that sound. Helped is not the same as learnt, so the
-    // third miss on /s/ in a row ends the task at once.
+  it('forgives a helped finish: the next miss on that sound is a fresh start, not an instant abandon', async () => {
+    // The simulation never retries, so there a helped finish can leave the count
+    // standing. Here it would leave a child who accepted help one miss from
+    // being abandoned with no second chance, which punishes asking for help.
     const repo = new MemoryProgressRepo();
     const [first, , ...rest] = freshPlan('guard-1');
     const hunts = [first, { ...first, id: 'again' }, ...rest];
@@ -392,7 +395,23 @@ describe('a wrong answer', () => {
     expect(taskOf(runner).id).toBe('again');
 
     await runner.answer(wrongFor(taskOf(runner)));
-    expect(viewOf(runner).index).toBe(2);
+    // Still on the same task, with the first level of help.
+    expect(viewOf(runner).index).toBe(1);
+    expect(viewOf(runner).tier).toBe(2);
+  });
+
+  it('forgives an abandoned task the same way', async () => {
+    const repo = new MemoryProgressRepo();
+    const [first, , ...rest] = freshPlan('guard-2');
+    await storeQuest(repo, [first, { ...first, id: 'again' }, ...rest], 0);
+    const { runner } = await started(repo);
+    for (let i = 0; i < 3; i += 1) await runner.answer(wrongFor(first));
+    // The replan rebuilt what remained, so find the next task for this sound's
+    // count by asking for any wrong answer: it must keep the child on the task.
+    const next = taskOf(runner);
+    await runner.answer(wrongFor(next));
+    expect(viewOf(runner).task?.id).toBe(next.id);
+    expect(viewOf(runner).tier).toBe(2);
   });
 
   it('does not count the child out of stars for asking for help alone', async () => {
@@ -424,6 +443,106 @@ describe('a wrong answer', () => {
     }
     expect(tasksPlayed).toBeLessThan(14);
     expect(tasksPlayed).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('stars from a played quest', () => {
+  it('still earns three stars after one slip', async () => {
+    const { runner } = await started();
+    await runner.answer(wrongFor(taskOf(runner)));
+    await finishCleanly(runner);
+    expect(viewOf(runner).stars).toBe(3);
+  });
+
+  it('earns two stars for three errors on three different tasks', async () => {
+    const { runner } = await started();
+    for (let i = 0; i < 3; i += 1) {
+      await runner.answer(wrongFor(taskOf(runner)));
+      await runner.answer(correctFor(taskOf(runner)));
+    }
+    await finishCleanly(runner);
+    expect(viewOf(runner).stars).toBe(2);
+  });
+
+  it('earns one star for five errors', async () => {
+    const { runner } = await started();
+    for (let i = 0; i < 5; i += 1) {
+      await runner.answer(wrongFor(taskOf(runner)));
+      await runner.answer(correctFor(taskOf(runner)));
+    }
+    await finishCleanly(runner);
+    expect(viewOf(runner).stars).toBe(1);
+  });
+});
+
+describe('how much a right answer is worth after help', () => {
+  const primaryOf = async (repo: ProgressRepo) =>
+    (await repo.loadAttempts(PROFILE)).filter((a) => a.skill === 'SOUND_ID' || a.skill === 'LETTER_SOUND');
+
+  it('is full weight when the child was not helped', async () => {
+    const { runner, repo } = await started();
+    await runner.answer(correctFor(taskOf(runner)), 0);
+    const [attempt] = await primaryOf(repo);
+    expect(attempt).toMatchObject({ correct: true, scaffolded: false, weight: 1 });
+  });
+
+  it('is full weight with only the idle nudge, which narrows nothing', async () => {
+    const { runner, repo } = await started();
+    await runner.answer(correctFor(taskOf(runner)), 1);
+    expect((await primaryOf(repo))[0].weight).toBe(1);
+  });
+
+  it('is half weight after an error has narrowed the choices, and not scaffolded', async () => {
+    const { runner, repo } = await started();
+    const task = taskOf(runner);
+    await runner.answer(wrongFor(task));
+    await runner.answer(correctFor(task));
+    const attempts = await primaryOf(repo);
+    expect(attempts[0]).toMatchObject({ correct: false, weight: 1 });
+    expect(attempts[1]).toMatchObject({ correct: true, scaffolded: false, weight: DEFAULT_CONFIG.secondaryWeight });
+  });
+
+  it('is half weight after the task itself reports tier 2, as an idle pause or the owl does', async () => {
+    const { runner, repo } = await started();
+    await runner.answer(correctFor(taskOf(runner)), 2);
+    expect((await primaryOf(repo))[0]).toMatchObject({ correct: true, scaffolded: false, weight: 0.5 });
+  });
+
+  it('is earned less: the mastery record counts half a correct answer', async () => {
+    const aided = await started();
+    const task = taskOf(aided.runner);
+    await aided.runner.answer(correctFor(task), 2);
+    const record = (await aided.repo.loadMastery(PROFILE))[masteryKey(task.primaryTarget, task.skill)];
+    expect(record.correctCount).toBe(0.5);
+    expect(record.primaryCorrectCount).toBe(0);
+
+    const unaided = await started();
+    await unaided.runner.answer(correctFor(taskOf(unaided.runner)), 0);
+    const clean = (await unaided.repo.loadMastery(PROFILE))[masteryKey(task.primaryTarget, task.skill)];
+    expect(clean.correctCount).toBe(1);
+  });
+
+  it('leaves a scaffolded finish as scaffolded, not as half weight', async () => {
+    const { runner, repo } = await started();
+    const task = taskOf(runner);
+    await runner.answer(wrongFor(task));
+    await runner.answer(wrongFor(task));
+    await runner.answer(correctFor(task), 3);
+    const last = (await primaryOf(repo)).at(-1);
+    expect(last).toMatchObject({ correct: true, scaffolded: true, weight: 1 });
+  });
+
+  it('weighs a helped answer the same after a restart', async () => {
+    // The closing swap and the stars are rebuilt from the log, so a half-weight
+    // answer must still read back as the task's own attempt.
+    const repo = new MemoryProgressRepo();
+    const first = await started(repo);
+    const task = taskOf(first.runner);
+    await first.runner.answer(wrongFor(task));
+    await first.runner.answer(correctFor(task));
+    const second = await started(repo);
+    await finishCleanly(second.runner);
+    expect(viewOf(second.runner).stars).toBe(3);
   });
 });
 

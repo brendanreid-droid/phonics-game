@@ -16,8 +16,13 @@ export interface TaskProps {
    * time a child paused.
    */
   externalTier: HintTier;
-  /** Fires once per answer. The runner judges correctness and timing. */
-  onAnswer: (answer: string) => void;
+  /**
+   * Fires once per answer. The runner judges correctness and timing. `tier` is
+   * the merged hint tier the child was looking at: idling and the owl button
+   * raise it too, and only the mini-game knows, so a right answer after the
+   * choices were narrowed can be weighed as the guess it partly is.
+   */
+  onAnswer: (answer: string, tier: HintTier) => void;
   /** Position in the quest, for the progress pips. */
   position: { index: number; total: number };
 }

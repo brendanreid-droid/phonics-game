@@ -104,7 +104,7 @@ export function PictureMatch({ task, audio, externalTier, onAnswer, position }: 
                 // Stop sounding out: the child has answered.
                 soundRun.current += 1;
                 setSoundingIndex(null);
-                onAnswer(choice);
+                onAnswer(choice, tier);
               }}
             >
               <Text style={styles.pictureEmoji}>{candidate.picture ?? '?'}</Text>

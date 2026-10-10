@@ -70,7 +70,7 @@ export function SoundHunt({ task, audio, externalTier, onAnswer, position }: Tas
                   ? 'revealed'
                   : 'idle'
             }
-            onPress={() => onAnswer(choice)}
+            onPress={() => onAnswer(choice, tier)}
           />
         ))}
       </View>

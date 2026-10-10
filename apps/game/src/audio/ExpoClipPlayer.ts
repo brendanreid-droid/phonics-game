@@ -87,7 +87,12 @@ export class ExpoClipPlayer implements ClipPlayer {
 
       try {
         void Promise.resolve(player.seekTo(0)).catch(() => {});
-        player.play();
+        // On web `play()` returns a promise that rejects when a later `pause()`
+        // interrupts it — which is normal here, because interrupting a clip is
+        // how the queue works. Swallow it: an unhandled rejection in the audio
+        // path is noise that would mask a real one, and this path has already
+        // produced three race conditions.
+        void Promise.resolve(player.play()).catch(() => {});
       } catch {
         // Could not start the clip: settle now, so the quest moves on silent
         // rather than waiting out the timeout.
@@ -106,7 +111,7 @@ export class ExpoClipPlayer implements ClipPlayer {
     const player = this.current;
     this.current = null;
     try {
-      player?.pause();
+      void Promise.resolve(player?.pause()).catch(() => {});
     } finally {
       // Settle even if pause() threw: a pending play() must never be left hanging.
       pending?.settle();

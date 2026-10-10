@@ -116,6 +116,51 @@ describe('attemptsForTask', () => {
   });
 });
 
+describe('an aided answer: right only after the choices were narrowed', () => {
+  it('halves the weight of the primary attempt and of every secondary', () => {
+    const attempts = attemptsForTask(task(), outcome({ aided: true }), DEFAULT_CONFIG);
+    const half = DEFAULT_CONFIG.secondaryWeight;
+    expect(attempts.map((a) => a.weight)).toEqual([half, half * half, half * half, half * half]);
+  });
+
+  it('uses the configured weight, not a hard-coded half', () => {
+    const config = withDefaults({ secondaryWeight: 0.3 });
+    const [primary, secondary] = attemptsForTask(task(), outcome({ aided: true }), config);
+    expect(primary.weight).toBeCloseTo(0.3, 9);
+    expect(secondary.weight).toBeCloseTo(0.09, 9);
+  });
+
+  it('leaves scaffolded false: the answer was not shown', () => {
+    const [primary] = attemptsForTask(task(), outcome({ aided: true }), DEFAULT_CONFIG);
+    expect(primary.scaffolded).toBe(false);
+    expect(primary.correct).toBe(true);
+  });
+
+  it('is full weight when the child was not aided', () => {
+    expect(attemptsForTask(task(), outcome({ aided: false }), DEFAULT_CONFIG)[0].weight).toBe(1);
+    expect(attemptsForTask(task(), outcome(), DEFAULT_CONFIG)[0].weight).toBe(1);
+  });
+
+  it('does not soften an error: a wrong answer is full weight however much help preceded it', () => {
+    const [primary] = attemptsForTask(task(), outcome({ aided: true, correct: false, chosen: 'm' }), DEFAULT_CONFIG);
+    expect(primary.weight).toBe(1);
+  });
+
+  it('does not change a scaffolded answer, which earns nothing either way', () => {
+    const [primary] = attemptsForTask(task(), outcome({ aided: true, scaffolded: true }), DEFAULT_CONFIG);
+    expect(primary.weight).toBe(1);
+  });
+
+  it('earns less than an unaided answer, and cannot by itself make a sound count as asked directly', () => {
+    const unaided = getRecord(recordTaskResult({}, task(), outcome(), DEFAULT_CONFIG), 'sat', 'SEGMENT_SPELL', DEFAULT_CONFIG);
+    const aided = getRecord(recordTaskResult({}, task(), outcome({ aided: true }), DEFAULT_CONFIG), 'sat', 'SEGMENT_SPELL', DEFAULT_CONFIG);
+    expect(aided.correctCount).toBe(0.5);
+    expect(aided.correctCount).toBeLessThan(unaided.correctCount);
+    expect(aided.halfLifeHours).toBeLessThan(unaided.halfLifeHours);
+    expect(aided.primaryCorrectCount).toBe(0);
+  });
+});
+
 describe('recordTaskResult', () => {
   const config = DEFAULT_CONFIG;
 

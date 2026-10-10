@@ -62,7 +62,7 @@ export function SoundSinger({ task, audio, externalTier, onAnswer, position }: T
     setStored(tap.state);
     noteActivity();
     if (tap.play !== null) void audio.interrupt(getGrapheme(tap.play).audio.phoneme);
-    if (tap.answer !== null) onAnswer(tap.answer);
+    if (tap.answer !== null) onAnswer(tap.answer, tier);
   };
 
   return (

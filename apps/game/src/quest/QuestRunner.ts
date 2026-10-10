@@ -59,6 +59,9 @@ export interface QuestDeps {
   celebrateMs?: number;
 }
 
+/** From this merged hint tier a correct answer counts at reduced weight. */
+const AIDED_FROM_TIER = 2;
+
 const LOADING: QuestView = {
   status: 'loading',
   task: null,
@@ -142,15 +145,19 @@ export class QuestRunner {
   }
 
   /**
-   * The child's answer. Answers that arrive while an earlier one is still being
-   * handled are dropped: a double tap must not be recorded twice, and the
-   * second tap of a pair is aimed at a screen that has already moved on.
+   * The child's answer, with the hint tier the task was showing when they gave
+   * it. The task passes that because it merges idling and the owl button into
+   * the tier, and the runner only knows the tier errors imposed.
+   *
+   * Answers that arrive while an earlier one is still being handled are
+   * dropped: a double tap must not be recorded twice, and the second tap of a
+   * pair is aimed at a screen that has already moved on.
    */
-  async answer(given: string): Promise<void> {
+  async answer(given: string, shownTier: HintTier = 0): Promise<void> {
     if (this.busy || this.view.status !== 'playing') return;
     this.busy = true;
     try {
-      await this.handle(given);
+      await this.handle(given, shownTier);
     } catch (error) {
       console.error('Soundlings: could not record an answer', error);
     } finally {
@@ -227,7 +234,7 @@ export class QuestRunner {
 
   // --- answering ---------------------------------------------------------------
 
-  private async handle(given: string): Promise<void> {
+  private async handle(given: string, shownTier: HintTier): Promise<void> {
     const { audio, now } = this.deps;
     const current = this.session;
     const task = current?.plan[current.index];
@@ -251,10 +258,16 @@ export class QuestRunner {
     let praised: Promise<void> = Promise.resolve();
 
     if (judgement.correct) {
-      // Finishing a task with the answer shown does not clear the guard's
-      // count, exactly as in the simulation: helped is not the same as learnt.
-      if (!this.scaffolded) this.guard.record(task.primaryTarget, true);
-      outcome = { ...base, correct: true, scaffolded: this.scaffolded };
+      // A helped finish clears the guard's count for this sound too. The
+      // simulation never retries, so there the count cannot matter again; here a
+      // child who accepted help would otherwise be one miss from an instant
+      // abandon, which punishes exactly the behaviour we want.
+      this.guard.record(task.primaryTarget, true);
+      // Right after the choices were narrowed is partly a coin flip: real
+      // evidence, but at half weight. (Shown the answer is `scaffolded`, which
+      // is a different thing and earns nothing.)
+      const aided = !this.scaffolded && Math.max(shownTier, this.view.tier) >= AIDED_FROM_TIER;
+      outcome = { ...base, correct: true, scaffolded: this.scaffolded, ...(aided ? { aided } : {}) };
       finishesTask = true;
       praised = audio.praise().catch(() => {});
     } else {
@@ -267,6 +280,9 @@ export class QuestRunner {
         // is let off.
         outcome = { ...base, correct: true, scaffolded: true };
         finishesTask = true;
+        // Let off, so the next miss on this sound starts afresh. The target
+        // stays counted as abandoned for the bad-day rule.
+        this.guard.record(task.primaryTarget, true);
         if (directive.capDifficulty !== null) this.maxDifficulty = directive.capDifficulty;
         this.truncateTo = directive.truncateTo;
       } else if (directive.scaffold) {

@@ -1139,6 +1139,73 @@ git commit -m "feat(game): latch level completion and record days played"
 
 ---
 
+## Task 4a: Deleting a profile must delete that child's progress
+
+**Added after Task 4's review.** `ProfileRepo.remove` deletes the profile row but leaves every `soundlings/<id>/…` key on the device — mastery, the attempt log, confusions, sessions, high scores, completions, played dates. That is a child's learning record, orphaned and unreachable.
+
+It is also a promise broken: the delete dialog in Task 6 says *"Everything they have learned will be lost."* That must be true, not approximately true.
+
+- [ ] **Step 1: Add the contract test**
+
+Append to `apps/game/src/data/progressRepoContract.ts`:
+
+```ts
+    it('clears every trace of one profile', async () => {
+      const repo = make();
+      await repo.saveMastery('kid', { 's::SOUND_ID': emptyRecord('s', 'SOUND_ID', DEFAULT_CONFIG) });
+      await repo.appendAttempt('kid', {
+        sessionId: 's1', targetId: 's', skill: 'SOUND_ID', taskTypeId: 'sound-hunt',
+        correct: true, scaffolded: false, latencyMs: 900, weight: 1, at: 1,
+      });
+      await repo.saveConfusions('kid', { 'm>a': 1 });
+      await repo.saveHighScore('kid', { level: 1, stars: 3, cleanRun: true, at: 1 });
+      await repo.markLevelComplete('kid', 1, 1);
+      await repo.markPlayedOn('kid', '2026-10-10');
+      await repo.saveActiveSession('kid', { sessionId: 's1', level: 1, plan: [], index: 0, stars: 0, startedAt: 1 });
+
+      await repo.clear('kid');
+
+      expect(await repo.loadMastery('kid')).toEqual({});
+      expect(await repo.loadAttempts('kid')).toEqual([]);
+      expect(await repo.loadConfusions('kid')).toEqual({});
+      expect(await repo.loadHighScores('kid')).toEqual([]);
+      expect(await repo.loadCompletions('kid')).toEqual({});
+      expect(await repo.loadPlayedDates('kid')).toEqual([]);
+      expect(await repo.loadActiveSession('kid')).toBeNull();
+    });
+
+    it('leaves other profiles untouched when clearing one', async () => {
+      const repo = make();
+      await repo.saveConfusions('a', { 'm>a': 1 });
+      await repo.saveConfusions('b', { 'm>a': 2 });
+      await repo.clear('a');
+      expect(await repo.loadConfusions('b')).toEqual({ 'm>a': 2 });
+    });
+```
+
+- [ ] **Step 2: Run it, confirm it fails**
+
+Expected: `repo.clear is not a function`, on both implementations.
+
+- [ ] **Step 3: Add `clear(profileId): Promise<void>` to the interface and both implementations**
+
+The AsyncStorage version removes every key under that profile's prefix. Use `AsyncStorage.multiRemove` with the explicit key list rather than `getAllKeys` and a prefix filter — a prefix match would also catch a profile whose id happens to begin with this one's, and deleting the wrong child's progress is unrecoverable.
+
+Go through the existing serialisation queue, like every other write in that file.
+
+- [ ] **Step 4: Call it from profile deletion**
+
+Whichever component performs the delete (Task 6) must clear progress **before** removing the profile row. If the order is reversed and the clear fails, the data is orphaned with no id left to find it by.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/game/src/data
+git commit -m "feat(game): delete a child's progress when their profile is deleted"
+```
+
+---
+
 ## Task 5: The profile context
 
 **Files:**

@@ -327,6 +327,16 @@ Hard invariants, each covered by a unit test:
 3. No two adjacent tasks share a task type.
 4. At least one win-back in the middle third.
 5. Every task's target — and every distractor — uses only graphemes the child has actually been **introduced to**, meaning the introduction groups up to and including the one their current focus sits in. Not merely "taught somewhere in this level": on day one a child has met two letters, and offering a third as a wrong answer is a trick question, not a challenge.
+
+5a. **Sounds before words.** A word task — blending or spelling — is only eligible once *every* grapheme in that word has at least `wordReadinessCorrect` unscaffolded correct answers against `SOUND_ID` or `LETTER_SOUND`. You do not ask a child to blend sounds they have not yet learned.
+
+   This was missing, and the consequence reached a real session: the second task of a child's very first quest asked them to spell `at`, and the fourth asked for `sat`, at which point they had seen `t` once and `s` not at all. Five of fourteen first-quest tasks were spelling. That is not synthetic phonics; it is a spelling test for a child who has not been taught the letters.
+
+   The cause is worth recording because it is a general trap: Level 1 was regrouped to `s,a,t` specifically so that a word would be buildable on day one, which was needed to break a task-type deadlock (§5.3). That fixed a mechanical problem and created a pedagogical one. **A fix that makes the engine work is not finished until you check what it does to the child.**
+
+   With this gate, a first quest is all sound work — hear the sound, find the letter; see the letter, find the sound — across the three sounds of the first group. Words arrive once those sounds are known, usually in the second quest. The deadlock stays fixed, because the evidence that unlocks words is exactly the evidence the sound tasks produce.
+
+   One known refinement, deliberately not taken yet: synthetic phonics usually introduces *blending* (reading) before *segmenting* (spelling), so spelling could reasonably require a higher threshold than reading. That is a second knob, and one is enough until a real child shows us it is not.
 6. Session length equals `config.sessionLength` (default 14).
 7. If fewer than 2 mastered targets exist (i.e. a brand-new child), win-backs are replaced as follows: the **opening** and **middle-third** anchors use the lowest-difficulty task type available, and the **closing** anchor uses at most the second-lowest and must sit on a target the child has already answered correctly in this session.
 

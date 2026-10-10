@@ -2643,6 +2643,7 @@ import { pickGraphemeDistractors, pickTileDistractors, pickWordDistractors } fro
 import { getRecord, isMastered, strengthAt } from './mastery';
 import { makeRng, seedFromString, shuffle } from './rng';
 import type { Rng } from './rng';
+import { graphemesMetAt, wordsDecodableFrom } from './metGraphemes';
 import { easiestTaskTypeForSkill, TASK_TYPES, taskTypesForSkill } from './taskTypes';
 import type { TaskTypeMeta } from './taskTypes';
 import type { ConfusionMap, MasteryMap, SessionBand, TaskInstance } from './types';
@@ -2695,9 +2696,10 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
   // first day has been introduced to two letters, not all seven. Scheduling
   // "review" of a letter they have never seen is not review, it is a trick
   // question, and it is the fastest way to make a five-year-old give up.
-  const metGraphemeIds = graphemesMetFor(level, focusGraphemes);
+  const metGraphemeIds = graphemesMetAt(level, focusGraphemes);
   const metSet = new Set(metGraphemeIds);
-  const pairings = allPairs.filter((p) => isComposedOf(p.targetId, metSet));
+  const decodable = new Set<string>([...metGraphemeIds, ...wordsDecodableFrom(level, metGraphemeIds)]);
+  const pairings = allPairs.filter((p) => decodable.has(p.targetId));
 
   const unmastered = pairings.filter(
     (p) => !isMastered(getRecord(mastery, p.targetId, p.skill, config), now, config),
@@ -2802,33 +2804,25 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
 }
 
 /**
- * Every grapheme the child has been introduced to: all introduction groups up
- * to and including the group their current focus sits in.
+ * **Amended after review — these two helpers already exist.** They were moved
+ * into their own engine module (`graphemesMetAt` and `wordsDecodableFrom`)
+ * because the distractor pickers need them too: without them,
+ * `pickWordDistractors` would default to the whole level pool and could offer
+ * a day-one child a word built from letters they have never seen. Import them
+ * rather than redefining them here:
+ *
+ * ```ts
+ * import { graphemesMetAt, wordsDecodableFrom } from './metGraphemes';
+ * ```
+ *
+ * `graphemesMetAt(level, focusGraphemes)` returns every grapheme in the
+ * introduction groups up to and including the group the focus graphemes sit
+ * in. `wordsDecodableFrom(level, metGraphemes)` returns the word ids buildable
+ * from those graphemes alone.
+ *
+ * Use `metGraphemes` for `allowed` on the grapheme and tile pickers, and the
+ * picturable subset of `wordsDecodableFrom` for `allowedWords`.
  */
-function graphemesMetFor(level: number, focusGraphemes: GraphemeId[]): GraphemeId[] {
-  const groups = getLevel(level).introductionGroups;
-  if (focusGraphemes.length === 0) return groups.flat();
-
-  // introductionGroupIndex returns -1 for a grapheme taught at an EARLIER
-  // level, which from Level 2 on is the normal case for review material. Those
-  // contribute nothing to how far through this level's groups we are.
-  const indices = focusGraphemes
-    .map((g) => introductionGroupIndex(level, g))
-    .filter((index) => index >= 0);
-
-  // Everything in focus was taught earlier, so the whole level is already open.
-  if (indices.length === 0) return groups.flat();
-
-  return groups.slice(0, Math.max(...indices) + 1).flat();
-}
-
-/** True when a target is a met grapheme, or a word built only from met graphemes. */
-function isComposedOf(targetId: TargetId, met: Set<GraphemeId>): boolean {
-  if (met.has(targetId)) return true;
-  const word = WORDS[targetId as WordId];
-  if (!word) return false;
-  return word.graphemes.every((g) => met.has(g));
-}
 
 /** Every (target, skill) pairing teachable at this level. */
 function allPairings(level: number): Pairing[] {
@@ -2960,6 +2954,12 @@ function makeTask(args: MakeTaskArgs): TaskInstance {
 
   // Choice count grows with how much the child has met, so a first session is
   // a two-way choice and a late one is a four-way choice.
+  //
+  // Note the pickers take a count of DISTRACTORS, while minChoices/maxChoices
+  // count CHOICES — hence `choiceCount - 1` at every call site below. They also
+  // return RANKED order and may return fewer than asked when the pool is small,
+  // so every call is followed by a shuffle of the whole choice set (correct
+  // answer included) and nothing assumes the requested length.
   const choiceCount = Math.min(
     taskType.maxChoices,
     Math.max(taskType.minChoices, Math.min(graphemesMet - 1, taskType.maxChoices)),

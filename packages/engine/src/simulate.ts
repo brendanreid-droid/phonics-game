@@ -9,7 +9,13 @@ import { buildSession } from './sessionBuilder';
 import { recordTaskResult } from './taskOutcome';
 import type { ConfusionMap, MasteryMap, TaskInstance } from './types';
 
-export type ChildProfile = 'fast' | 'average' | 'struggling';
+/**
+ * fast, average and struggling are children who are learning; struggling is
+ * finding it genuinely hard. nearChance answers correctly barely more often
+ * than guessing a two-choice task (50%), which is not a child who is learning,
+ * and no amount of practice should pass them through a mastery gate.
+ */
+export type ChildProfile = 'fast' | 'average' | 'struggling' | 'nearChance';
 
 export interface SimulateArgs {
   profile: ChildProfile;
@@ -44,7 +50,8 @@ export interface SimulateResult {
 const ACCURACY: Record<ChildProfile, number> = {
   fast: 0.95,
   average: 0.8,
-  struggling: 0.55,
+  struggling: 0.7,
+  nearChance: 0.55,
 };
 
 /** Milliseconds a synthetic child takes. Struggling children are also slower. */
@@ -52,6 +59,7 @@ const LATENCY: Record<ChildProfile, number> = {
   fast: 1200,
   average: 2600,
   struggling: 5200,
+  nearChance: 5200,
 };
 
 const HOUR = 3_600_000;

@@ -73,4 +73,9 @@ describe('DEFAULT_CONFIG rationale', () => {
     expect(DEFAULT_CONFIG.masteryStrength).toBe(0.8);
     expect(DEFAULT_CONFIG.masteryTaskTypes).toBe(2);
   });
+
+  it('asks for six words read and five spelt, as decided, on top of every sound in both directions', () => {
+    expect(DEFAULT_CONFIG.blendWordsRequired).toBe(6);
+    expect(DEFAULT_CONFIG.segmentWordsRequired).toBe(5);
+  });
 });

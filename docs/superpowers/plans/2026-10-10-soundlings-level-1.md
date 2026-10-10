@@ -2382,6 +2382,27 @@ git commit -m "feat(engine): pick distractors from the child's own confusion his
 
 ---
 
+## Amendments to Tasks 10–11, after review
+
+**The test code in Task 11 above is weaker than it looks.** Two of its assertions could pass against broken code:
+
+- "prefers minimal pairs" uses a single seed, and would pass by chance with the distance sort removed entirely.
+- "prefers a grapheme this child has actually confused" also uses one seed.
+
+The committed tests replace both with sweeps across 25 seeds plus exact-set assertions, so the ordering rules are genuinely pinned. If you are reading the plan's version and wondering why the committed tests are longer, that is why. Mutation testing found this; the plan's own tests did not.
+
+Other amendments:
+
+| # | Change | Why |
+|---|---|---|
+| 1 | `pickGraphemeDistractors` and `pickWordDistractors` use `getGrapheme`/`getWord` rather than `GRAPHEMES[id]?.x ?? []` | The optional-chaining version silently treats an unknown target as having no confusable neighbours, which degrades the distractor quality invisibly. The accessors throw and name the id |
+| 2 | `pickWordDistractors` filters its pool to words with a `picture`, whatever pool it is given | `allowedWords` replaced the picturable pool wholesale, so a caller passing a picture-less word would render a blank card in Picture Match — a child staring at an empty box, failed by the app rather than by their reading. The Task 12 caller happens to pass picturable words, but that is a property of the caller, not a guarantee |
+| 3 | `allowed` is deduped; a negative `count` is clamped to 0 | `slice(0, -1)` quietly returns everything-but-the-last rather than nothing |
+| 4 | `easiestTaskTypeForSkill(skill, pool = TASK_TYPES)` takes an optional pool | Its comparator was untestable and provably never executed, because each skill currently has exactly one task type. A comparator that has never run is one nobody should trust, and Plan 2 adds more task types per skill |
+| 5 | `TASK_TYPES` typed `readonly` | Consistent with the curriculum collections, for the same reason — a stray `.sort()` would reorder shared data process-wide |
+
+---
+
 ## Task 12: Session builder
 
 **Files:**

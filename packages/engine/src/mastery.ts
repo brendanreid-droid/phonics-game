@@ -1,6 +1,7 @@
 import type { Skill, TargetId } from '@soundlings/curriculum';
 import type { EngineConfig } from './config';
-import type { Attempt, MasteryRecord } from './types';
+import { masteryKey } from './types';
+import type { Attempt, MasteryMap, MasteryRecord } from './types';
 
 const MS_PER_HOUR = 3_600_000;
 
@@ -90,4 +91,52 @@ export function applyAttempt(
   }
 
   return next;
+}
+
+/**
+ * Could this child do it again, cold, today?
+ *
+ * Evaluated at session-build time, never immediately after an answer —
+ * strength is ~1 the instant an attempt lands, so asking then is meaningless.
+ *
+ * The two conditions people try to remove are the two that matter.
+ * `masteryTaskTypes` stops a child "mastering" a sound by memorising the shape
+ * of one mini-game. `masterySessions` requires retention across a gap rather
+ * than same-sitting recall.
+ */
+export function isMastered(record: MasteryRecord, now: number, config: EngineConfig): boolean {
+  return (
+    strengthAt(record, now) >= config.masteryStrength &&
+    record.correctCount >= config.masteryCorrect &&
+    record.taskTypesSeen.length >= config.masteryTaskTypes &&
+    record.sessionsSeen >= config.masterySessions
+  );
+}
+
+export function getRecord(
+  map: MasteryMap,
+  targetId: TargetId,
+  skill: Skill,
+  config: EngineConfig,
+): MasteryRecord {
+  return map[masteryKey(targetId, skill)] ?? emptyRecord(targetId, skill, config);
+}
+
+/** Returns a new map with this attempt folded in. Does not mutate `map`. */
+export function recordAttempt(map: MasteryMap, attempt: Attempt, config: EngineConfig): MasteryMap {
+  const key = masteryKey(attempt.targetId, attempt.skill);
+  const current = map[key] ?? emptyRecord(attempt.targetId, attempt.skill, config);
+  return { ...map, [key]: applyAttempt(current, attempt, config) };
+}
+
+/**
+ * Folds a task's primary and secondary attempts into the map in one call.
+ * Mastery only: the confusion map is updated separately.
+ */
+export function recordAttempts(
+  map: MasteryMap,
+  attempts: Attempt[],
+  config: EngineConfig,
+): MasteryMap {
+  return attempts.reduce((acc, attempt) => recordAttempt(acc, attempt, config), map);
 }

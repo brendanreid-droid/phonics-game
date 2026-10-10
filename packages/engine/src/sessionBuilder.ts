@@ -25,9 +25,13 @@ export interface BuildSessionArgs {
   confusions: ConfusionMap;
   now: number;
   config?: Partial<EngineConfig>;
-  /** Caps task difficulty. Set by the frustration guard after a bad session. */
+  /**
+   * Caps task difficulty. Set by the frustration guard when it abandons a task,
+   * and applies to the current session only: the guard's state is never
+   * persisted, so the next quest starts uncapped.
+   */
   maxDifficulty?: number;
-  /** Overrides session length. Set by the frustration guard on a bad day. */
+  /** Overrides session length. Set by the frustration guard on a bad day, for the current session only. */
   length?: number;
 }
 

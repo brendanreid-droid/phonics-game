@@ -272,6 +272,11 @@ A target is **mastered** for a skill when **all** hold:
 3. `taskTypesSeen.length >= 2`
 4. `sessionsProven >= 2`
 5. `primaryCorrectCount >= 1`
+6. `consecutiveCorrect >= 1`
+
+Condition 6 closes a short-timescale version of the clock bug described in §5.2. Anchoring decay to `lastReinforcedAt` fixes the case where the failure comes a day later, but not where it comes a minute later: the clock correctly does not advance and the half-life correctly shrinks, yet so little time has passed that strength is still ≈0.998. Without condition 6 a sound the child failed moments ago still reads as mastered.
+
+Because `consecutiveCorrect` resets on any unscaffolded error *and* on a scaffolded failure, this also means a previously mastered sound becomes unmastered the moment the child gets it wrong, and must be re-proven. That is the intended behaviour, not a side effect — mastery is a claim about the present, and the most recent evidence is that they could not do it.
 
 Conditions 3 and 4 are the important ones. (3) stops a child memorising the answer pattern of a single mini-game. (4) requires retention across a gap, not same-sitting recall.
 
@@ -293,7 +298,7 @@ Default session length is **14 tasks**, composed:
 |---|---|---|
 | **Current focus** | 8 (~57%) | Newest 1–2 unmastered graphemes in the level |
 | **Due review** | 3 (~21%) | Unmastered targets, ranked by `overdueness × (1 - strength)` |
-| **Win-backs** | 3 (~21%) | Mastered targets at high strength — guaranteed success |
+| **Win-backs** | 3 (~21%) | Mastered targets at high strength **whose last answer was correct** — guaranteed success |
 
 Win-backs are a minimum of **3**, not a percentage, because invariants 1, 2 and 4 below require one at the open, one at the close and one in the middle third. An earlier draft of this spec said 60/25/15, which cannot satisfy those invariants at any session length under 20 — the invariants win, because they are what protect the child's experience.
 

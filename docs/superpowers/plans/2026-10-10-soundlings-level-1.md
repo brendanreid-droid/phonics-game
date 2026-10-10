@@ -1940,6 +1940,9 @@ The third is the one that would have reached a child: the session builder would 
 | 7 | `deriveSeed(seed, index)` added to `rng.ts` | The session builder would otherwise reach for `sessionSeed + i` |
 | 8 | RNG tests rebuilt | Eight mutations survived: a biased shuffle, an early-stopping shuffle, a shuffle that mutates its input, a divisor that can emit exactly 1.0, a dropped xorshift, a changed constant, and `seedFromString` returning 0 or hashing one character. The "does not mutate the input" test was **vacuous** — its seed returned the identity permutation, so it could not fail |
 | 9 | Mastery tests added for `recordAttempts`, the skill dimension of `masteryKey`/`getRecord`, `confusionKey`, `withDefaults`, exact growth values, the slow-latency and strength boundaries, the scaffolded-wrong path, and the fields a scaffolded attempt must still advance | Each had a surviving mutation, so none of it was protected |
+| 10 | `isMastered` additionally requires `consecutiveCorrect >= 1`, and the win-back pool requires it too | Anchoring the clock to evidence fixes a failure a *day* later but not a *minute* later: the clock correctly does not move and the half-life correctly shrinks, but so little time has passed that strength is still ≈0.998. A sound failed moments ago still read as mastered and still qualified for the win-back slot. A consequence, intended: a mastered sound becomes unmastered the moment the child gets it wrong, and must be re-proven |
+| 11 | Bad input is split between throwing and clamping | A `RangeError` inside a live session is the wrong trade for a children's app — a crash mid-quest is far worse than a slightly wrong number. Inputs only our own code sets (`weight` outside `(0,1]`, a non-finite `at`) throw, so our bugs fail loudly in test. Inputs that can legitimately arrive from a device clock or a corrupt stored record (a negative or non-finite `latencyMs`, a non-finite half-life or timestamp on a loaded record) clamp. A corrupt record should cost the child that sound's history, not their session |
+| 12 | `strengthAt(record, now, config)` now takes the config | The half-life clamps were applied only inside `applyAttempt`, so a record loaded from storage bypassed them entirely. Clamping on read cannot be bypassed. Call sites in Task 12 are already updated |
 
 Knock-on edits already applied to later tasks in this plan: Task 12's urgency score tests `attemptCount === 0` rather than `lastSeenAt === 0` (a clock starting at 0 would otherwise read every attempted record as unseen); Task 15 imports `recordTaskResult` instead of defining its own fold; Task 27 calls `recordTaskResult`.
 
@@ -2689,12 +2692,22 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
     now,
     config,
   );
+  // A win-back must be a near-certain success, so high strength is not enough
+  // on its own: require the child's most recent answer on it to have been
+  // correct. Strength alone would admit a sound they failed moments ago,
+  // because so little time has passed that it has barely decayed.
   const winbackPool = mastered
-    .filter((p) => strengthAt(getRecord(mastery, p.targetId, p.skill, config), now) >= config.winbackStrength)
+    .filter((p) => {
+      const record = getRecord(mastery, p.targetId, p.skill, config);
+      return (
+        strengthAt(record, now, config) >= config.winbackStrength &&
+        record.consecutiveCorrect >= 1
+      );
+    })
     .sort(
       (a, b) =>
-        strengthAt(getRecord(mastery, b.targetId, b.skill, config), now) -
-        strengthAt(getRecord(mastery, a.targetId, a.skill, config), now),
+        strengthAt(getRecord(mastery, b.targetId, b.skill, config), now, config) -
+        strengthAt(getRecord(mastery, a.targetId, a.skill, config), now, config),
     );
 
   const anchorCount = Math.min(config.winbackCount, length);
@@ -2853,7 +2866,7 @@ function rankByUrgency(
 
   function urgency(pairing: Pairing): number {
     const record = getRecord(mastery, pairing.targetId, pairing.skill, config);
-    const strength = strengthAt(record, now);
+    const strength = strengthAt(record, now, config);
     // Test "never attempted" with attemptCount, NOT `lastSeenAt === 0`. A
     // simulation (or a test) whose clock starts at 0 would otherwise read
     // every freshly attempted record as never seen.

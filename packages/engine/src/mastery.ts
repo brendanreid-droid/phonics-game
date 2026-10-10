@@ -30,24 +30,45 @@ export function emptyRecord(targetId: TargetId, skill: Skill, config: EngineConf
   };
 }
 
+/**
+ * Throws for a bad value that can only be our own bug (a non-finite clock
+ * reading handed to us by calling code). Those should fail loudly in dev and
+ * test. Contrast `finiteOr`, for values that can legitimately arrive corrupt.
+ */
 function assertFinite(value: number, what: string, record: MasteryRecord): void {
   if (!Number.isFinite(value)) {
     throw new RangeError(
-      `mastery record ${record.targetId}::${record.skill} has non-finite ${what} (${value})`,
+      `mastery record ${record.targetId}::${record.skill}: ${what} must be finite, got ${value}`,
     );
   }
 }
 
 /**
- * A record can reach us from storage or a hand edit, bypassing the clamps
- * `applyAttempt` applies. Out-of-range values are pulled back into
- * [min, max]; a non-finite one is corruption and is refused loudly, because
- * NaN would otherwise fail every `>=` comparison and the child would simply
- * never master the sound, with nothing visibly wrong.
+ * Corrupt stored data is clamped, never thrown on: a crash mid-quest costs a
+ * child far more than a slightly wrong number. Anything reaching us from
+ * storage or a device clock can be non-finite; we replace it with a deliberate
+ * fallback and carry on.
+ *
+ * TODO(Plan 2, persistence layer): validate and quarantine corrupt records on
+ * load, so these fallbacks are a last line of defence rather than the only
+ * one. Only halfLifeHours, lastReinforcedAt, lastSeenAt and latency are
+ * guarded here; the counters (correctCount, attemptCount, ...) are not.
+ */
+function finiteOr(value: number, fallback: number): number {
+  return Number.isFinite(value) ? value : fallback;
+}
+
+/**
+ * Half-life bounds, enforced on read because a record can reach us from
+ * storage or a hand edit without ever passing through `applyAttempt`.
+ * Out-of-range values are pulled into [min, max]. A non-finite one falls back
+ * to the FLOOR: the pessimistic choice. The sound then looks stale and is
+ * re-practised, which costs the child a little repetition; the optimistic
+ * alternative would let a corrupt record claim a sound is known.
  */
 function usableHalfLife(record: MasteryRecord, config: EngineConfig): number {
-  assertFinite(record.halfLifeHours, 'halfLifeHours', record);
-  return Math.min(config.maxHalfLifeHours, Math.max(config.minHalfLifeHours, record.halfLifeHours));
+  const halfLife = finiteOr(record.halfLifeHours, config.minHalfLifeHours);
+  return Math.min(config.maxHalfLifeHours, Math.max(config.minHalfLifeHours, halfLife));
 }
 
 /**
@@ -65,11 +86,15 @@ function usableHalfLife(record: MasteryRecord, config: EngineConfig): number {
  * boundary-time sanitiser, because every caller (mastery check, session
  * builder) already holds the config, and a read-time clamp cannot be bypassed
  * by a record that was persisted or edited outside `applyAttempt`.
+ *
+ * A non-finite `lastReinforcedAt` leaves nothing to anchor the decay to, so the
+ * record reports 0: the child loses that sound's history, not their session.
+ * A non-finite `now` is a bug in the caller, not stored data, and throws.
  */
 export function strengthAt(record: MasteryRecord, now: number, config: EngineConfig): number {
   if (record.primaryCorrectCount === 0) return 0;
   assertFinite(now, 'now', record);
-  assertFinite(record.lastReinforcedAt, 'lastReinforcedAt', record);
+  if (!Number.isFinite(record.lastReinforcedAt)) return 0;
   const halfLifeHours = usableHalfLife(record, config);
   const elapsedHours = Math.max(0, now - record.lastReinforcedAt) / MS_PER_HOUR;
   // Base 2, not e: after exactly one half-life the strength must be 0.5.
@@ -96,23 +121,31 @@ export function applyAttempt(
   if (!(attempt.weight > 0 && attempt.weight <= 1)) {
     throw new RangeError(`attempt weight must be in (0, 1], got ${attempt.weight}`);
   }
-  if (!Number.isFinite(attempt.latencyMs) || attempt.latencyMs < 0) {
-    throw new RangeError(`attempt latencyMs must be finite and non-negative, got ${attempt.latencyMs}`);
-  }
   if (!Number.isFinite(attempt.at)) {
     throw new RangeError(`attempt.at must be a finite timestamp, got ${attempt.at}`);
   }
   const halfLifeHours = usableHalfLife(record, config);
+  // Latency is a difference of two device clock readings, so clock skew can make
+  // it negative or non-finite. Treat both as 0: that keeps the running mean
+  // finite, and reads as "fast", so a clock fault never costs the child
+  // reinforcement they earned.
+  const latencyMs = Number.isFinite(attempt.latencyMs) ? Math.max(0, attempt.latencyMs) : 0;
+  // Stored timestamps that are non-finite are reset to 0 (never seen / never
+  // reinforced), so Math.max below cannot propagate NaN.
+  const lastSeenAt = finiteOr(record.lastSeenAt, 0);
+  const lastReinforcedAt = finiteOr(record.lastReinforcedAt, 0);
 
   const next: MasteryRecord = {
     ...record,
+    lastSeenAt,
+    lastReinforcedAt,
     taskTypesSeen: [...record.taskTypesSeen],
   };
 
   next.attemptCount = record.attemptCount + 1;
   next.avgLatencyMs =
-    (record.avgLatencyMs * record.attemptCount + attempt.latencyMs) / next.attemptCount;
-  next.lastSeenAt = Math.max(record.lastSeenAt, attempt.at);
+    (record.avgLatencyMs * record.attemptCount + latencyMs) / next.attemptCount;
+  next.lastSeenAt = Math.max(lastSeenAt, attempt.at);
 
   if (attempt.scaffolded) {
     next.scaffoldedCount = record.scaffoldedCount + 1;
@@ -129,7 +162,7 @@ export function applyAttempt(
     return next;
   }
 
-  const slow = attempt.latencyMs > config.slowLatencyMs;
+  const slow = latencyMs > config.slowLatencyMs;
   const rate = attempt.weight * (slow ? config.slowReinforceFactor : 1);
   const growth = 1 + (config.growthFactor - 1) * rate;
 
@@ -137,7 +170,7 @@ export function applyAttempt(
   next.correctCount = record.correctCount + attempt.weight;
   if (attempt.weight === 1) next.primaryCorrectCount = record.primaryCorrectCount + 1;
   next.consecutiveCorrect = record.consecutiveCorrect + 1;
-  next.lastReinforcedAt = Math.max(record.lastReinforcedAt, attempt.at);
+  next.lastReinforcedAt = Math.max(lastReinforcedAt, attempt.at);
   if (attempt.sessionId !== record.lastProvenSessionId) {
     next.sessionsProven = record.sessionsProven + 1;
     next.lastProvenSessionId = attempt.sessionId;
@@ -165,12 +198,20 @@ export function applyAttempt(
  * directly: secondary credit is meant to accelerate mastery, never replace
  * being asked. (Today `strengthAt` already returns 0 without it; the explicit
  * check keeps the rule true even if the strength threshold is ever 0.)
+ *
+ * `consecutiveCorrect >= 1` means the most recent unaided evidence is a
+ * success. The decay clock cannot see a failure a moment ago (an error leaves
+ * it where it was, and a minute later strength is still ~0.998), so recency is
+ * a condition of its own. A previously mastered sound is therefore unmastered
+ * the instant the child gets it wrong, and must be re-proven. Mastery is a
+ * claim about the present.
  */
 export function isMastered(record: MasteryRecord, now: number, config: EngineConfig): boolean {
   return (
     strengthAt(record, now, config) >= config.masteryStrength &&
     record.correctCount + COUNT_EPSILON >= config.masteryCorrect &&
     record.primaryCorrectCount >= 1 &&
+    record.consecutiveCorrect >= 1 &&
     record.taskTypesSeen.length >= config.masteryTaskTypes &&
     record.sessionsProven >= config.masterySessions
   );

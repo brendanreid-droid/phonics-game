@@ -68,3 +68,63 @@ describe('the decay clock is anchored to evidence, not contact', () => {
     expect(strengthAt(wrong, nextDay, DEFAULT_CONFIG)).toBeLessThan(DEFAULT_CONFIG.winbackStrength);
   });
 });
+
+/**
+ * The same bug at a shorter timescale. The clock correctly does not advance on
+ * an error and the half-life correctly shrinks, but a minute later barely any
+ * time has passed, so strength is still ~0.998. Recency of failure therefore
+ * has to be a condition of its own: consecutiveCorrect >= 1.
+ */
+describe('a failure a moment ago is not mastery, however strong the decay curve says it is', () => {
+  const MINUTE = 60_000;
+  const justAfter = 3 * HOUR + MINUTE;
+
+  function failedMomentsAgo(): MasteryRecord {
+    return applyAttempt(
+      masteredAtThreeHours(),
+      attempt({ sessionId: 'two', correct: false, chosen: 'f', at: justAfter }),
+      DEFAULT_CONFIG,
+    );
+  }
+
+  it('is not mastered one minute after a wrong answer', () => {
+    const record = failedMomentsAgo();
+    // The decay curve alone cannot see this: that is the point of the test.
+    expect(strengthAt(record, justAfter, DEFAULT_CONFIG)).toBeGreaterThanOrEqual(DEFAULT_CONFIG.masteryStrength);
+    expect(isMastered(record, justAfter, DEFAULT_CONFIG)).toBe(false);
+  });
+
+  it('is not mastered one minute after being shown the answer to a failure', () => {
+    const record = applyAttempt(
+      masteredAtThreeHours(),
+      attempt({ sessionId: 'two', correct: false, scaffolded: true, at: justAfter }),
+      DEFAULT_CONFIG,
+    );
+    expect(strengthAt(record, justAfter, DEFAULT_CONFIG)).toBeGreaterThanOrEqual(DEFAULT_CONFIG.masteryStrength);
+    expect(isMastered(record, justAfter, DEFAULT_CONFIG)).toBe(false);
+  });
+
+  it('is mastered again once the child gets it right', () => {
+    const failed = failedMomentsAgo();
+    const recovered = applyAttempt(failed, attempt({ sessionId: 'two', at: justAfter + MINUTE }), DEFAULT_CONFIG);
+    expect(isMastered(recovered, justAfter + MINUTE, DEFAULT_CONFIG)).toBe(true);
+  });
+
+  it('does not pass the win-back test: strong on the curve, but not right most recently', () => {
+    const record = failedMomentsAgo();
+    const strong = strengthAt(record, justAfter, DEFAULT_CONFIG) >= DEFAULT_CONFIG.winbackStrength;
+    expect(strong).toBe(true);
+    expect(record.consecutiveCorrect).toBe(0);
+    const winbackEligible = strong && record.consecutiveCorrect >= 1;
+    expect(winbackEligible).toBe(false);
+  });
+
+  it('a scaffolded CORRECT answer does not unmaster a child who was not failing', () => {
+    const helped = applyAttempt(
+      masteredAtThreeHours(),
+      attempt({ sessionId: 'two', scaffolded: true, at: justAfter }),
+      DEFAULT_CONFIG,
+    );
+    expect(isMastered(helped, justAfter, DEFAULT_CONFIG)).toBe(true);
+  });
+});

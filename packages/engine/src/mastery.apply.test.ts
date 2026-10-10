@@ -238,21 +238,52 @@ describe('applyAttempt input validation', () => {
     expect(record.attemptCount).toBe(0);
   });
 
-  it.each([-1, Number.NaN, Infinity])('rejects latency %s', (latencyMs) => {
-    expect(() => applyAttempt(fresh(), attempt({ latencyMs }), DEFAULT_CONFIG)).toThrow(/latencyMs/);
+  // Latency is a difference of two device clock readings, so a bad value can
+  // legitimately arrive at runtime (clock skew). It is clamped, never thrown.
+  it.each([-1, -5000, Number.NaN, Infinity, -Infinity])('treats latency %s as 0 without throwing', (latencyMs) => {
+    let next = fresh();
+    expect(() => {
+      next = applyAttempt(fresh(), attempt({ latencyMs }), DEFAULT_CONFIG);
+    }).not.toThrow();
+    expect(next.avgLatencyMs).toBe(0);
+    // ...and cannot poison the running mean for later attempts.
+    const later = applyAttempt(next, attempt({ latencyMs: 2000 }), DEFAULT_CONFIG);
+    expect(later.avgLatencyMs).toBe(1000);
   });
 
-  it('accepts a latency of exactly 0', () => {
-    expect(() => applyAttempt(fresh(), attempt({ latencyMs: 0 }), DEFAULT_CONFIG)).not.toThrow();
+  it('treats a bad latency as fast rather than slow, so a clock fault never costs the child reinforcement', () => {
+    const bad = applyAttempt(fresh(), attempt({ latencyMs: Infinity }), DEFAULT_CONFIG);
+    expect(bad.halfLifeHours).toBeCloseTo(6 * 1.9, 9);
   });
 
   it.each([Number.NaN, Infinity])('rejects a non-finite timestamp %s', (at) => {
     expect(() => applyAttempt(fresh(), attempt({ at }), DEFAULT_CONFIG)).toThrow(/attempt\.at/);
   });
 
-  it('refuses a record whose half-life is NaN rather than propagating it', () => {
-    const corrupt = { ...fresh(), halfLifeHours: Number.NaN };
-    expect(() => applyAttempt(corrupt, attempt(), DEFAULT_CONFIG)).toThrow(/halfLifeHours/);
+  it.each([Number.NaN, Infinity, -Infinity])(
+    'recovers a record whose half-life is %s: it restarts from the floor, without throwing',
+    (halfLifeHours) => {
+      const corrupt = { ...fresh(), halfLifeHours };
+      let next = corrupt;
+      expect(() => {
+        next = applyAttempt(corrupt, attempt(), DEFAULT_CONFIG);
+      }).not.toThrow();
+      expect(next.halfLifeHours).toBeCloseTo(DEFAULT_CONFIG.minHalfLifeHours * 1.9, 9);
+    },
+  );
+
+  it.each([Number.NaN, Infinity])('recovers a record whose lastSeenAt / lastReinforcedAt is %s', (bad) => {
+    const corrupt = { ...fresh(), lastSeenAt: bad, lastReinforcedAt: bad };
+    const next = applyAttempt(corrupt, attempt({ at: 8 * HOUR }), DEFAULT_CONFIG);
+    expect(next.lastSeenAt).toBe(8 * HOUR);
+    expect(next.lastReinforcedAt).toBe(8 * HOUR);
+  });
+
+  it('an error on a record with a corrupt clock leaves it unreinforced (0), not NaN', () => {
+    const corrupt = { ...fresh(), lastReinforcedAt: Number.NaN };
+    const next = applyAttempt(corrupt, attempt({ correct: false, at: 8 * HOUR }), DEFAULT_CONFIG);
+    expect(next.lastReinforcedAt).toBe(0);
+    expect(next.lastSeenAt).toBe(8 * HOUR);
   });
 
   it('grows from the floor when a record arrives with a half-life below it', () => {

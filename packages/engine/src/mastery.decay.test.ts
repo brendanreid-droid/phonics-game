@@ -84,14 +84,27 @@ describe('strengthAt on records that bypassed the half-life clamps', () => {
     expect(strength).toBeCloseTo(0.5, 10);
   });
 
-  it('refuses a non-finite half-life rather than failing every comparison silently', () => {
-    expect(() => strengthAt(proven({ halfLifeHours: Number.NaN }), HOUR, DEFAULT_CONFIG)).toThrow(/halfLifeHours/);
-    expect(() => strengthAt(proven({ halfLifeHours: Infinity }), HOUR, DEFAULT_CONFIG)).toThrow(/halfLifeHours/);
-  });
+  it.each([Number.NaN, Infinity, -Infinity])(
+    'treats a %s half-life as the floor: pessimistic, finite, and no throw',
+    (halfLifeHours) => {
+      let strength = -1;
+      expect(() => {
+        strength = strengthAt(proven({ halfLifeHours }), min * HOUR, DEFAULT_CONFIG);
+      }).not.toThrow();
+      expect(strength).toBeCloseTo(0.5, 10);
+    },
+  );
 
-  it('refuses a non-finite clock reading', () => {
+  it.each([Number.NaN, Infinity])(
+    'reports 0 for a record whose lastReinforcedAt is %s: no valid anchor, no remembered strength',
+    (bad) => {
+      expect(strengthAt(proven({ lastReinforcedAt: bad }), HOUR, DEFAULT_CONFIG)).toBe(0);
+    },
+  );
+
+  it('still refuses a non-finite clock reading: that is the caller\'s own bug, not stored data', () => {
     expect(() => strengthAt(proven(), Number.NaN, DEFAULT_CONFIG)).toThrow(/now/);
-    expect(() => strengthAt(proven({ lastReinforcedAt: Number.NaN }), HOUR, DEFAULT_CONFIG)).toThrow(/lastReinforcedAt/);
+    expect(() => strengthAt(proven(), Infinity, DEFAULT_CONFIG)).toThrow(/now/);
   });
 });
 

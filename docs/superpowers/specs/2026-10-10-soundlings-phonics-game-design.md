@@ -385,7 +385,24 @@ Quotas: **6** blend-reading words and **5** spelling words. An earlier draft sai
 - `LETTER_SOUND`, `BLEND_READ` and `SEGMENT_SPELL` get no composite credit, so their practice is irreducible.
 - Therefore the real figures are higher than this spec previously claimed, and **we do not claim fewer total tasks than the 40-game competitor.**
 
-The ranges in §11 are to be derived from the simulation harness and then written back here as measured values with the config that produced them. Until that is done, no quest count in this document should be quoted to anyone.
+### Measured figures
+
+From the simulation harness, 30 seeds per profile, one quest per simulated day, with the calibrated config below. **These are measurements, not targets.**
+
+| Profile | Accuracy | Quests (min / mean / max) | Tasks (mean) | Completed |
+|---|---|---|---|---|
+| Fast | 95% | 11 / **13.6** / 19 | 191 | 30/30 |
+| Average | 80% | 12 / **18.8** / 31 | 264 | 30/30 |
+| Struggling | 70% | 16 / **29.4** / 65 | 411 | 30/30 |
+| Near-chance | 55% | 21 / 38.8 / 40 | 543 | 3/30 at a 40-quest cap |
+
+Calibrated config: `initialHalfLifeHours` 24 (was 6 — indefensible for a once-a-day product), `growthFactor` 4, `slowLatencyMs` 7000, `focusTargetCount` 3. Every mastery guarantee is unchanged: 3 unscaffolded correct, 2 separate sessions, 0.8 strength, most recent answer correct.
+
+So a strong child needs about **14 quests, roughly 70 minutes of play**, to reach genuine mastery of seven sounds in both directions plus reading and spelling. That is more than this spec once claimed and it is the real number. For context it is also far less than the classroom time the same content takes, and it buys a demonstrable outcome rather than a completion count.
+
+**Why it sits at roughly twice the structural floor**, and why that is the design rather than a bug: mastery is a live predicate, so a mastered sound that is not revisited decays below the 0.8 gate and must be re-proven. Mastered material leaves the practice pool except for the three win-back anchors, so it lapses. Completion needs every record fresh simultaneously. Traces show spelling words lagging sounds by several quests.
+
+**A known pacing lever, deliberately not pulled yet:** the win-back share could rise as a level approaches completion, letting the child top up mastered items instead of letting them lapse. That would cut quest counts without weakening any gate. It is an optimisation, it changes the quest's feel, and it should be judged against real children rather than against a simulation — so it waits.
 
 **What survives, and is still the differentiator:** a child who completes Level 1 here can read `sat, pat, tip, mat, fit, map` — cold, a day later, unaided. A child who completes 40 fixed games has played 40 games. Those are not the same claim, and ours is the one a parent actually wants. The adaptive engine's benefit is distributional rather than total: a struggling child spends their time on the sounds they are failing, and a strong child is not marched through review they do not need.
 
@@ -566,7 +583,11 @@ So the struggling profile is redefined to **70%**: a child finding it genuinely 
 
 A child at or near chance is a different case, and the correct product response is not a longer quest. It is to tell the grown-up. Plan 2 adds a "needs a hand" signal to the parent area, raised when a child's accuracy on current-focus material stays near chance across several sessions. That is a feature, not a failure mode: a five-year-old stuck at guessing needs a person sitting with them, and the most useful thing the app can do is say so plainly instead of grinding them through another fourteen tasks.
 
-Accordingly the harness asserts completion for fast and average and the redefined struggling profile, and asserts for a near-chance profile that it does **not** complete — pinning the guarantee that mastery cannot be reached by volume alone.
+Accordingly the harness asserts completion for fast, average and the redefined struggling profile, and asserts that a near-chance profile does not complete within a 40-quest cap (measured: 3 of 30 get through).
+
+**But the gate is statistical, not a bright line, and an earlier draft of this section overclaimed.** Measured without a cap, 40 of 50 near-chance children eventually complete, at a mean of 72 quests. A child answering at 55% will pass any threshold built on counting correct answers, given enough attempts — and no such threshold can be made luck-proof, because every one of them is passable by trying often enough.
+
+So the honest position: the mastery gate makes passing-by-luck *slow and unlikely in any realistic number of sessions*, and that is all it does. The thing that actually protects a child performing at chance is the product telling their grown-up, which is therefore **required rather than a nice-to-have**. A near-chance child grinding through seventy quests is a failure of the product even though the gate technically held for the first forty.
 | Manual | iPad simulator, every review gate. |
 
 ---

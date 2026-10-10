@@ -14,6 +14,14 @@ export interface ActiveSession {
   index: number;
   stars: number;
   startedAt: number;
+  /**
+   * The creatures already earned when this quest began. Stored so that a quest
+   * resumed after an interruption still announces a creature earned before the
+   * interruption: recomputed on resume, the mastery saved so far would already
+   * include it and the hatching would never be shown. Optional because sessions
+   * stored by an earlier build do not have it.
+   */
+  creaturesAtStart?: string[];
 }
 
 export interface HighScore {

@@ -243,6 +243,22 @@ export function replanRemaining(args: {
 // --- reading a stored quest back --------------------------------------------
 
 /**
+ * Whether a stored quest would be resumed, rather than a fresh one started.
+ *
+ * The one rule the quest runner and the island both go by, so the island only
+ * says "Keep going" when the runner really will: same level, something left to
+ * answer, and a plan this build can render.
+ */
+export function canResume(
+  active: { level: number; index: number; plan: readonly TaskInstance[] } | null,
+  level: number,
+): boolean {
+  return (
+    active !== null && active.level === level && active.index < active.plan.length && isPlayablePlan(active.plan)
+  );
+}
+
+/**
  * Whether a stored plan can be played by this build.
  *
  * `isActiveSession` checks the shape of the envelope. This checks that every

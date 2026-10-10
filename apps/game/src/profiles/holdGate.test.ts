@@ -56,6 +56,9 @@ describe('the grown-up hold', () => {
     hold.start();
     vi.advanceTimersByTime(500);
     expect(onConfirm).toHaveBeenCalledTimes(1);
+    // ...and the second press-down left no second clock running behind it.
+    vi.advanceTimersByTime(HOLD_MS * 3);
+    expect(onConfirm).toHaveBeenCalledTimes(1);
   });
 
   it('starts the clock afresh after a release: earlier holding does not count', () => {

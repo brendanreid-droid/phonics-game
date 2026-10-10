@@ -4,6 +4,7 @@ import { DEFAULT_CONFIG, TASK_TYPES, buildSession, masteryKey } from '@soundling
 import type { Attempt, TaskInstance } from '@soundlings/engine';
 import {
   MIN_TAIL,
+  canResume,
   applyClosingSwap,
   confusionFor,
   creatureIdsFromParam,
@@ -427,5 +428,35 @@ describe('config coupling', () => {
 
   it('knows every task type the engine can schedule', () => {
     expect(TASK_TYPES.length).toBeGreaterThan(0);
+  });
+});
+
+describe('canResume', () => {
+  const session = (over: Partial<{ level: number; index: number; plan: TaskInstance[] }> = {}) => ({
+    level: 1,
+    index: 3,
+    plan: plan(),
+    ...over,
+  });
+
+  it('is false with no stored quest', () => {
+    expect(canResume(null, 1)).toBe(false);
+  });
+
+  it('is true for a quest part-way through at this level', () => {
+    expect(canResume(session(), 1)).toBe(true);
+  });
+
+  it('is false for a quest at another level', () => {
+    expect(canResume(session({ level: 2 }), 1)).toBe(false);
+  });
+
+  it('is false for a quest with nothing left to answer', () => {
+    const p = plan();
+    expect(canResume(session({ plan: p, index: p.length }), 1)).toBe(false);
+  });
+
+  it('is false for a plan this build cannot play, as the runner will not resume it either', () => {
+    expect(canResume(session({ plan: [{ ...plan()[0], taskTypeId: 'retired-game' }] }), 1)).toBe(false);
   });
 });

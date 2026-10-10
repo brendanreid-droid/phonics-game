@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { daysBetween, localDateString, streakFrom } from './streaks';
+import { currentRun, daysBetween, localDateString, streakFrom } from './streaks';
 
 /**
  * The machine running these tests has one timezone, and a calculation that
@@ -204,5 +204,43 @@ describe('daysBetween', () => {
     expect(daysBetween('2026-10-24', '2026-10-26')).toBe(2);
     expect(daysBetween('2026-10-31', '2026-11-02')).toBe(2);
     expect(daysBetween('2026-04-04', '2026-04-06')).toBe(2);
+  });
+});
+
+describe('currentRun', () => {
+  it('is 0 with no days played', () => {
+    expect(currentRun([], '2026-10-10')).toBe(0);
+  });
+
+  it('counts the consecutive days ending today', () => {
+    expect(currentRun(['2026-10-08', '2026-10-09', '2026-10-10'], '2026-10-10')).toBe(3);
+  });
+
+  it('is still alive when the last day was yesterday: today has not been missed yet', () => {
+    expect(currentRun(['2026-10-08', '2026-10-09'], '2026-10-10')).toBe(2);
+  });
+
+  it('is 0 once a whole day has been missed', () => {
+    expect(currentRun(['2026-10-07', '2026-10-08'], '2026-10-10')).toBe(0);
+  });
+
+  it('counts only the run that ends at the end, not an earlier longer one', () => {
+    expect(currentRun(['2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-09', '2026-10-10'], '2026-10-10')).toBe(2);
+  });
+
+  it('stops at a gap', () => {
+    expect(currentRun(['2026-10-05', '2026-10-08', '2026-10-09', '2026-10-10'], '2026-10-10')).toBe(3);
+  });
+
+  it('does not depend on the order or repeats it is given', () => {
+    expect(currentRun(['2026-10-10', '2026-10-09', '2026-10-10', '2026-10-08'], '2026-10-10')).toBe(3);
+  });
+
+  it('counts across month and year boundaries', () => {
+    expect(currentRun(['2026-12-30', '2026-12-31', '2027-01-01'], '2027-01-01')).toBe(3);
+  });
+
+  it('gives the benefit of the doubt to a date in the future, as streakFrom does', () => {
+    expect(currentRun(['2026-10-10', '2026-10-11'], '2026-10-10')).toBe(2);
   });
 });

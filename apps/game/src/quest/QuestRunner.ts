@@ -21,8 +21,8 @@ import type { ActiveSession, ProgressRepo } from '../data/ProgressRepo';
 import type { HintTier } from '../tasks/useHintLadder';
 import {
   applyClosingSwap,
+  canResume,
   confusionFor,
-  isPlayablePlan,
   judgeAnswer,
   noteOutcome,
   preloadKeysFor,
@@ -177,13 +177,7 @@ export class QuestRunner {
     this.mastery = mastery;
     this.confusions = confusions;
 
-    const resumed =
-      active !== null &&
-      active.level === level &&
-      active.index < active.plan.length &&
-      isPlayablePlan(active.plan)
-        ? active
-        : null;
+    const resumed = active !== null && canResume(active, level) ? active : null;
 
     let current: ActiveSession;
     if (resumed) {

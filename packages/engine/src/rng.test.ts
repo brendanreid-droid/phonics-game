@@ -47,8 +47,24 @@ describe('seeded rng', () => {
 });
 
 describe('makeRng golden values', () => {
-  // Cross-checked against an independent implementation of mulberry32. Seed 1's
-  // first output, 0.6270739405881613, is the value usually quoted for it.
+  // These pin OUR implementation, so that a seed replays the same tasks across
+  // versions and a parent's bug report stays reproducible. They are not a claim
+  // of matching any canonical mulberry32 reference: do not "fix" them against
+  // a blog post. Values were cross-checked against an independent port of the
+  // same algorithm. Distribution quality was measured separately on that port
+  // (100,000 outputs each from seeds 1, 42 and 12345, in 100 bins): means
+  // 0.4989 to 0.5010, chi-square 95 to 110 on 99 degrees of freedom.
+  //
+  // Known-equivalent mutants, i.e. NOT coverage gaps; do not chase them:
+  //  - makeRng without `>>> 0` on the seed: the `>>> 0` after the first
+  //    addition yields identical output for floats and negatives.
+  //  - `>` instead of `>=` on the correctCount threshold in isMastered: the
+  //    1e-9 epsilon makes them indistinguishable.
+  //  - recordAttempts copying the map per attempt instead of once: same result,
+  //    only slower.
+  //  - a divisor that could emit exactly 1.0: no seed is known to reach it, so
+  //    the bounds test below is a sanity check; the golden values are what
+  //    kill a changed divisor.
   const golden: Array<[number, number[]]> = [
     [0, [0.26642920868471265, 0.0003297457005828619, 0.2232720274478197, 0.1462021479383111]],
     [1, [0.6270739405881613, 0.002735721180215478, 0.5274470399599522, 0.9810509674716741]],

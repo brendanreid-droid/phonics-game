@@ -310,7 +310,11 @@ Hard invariants, each covered by a unit test:
 4. At least one win-back in the middle third.
 5. Every task's target — and every distractor — uses only graphemes the child has actually been **introduced to**, meaning the introduction groups up to and including the one their current focus sits in. Not merely "taught somewhere in this level": on day one a child has met two letters, and offering a third as a wrong answer is a trick question, not a challenge.
 6. Session length equals `config.sessionLength` (default 14).
-7. If fewer than 2 mastered targets exist (i.e. a brand-new child), win-backs are replaced by the lowest-difficulty task type on the current focus — never by a hard task.
+7. If fewer than 2 mastered targets exist (i.e. a brand-new child), win-backs are replaced as follows: the **opening** and **middle-third** anchors use the lowest-difficulty task type available, and the **closing** anchor uses at most the second-lowest and must sit on a target the child has already answered correctly in this session.
+
+   An earlier version of this invariant required all three anchors to use the lowest-difficulty type, and that is **impossible**. On a child's first sessions the focus is `s, a`, and no Level 1 word is buildable from those two letters alone — every word needs `t`, `p`, `m` or `i`. So only two task types exist, invariant 3 forces strict alternation, and slots 0 and 13 of a 14-task quest have opposite parity and therefore opposite types. A brute force over all 2^14 sequences finds zero solutions.
+
+   Invariant 3 wins that conflict, because back-to-back identical mini-games is what a child actually notices and resents. The purpose of invariant 7 — never open on the hardest thing available, always close on a near-certain success — is preserved: a `sound-singer` close is difficulty 2 of 4, on a sound just practised a dozen times. Note that giving either sound skill a second task type dissolves the conflict entirely (924 valid arrangements at three types), so revisit this when Plan 2 adds one.
 
 Invariant 7 matters: a first-ever session has no mastered targets to draw win-backs from, and the naive implementation would open a brand-new 5-year-old on their hardest content.
 

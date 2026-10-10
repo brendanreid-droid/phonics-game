@@ -3119,6 +3119,44 @@ git commit -m "feat(engine): compose adaptive quests with anchors, focus and rev
 
 ---
 
+## STOP — Task 12 is blocked on a design contradiction. Read this before implementing it.
+
+Task 12 was attempted and halted. Two of its invariants cannot both hold, and the plan's own tests hide it. **Do not implement Task 12 as written above.**
+
+### The contradiction
+
+On a child's first sessions the focus is `s, a`. Verified by running the real `graphemesMetAt` and `wordsDecodableFrom`: **no Level 1 word is buildable from `s` and `a` alone** — every word needs `t`, `p`, `m` or `i`. So only two task types can appear, `sound-hunt` (difficulty 1) and `sound-singer` (difficulty 2), until `s` and `a` are both mastered.
+
+With two task types and invariant 3 (no two adjacent tasks share a type), the sequence must strictly alternate. Slot 0 and slot 13 therefore have opposite parity and opposite types. Invariant 7 wants all three anchors to be the lowest-difficulty type. Both cannot be `sound-hunt`. A brute force over all 2^14 sequences confirms zero solutions; the same shape recurs in the 8-task bad-day session.
+
+The plan's no-adjacent test only ever runs against `masteredGraphemes(['s','a','t'])` — so **the one case that is impossible is the only case the test never covers.**
+
+### Decision: weaken invariant 7, keep invariant 3
+
+Invariant 7's *purpose* is that a five-year-old's first screen is never the hardest thing the engine can produce, and that the quest closes on something they will get right. Uniform task type was the mechanism, not the goal.
+
+Replace invariant 7 with:
+
+> The opening anchor and the middle-third anchor use the lowest-difficulty task type available. The closing anchor uses at most the second-lowest, and must be on a target the child has already answered correctly in this session.
+
+On day one that yields `hunt, singer, hunt, singer …` with the middle anchor on an even slot and a `sound-singer` close — difficulty 2 of 4, on a sound practised a dozen times in the preceding minutes. That is a near-certain success, which is what the invariant is actually for. Invariant 3 is preserved, because back-to-back identical mini-games is the thing a child will actually notice and resent.
+
+Apply the same rule to the bad-day session. Rejected alternatives: a 13-task day-one session (breaks invariant 6 for a one-off); allowing one adjacent repeat on day one (the first session is where boredom matters most); adding a second task type per skill now (real product work, belongs in Plan 2 — but it does dissolve this problem, with 924 valid arrangements at three types, so revisit invariant 7 when it lands).
+
+### Five further bugs in Task 12's code, found by running it verbatim
+
+Four of the plan's 21 tests fail against the plan's own implementation, plus one crash. Fix all of these when rebuilding:
+
+1. **The swap pass moves anchors out of their slots.** `findSwap` and `separateRepeats` swap `result[i]` without checking whether `i` is an anchor, so the middle-third anchor ends up elsewhere and runs of three identical types survive. Rebuild `arrange` to place anchors by type constraint up front rather than swapping afterwards, so it terminates and succeeds whenever a valid arrangement exists.
+2. **The greedy swap does not guarantee success.** Seed 2 produces an adjacent `picture-match` repeat.
+3. **Anchors are chosen in pairing order, not by difficulty.** Cycling `focusPool` yields `s/SOUND_ID, s/LETTER_SOUND, a/SOUND_ID` — hunt, singer, hunt — so the opening anchor is not reliably the easiest type. Pick anchors as the pairings whose task type is globally easiest.
+4. **"Always includes the correct answer among the choices" is a wrong test.** For `SEGMENT_SPELL`, `choices` are letter tiles while `correctChoice` is the word id — Word Builder and `judgeAnswer` both depend on that. The assertion should be that the word's graphemes, **as a multiset**, are contained in `choices`. The "no duplicate choices" test is wrong for the same reason: `pip` legitimately needs two `p` tiles, and it passed only because `pip` never came up.
+5. **The builder crashes for a fully mastered child.** With every pairing mastered, `focusPool`, `unmastered` and `reviewPool` are all empty and `filler[next % 0]` is `undefined`, giving `TypeError: Cannot read properties of undefined`. Needs a fallback to mastered material.
+
+Also: the spec says invariant 7 triggers on "fewer than 2 mastered targets" while the plan code tests `winbackPool.length > 0` — with exactly one win-back target the plan would cycle that single target across all three anchors. Follow the spec. And for win-backs the plan calls `chooseTaskType`, which *prefers a type the child has not yet proven* — the opposite of a guaranteed success. Win-backs should prefer a proven type.
+
+---
+
 ## Task 13: Frustration guard
 
 **Files:**

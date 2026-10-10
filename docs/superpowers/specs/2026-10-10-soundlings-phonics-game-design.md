@@ -364,6 +364,8 @@ Per-session, per-target error counting:
 
 The cap is 2, not 1. An earlier draft capped at 1, which looks kinder and is worse: only one Level 1 task type has difficulty 1, so a capped quest would have a single usable mini-game and the no-adjacent rule (§5.4 invariant 3) would collapse into fourteen identical tasks in a row. That would hand the most monotonous possible session to exactly the child already having the hardest time. A cap of 2 keeps two task types in play so the quest still alternates, and difficulty 2 is still an easy task.
 
+**The guard counts errors per target, not per (target, skill) — on purpose.** A child who fails `s` by ear and then fails to name `s` is having trouble with `s`, and that is more reason to ease off, not less. Closing-anchor eligibility *is* keyed per (target, skill), because "can we finish on something they got right?" is a different question and singing `s` is a different question from hearing it. The asymmetry is intentional; don't reconcile it.
+
 The last row is the "bad day" case — tired, unwell, distracted. The right response is a short, kind session, not a full quest of failure. Importantly, attempts in a degraded session still record normally, so the mastery data stays honest; we simply stop asking.
 
 ### 5.7 Level completion

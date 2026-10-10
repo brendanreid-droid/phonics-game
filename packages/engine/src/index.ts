@@ -18,5 +18,5 @@ export {
   recordAttempts,
   strengthAt,
 } from './mastery';
-export { simulateChild } from './simulate';
-export type { ChildProfile, SimulateArgs, SimulateResult } from './simulate';
+export { closingTask, simulateChild } from './simulate';
+export type { ChildProfile, SimulateArgs, SimulateResult, TargetOutcome } from './simulate';

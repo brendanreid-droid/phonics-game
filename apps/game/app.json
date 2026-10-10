@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "Soundlings",
+    "slug": "soundlings",
+    "version": "0.1.0",
+    "orientation": "landscape",
+    "scheme": "soundlings",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "assetBundlePatterns": ["assets/**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "requireFullScreen": true,
+      "bundleIdentifier": "com.soundlings.game"
+    },
+    "android": {
+      "package": "com.soundlings.game"
+    },
+    "plugins": ["expo-router"]
+  }
+}

@@ -71,12 +71,13 @@ const isWordSkill = (skill: Skill): boolean => skill === 'BLEND_READ' || skill =
  *     available and the closing anchor at most the second-lowest, on a target
  *     the quest has already asked about.
  *
- * Why invariant 7 is not "every anchor is the easiest type": on day one only
- * two task types exist (no word is buildable from s and a), so invariant 3
- * forces them to alternate, and in an even-length session the first and last
- * slots then hold different types. Invariant 3 wins: it is the one a child
- * notices. Adding a second task type per skill (Plan 2) removes the conflict;
- * revisit the rule then.
+ * Why invariant 7 is not "every anchor is the easiest type": whenever only two
+ * task types are usable (a child under the frustration cap, or one whose focus
+ * has only two skills available), invariant 3 forces them to alternate, and in
+ * an even-length session the first and last slots then hold different types.
+ * Invariant 3 wins: it is the one a child notices. (On day one three types are
+ * usable, since at and sat are buildable from the first group, s a t.) Adding a
+ * second task type per skill (Plan 2) removes the conflict; revisit the rule then.
  *
  * "Already asked about" is all a plan can promise. Whether the child answered
  * correctly is only known at play time.

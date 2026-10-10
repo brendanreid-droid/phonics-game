@@ -4,20 +4,22 @@ import { graphemesMetAt, wordsDecodableFrom } from './metGraphemes';
 
 describe('graphemesMetAt', () => {
   it('opens only the first group on day one', () => {
-    expect(graphemesMetAt(1, ['s'])).toEqual(['s', 'a']);
-    expect(graphemesMetAt(1, ['a'])).toEqual(['s', 'a']);
+    expect(graphemesMetAt(1, ['s'])).toEqual(['s', 'a', 't']);
+    expect(graphemesMetAt(1, ['a'])).toEqual(['s', 'a', 't']);
+    expect(graphemesMetAt(1, ['t'])).toEqual(['s', 'a', 't']);
   });
 
   it('opens every group up to and including the one the focus sits in, in teaching order', () => {
-    expect(graphemesMetAt(1, ['t'])).toEqual(['s', 'a', 't', 'p']);
-    expect(graphemesMetAt(1, ['p'])).toEqual(['s', 'a', 't', 'p']);
-    expect(graphemesMetAt(1, ['m'])).toEqual(['s', 'a', 't', 'p', 'i', 'm']);
+    expect(graphemesMetAt(1, ['p'])).toEqual(['s', 'a', 't', 'p', 'i']);
+    expect(graphemesMetAt(1, ['i'])).toEqual(['s', 'a', 't', 'p', 'i']);
+    expect(graphemesMetAt(1, ['m'])).toEqual(['s', 'a', 't', 'p', 'i', 'm', 'f']);
     expect(graphemesMetAt(1, ['f'])).toEqual(['s', 'a', 't', 'p', 'i', 'm', 'f']);
   });
 
   it('opens up to the furthest focus grapheme when the focus spans groups', () => {
-    expect(graphemesMetAt(1, ['s', 'p'])).toEqual(['s', 'a', 't', 'p']);
-    expect(graphemesMetAt(1, ['i', 'a'])).toEqual(['s', 'a', 't', 'p', 'i', 'm']);
+    expect(graphemesMetAt(1, ['s', 'p'])).toEqual(['s', 'a', 't', 'p', 'i']);
+    expect(graphemesMetAt(1, ['i', 'a'])).toEqual(['s', 'a', 't', 'p', 'i']);
+    expect(graphemesMetAt(1, ['a', 'f'])).toEqual(['s', 'a', 't', 'p', 'i', 'm', 'f']);
   });
 
   it('does not depend on the order of the focus graphemes', () => {

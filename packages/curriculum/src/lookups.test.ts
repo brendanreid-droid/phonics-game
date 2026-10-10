@@ -134,8 +134,11 @@ describe('creatureForGrapheme', () => {
 describe('introductionGroupIndex', () => {
   it('returns the group index for a grapheme taught at the current level', () => {
     expect(introductionGroupIndex(1, 's')).toBe(0);
+    expect(introductionGroupIndex(1, 't')).toBe(0);
     expect(introductionGroupIndex(1, 'p')).toBe(1);
-    expect(introductionGroupIndex(1, 'f')).toBe(3);
+    expect(introductionGroupIndex(1, 'i')).toBe(1);
+    expect(introductionGroupIndex(1, 'm')).toBe(2);
+    expect(introductionGroupIndex(1, 'f')).toBe(2);
   });
 
   it('returns -1 for a grapheme taught at an earlier level, meaning "treat as oldest"', () => {

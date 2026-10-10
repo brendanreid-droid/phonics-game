@@ -13,6 +13,20 @@ import {
 } from './index';
 import { getLevel, graphemesForLevel, picturableWordsForLevel, wordsForLevel } from './lookups';
 
+/**
+ * Words that a child who has met only the first group (plus anything taught at an
+ * earlier level) can build, and that use at least one grapheme from that group.
+ */
+function firstGroupWords(levelNumber: number, groups: readonly (readonly string[])[]): string[] {
+  const known = new Set<string>([
+    ...GRAPHEME_LIST.filter((g) => g.introducedInLevel < levelNumber).map((g) => g.id),
+    ...groups[0],
+  ]);
+  return WORD_LIST.filter(
+    (w) => w.graphemes.every((g) => known.has(g)) && w.graphemes.some((g) => groups[0].includes(g)),
+  ).map((w) => w.id);
+}
+
 describe('curriculum integrity', () => {
   it('gives every grapheme exactly one creature', () => {
     for (const g of GRAPHEME_LIST) {
@@ -59,6 +73,21 @@ describe('curriculum integrity', () => {
       expect(flattened.slice().sort()).toEqual(level.graphemeIds.slice().sort());
       expect(new Set(flattened).size).toBe(flattened.length);
     }
+  });
+
+  it('lets the child build a real word from the first introduction group alone', () => {
+    // The guard against a deadlock this game has already had: with a first group
+    // that supports no word task, SOUND_ID has one task type and can never be
+    // mastered, so the opening focus never graduates.
+    for (const level of LEVELS) {
+      expect(firstGroupWords(level.number, level.introductionGroups), `level ${level.number}`).not.toEqual([]);
+    }
+  });
+
+  it('would catch a first group that spells nothing', () => {
+    // The guard above must be able to fail. s and a alone build no Level 1 word.
+    expect(firstGroupWords(1, [['s', 'a'], ['t', 'p'], ['i', 'm'], ['f']])).toEqual([]);
+    expect(firstGroupWords(1, [['s', 'a', 't'], ['p', 'i'], ['m', 'f']]).sort()).toEqual(['at', 'sat']);
   });
 
   it('lists only known tricky words in each level', () => {

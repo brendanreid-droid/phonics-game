@@ -4,6 +4,7 @@ import type { Skill } from '@soundlings/curriculum';
 import { DEFAULT_CONFIG } from './config';
 import { applyAttempt, emptyRecord, getRecord, isMastered, strengthAt } from './mastery';
 import { buildSession } from './sessionBuilder';
+import { taskTypeById } from './taskTypes';
 import type { BuildSessionArgs } from './sessionBuilder';
 import { masteryKey } from './types';
 import type { Attempt, MasteryMap, TaskInstance } from './types';
@@ -159,15 +160,16 @@ describe('buildSession invariants', () => {
   });
 
   it('shows only what the child has met: targets, wrong answers, picture words and spelling tiles', () => {
-    // The introduction groups are [s a] [t p] [i m] [f]; focus decides how far the child has got.
+    // The introduction groups are [s a t] [p i] [m f]; focus decides how far the child has got.
+    const level1 = ['s', 'a', 't', 'p', 'i', 'm', 'f'];
     const met: Record<string, string[]> = {
-      'brand new': ['s', 'a'],
-      'day two: s and a heard but not yet sung': ['s', 'a'],
-      's and a mastered': ['s', 'a', 't', 'p'],
-      's a t mastered': ['s', 'a', 't', 'p', 'i', 'm'],
-      's a t p mastered': ['s', 'a', 't', 'p', 'i', 'm'],
-      's a t p i mastered': ['s', 'a', 't', 'p', 'i', 'm', 'f'],
-      'six mastered': ['s', 'a', 't', 'p', 'i', 'm', 'f'],
+      'brand new': ['s', 'a', 't'],
+      'day two: s and a heard but not yet sung': ['s', 'a', 't'],
+      's and a mastered': ['s', 'a', 't', 'p', 'i'],
+      's a t mastered': ['s', 'a', 't', 'p', 'i'],
+      's a t p mastered': level1,
+      's a t p i mastered': level1,
+      'six mastered': level1,
     };
     for (const [name, mastery] of Object.entries(STATES)) {
       for (const seed of SEEDS.slice(0, 15)) {
@@ -325,12 +327,36 @@ describe('buildSession for a brand-new child', () => {
     }
   });
 
-  it('has only two task types available on day one, and alternates them without a repeat', () => {
-    // No Level 1 word is buildable from s and a, so a first session can only use
-    // sound-hunt and sound-singer. With a no-adjacent-repeat rule that forces strict
-    // alternation, which is why the closing anchor may be the second-easiest type.
+  it('has three task types on day one, because at and sat are buildable from s, a and t', () => {
+    // No picture word is buildable from s, a, t, so reading is not available yet, but
+    // spelling is: that second proving type for SOUND_ID is what lets the first focus
+    // graduate at all. A first group with no buildable word deadlocked the game.
     for (const seed of SEEDS) {
       const plan = build({}, seed);
+      expect(new Set(plan.map((t) => t.taskTypeId)), seed).toEqual(
+        new Set(['sound-hunt', 'sound-singer', 'word-builder']),
+      );
+      expect(plan[0].taskTypeId, seed).toBe('sound-hunt');
+      for (let i = 1; i < plan.length; i += 1) {
+        expect(plan[i].taskTypeId, `${seed} slot ${i}`).not.toBe(plan[i - 1].taskTypeId);
+      }
+    }
+  });
+
+  it('gives every sound in the first group a second task type that can prove it', () => {
+    // The anti-deadlock property itself: on day one, spelling must credit s, a and t.
+    const spelled = SEEDS.flatMap((seed) => build({}, seed)).filter((t) => t.skill === 'SEGMENT_SPELL');
+    expect(spelled.length).toBeGreaterThan(0);
+    const credited = new Set(spelled.flatMap((t) => t.secondaryTargets));
+    expect(credited).toEqual(new Set(['s', 'a', 't']));
+  });
+
+  it('alternates strictly between two task types when the frustration cap leaves only two', () => {
+    // maxDifficulty 2 rules out spelling. Only sound-hunt and sound-singer remain, so
+    // the no-adjacent-repeat rule forces strict alternation, which is why the closing
+    // anchor may be the second-easiest type.
+    for (const seed of SEEDS) {
+      const plan = build({}, seed, { maxDifficulty: 2 });
       expect(new Set(plan.map((t) => t.taskTypeId)), seed).toEqual(new Set(['sound-hunt', 'sound-singer']));
       expect(plan[0].taskTypeId, seed).toBe('sound-hunt');
       expect(plan[plan.length - 1].taskTypeId, seed).toBe('sound-singer');
@@ -346,7 +372,7 @@ describe('buildSession for a brand-new child', () => {
     expect(anchors.length).toBe(DEFAULT_CONFIG.winbackCount);
     for (const anchor of anchors) {
       expect(anchor.band).toBe('focus');
-      expect(['s', 'a']).toContain(anchor.primaryTarget);
+      expect(['s', 'a', 't']).toContain(anchor.primaryTarget);
     }
   });
 
@@ -360,54 +386,65 @@ describe('buildSession for a brand-new child', () => {
   });
 
   it('focuses only on the first introduction group', () => {
+    const lettersOf = (t: TaskInstance) =>
+      t.skill === 'SOUND_ID' || t.skill === 'LETTER_SOUND' ? [t.primaryTarget] : getWord(t.primaryTarget).graphemes;
     for (const seed of SEEDS) {
-      for (const target of build({}, seed).map((t) => t.primaryTarget)) {
-        expect(['s', 'a'], seed).toContain(target);
+      for (const task of build({}, seed)) {
+        for (const letter of lettersOf(task)) expect(['s', 'a', 't'], `${seed}: ${task.id}`).toContain(letter);
       }
     }
   });
 
   it('never offers a letter the child has not been introduced to, even as a wrong answer', () => {
-    // Day one: the child has met s and a. Showing them f as a distractor is
+    // Day one: the child has met s, a and t. Showing them f as a distractor is
     // not a challenge, it is a trick question.
     for (const seed of SEEDS) {
       for (const task of build({}, seed)) {
-        for (const choice of task.choices) expect(['s', 'a'], `${seed}: saw ${choice}`).toContain(choice);
+        for (const choice of task.choices) expect(['s', 'a', 't'], `${seed}: saw ${choice}`).toContain(choice);
       }
     }
   });
 
-  it('uses no word at all, since none is buildable from the letters met', () => {
-    for (const task of build({})) {
-      expect(['SOUND_ID', 'LETTER_SOUND']).toContain(task.skill);
+  it('spells only at and sat, and never offers a reading task, since no picture word is buildable', () => {
+    for (const seed of SEEDS) {
+      for (const task of build({}, seed)) {
+        expect(['SOUND_ID', 'LETTER_SOUND', 'SEGMENT_SPELL'], seed).toContain(task.skill);
+        if (task.skill === 'SEGMENT_SPELL') expect(['at', 'sat'], seed).toContain(task.primaryTarget);
+      }
     }
   });
 
-  it('starts with only two choices on every task, so a first screen is winnable', () => {
+  it('starts every task at the fewest choices its mini-game allows, so a first screen is winnable', () => {
     for (const task of build({})) {
-      expect(task.choices.length, task.id).toBe(2);
+      expect(task.choices.length, task.id).toBe(taskTypeById(task.taskTypeId).minChoices);
     }
   });
 
-  it('shows both sounds across the session, not just one', () => {
-    const targets = new Set(build({}).map((t) => t.primaryTarget));
-    expect(targets).toEqual(new Set(['s', 'a']));
+  it('shows both focus sounds across the session, not just one', () => {
+    const sounds = build({})
+      .filter((t) => t.skill === 'SOUND_ID' || t.skill === 'LETTER_SOUND')
+      .map((t) => t.primaryTarget);
+    expect(sounds).toContain('s');
+    expect(sounds).toContain('a');
+    for (const sound of sounds) expect(['s', 'a', 't']).toContain(sound);
   });
 });
 
 describe('buildSession when only two task types are available but win-backs exist', () => {
-  // s and a heard but not yet sung: two win-backs, both sound-hunt, and still only two task types.
+  // s and a heard but not yet sung: two win-backs, both sound-hunt. The frustration cap
+  // (difficulty 2) rules spelling out, so only two task types remain.
   const mastery = STATES['day two: s and a heard but not yet sung'];
+  const capped = { maxDifficulty: DEFAULT_CONFIG.cappedDifficulty };
 
   it('really has win-backs and really has only two task types', () => {
-    const plan = build(mastery);
+    const plan = build(mastery, 'test-session', capped);
     expect(plan.some((t) => t.band === 'winback')).toBe(true);
     expect(new Set(plan.map((t) => t.taskTypeId)).size).toBe(2);
   });
 
   it('opens and breathes on win-backs, and closes on a sound it already asked about', () => {
     for (const seed of SEEDS) {
-      const plan = build(mastery, seed);
+      const plan = build(mastery, seed, capped);
       expect(plan[0].band, seed).toBe('winback');
       const mid = plan.findIndex((t, i) => i > 0 && i < plan.length - 1 && t.anchor);
       expect(plan[mid].band, seed).toBe('winback');
@@ -525,7 +562,7 @@ describe('buildSession composition', () => {
   });
 
   it('uses only words buildable from the letters met so far, whether read or spelled', () => {
-    const met = ['s', 'a', 't', 'p'];
+    const met = ['s', 'a', 't', 'p', 'i'];
     for (const seed of SEEDS) {
       for (const task of build(masteredGraphemes(['s', 'a']), seed)) {
         if (task.skill === 'SOUND_ID' || task.skill === 'LETTER_SOUND') continue;
@@ -620,7 +657,8 @@ describe('buildSession composition', () => {
         if (task.skill === 'BLEND_READ') positions.add(task.choices.indexOf(task.correctChoice));
       }
     }
-    expect([...positions].sort()).toEqual([0, 1]);
+    // Three pictures per reading task, so the answer can land in any of three places.
+    expect([...positions].sort()).toEqual([0, 1, 2]);
   });
 
   it('credits a repeated letter once: pip is p and i, not p, i and p', () => {
@@ -643,43 +681,43 @@ describe('buildSession composition', () => {
   });
 
   it('reviews the weakest material first', () => {
-    // s is mastered; a and t are the focus; p is met but outside it, so it is the only review.
-    // p/SOUND_ID has just been failed, p/LETTER_SOUND is nearly known.
-    const base = masteredPairs([['s', 'SOUND_ID'], ['s', 'LETTER_SOUND']]);
+    // s and a are mastered; t and p are the focus; i is met but outside it, so it is the only
+    // review. i/SOUND_ID has just been failed, i/LETTER_SOUND is nearly known.
+    const base = masteredGraphemes(['s', 'a']);
     const answer = (skill: Skill, correct: boolean, at: number, id: string): Attempt => ({
-      sessionId: id, targetId: 'p', skill, taskTypeId: 'sound-hunt', correct, scaffolded: false, latencyMs: 900, weight: 1, at,
+      sessionId: id, targetId: 'i', skill, taskTypeId: 'sound-hunt', correct, scaffolded: false, latencyMs: 900, weight: 1, at,
     });
-    let weak = emptyRecord('p', 'SOUND_ID', DEFAULT_CONFIG);
+    let weak = emptyRecord('i', 'SOUND_ID', DEFAULT_CONFIG);
     weak = applyAttempt(weak, answer('SOUND_ID', false, NOW - HOUR, 'w1'), DEFAULT_CONFIG);
-    let nearly = emptyRecord('p', 'LETTER_SOUND', DEFAULT_CONFIG);
+    let nearly = emptyRecord('i', 'LETTER_SOUND', DEFAULT_CONFIG);
     nearly = applyAttempt(nearly, answer('LETTER_SOUND', true, NOW - HOUR, 'n1'), DEFAULT_CONFIG);
     nearly = applyAttempt(nearly, answer('LETTER_SOUND', true, NOW - HOUR, 'n2'), DEFAULT_CONFIG);
-    const mastery = { ...base, [masteryKey('p', 'SOUND_ID')]: weak, [masteryKey('p', 'LETTER_SOUND')]: nearly };
+    const mastery = { ...base, [masteryKey('i', 'SOUND_ID')]: weak, [masteryKey('i', 'LETTER_SOUND')]: nearly };
     for (const seed of SEEDS) {
       const review = build(mastery, seed, { config: { reviewCount: 1 } }).filter((t) => t.band === 'review');
       expect(review.length, seed).toBe(1);
-      expect(`${review[0].primaryTarget}/${review[0].skill}`, seed).toBe('p/SOUND_ID');
+      expect(`${review[0].primaryTarget}/${review[0].skill}`, seed).toBe('i/SOUND_ID');
     }
   });
 
   it('counts how overdue a target is as well as how weak, when reviewing', () => {
-    // Equal strength: both were last answered correctly two hours ago. p/SOUND_ID was then
+    // Equal strength: both were last answered correctly two hours ago. i/SOUND_ID was then
     // seen again with a hint a moment ago, which moves lastSeenAt but proves nothing, while
-    // p/LETTER_SOUND has gone untouched. Only the overdue term separates them, and
-    // p/SOUND_ID would win a tie because it comes first in teaching order.
-    const base = masteredPairs([['s', 'SOUND_ID'], ['s', 'LETTER_SOUND']]);
+    // i/LETTER_SOUND has gone untouched. Only the overdue term separates them, and
+    // i/SOUND_ID would win a tie because it comes first in teaching order.
+    const base = masteredGraphemes(['s', 'a']);
     const correct = (skill: Skill, id: string): Attempt => ({
-      sessionId: id, targetId: 'p', skill, taskTypeId: 'sound-hunt', correct: true, scaffolded: false, latencyMs: 900, weight: 1, at: NOW - 2 * HOUR,
+      sessionId: id, targetId: 'i', skill, taskTypeId: 'sound-hunt', correct: true, scaffolded: false, latencyMs: 900, weight: 1, at: NOW - 2 * HOUR,
     });
-    let sid = applyAttempt(emptyRecord('p', 'SOUND_ID', DEFAULT_CONFIG), correct('SOUND_ID', 'a'), DEFAULT_CONFIG);
+    let sid = applyAttempt(emptyRecord('i', 'SOUND_ID', DEFAULT_CONFIG), correct('SOUND_ID', 'a'), DEFAULT_CONFIG);
     sid = applyAttempt(sid, { ...correct('SOUND_ID', 'b'), scaffolded: true, at: NOW - 60_000 }, DEFAULT_CONFIG);
-    const ls = applyAttempt(emptyRecord('p', 'LETTER_SOUND', DEFAULT_CONFIG), correct('LETTER_SOUND', 'a'), DEFAULT_CONFIG);
-    const mastery = { ...base, [masteryKey('p', 'SOUND_ID')]: sid, [masteryKey('p', 'LETTER_SOUND')]: ls };
+    const ls = applyAttempt(emptyRecord('i', 'LETTER_SOUND', DEFAULT_CONFIG), correct('LETTER_SOUND', 'a'), DEFAULT_CONFIG);
+    const mastery = { ...base, [masteryKey('i', 'SOUND_ID')]: sid, [masteryKey('i', 'LETTER_SOUND')]: ls };
     expect(strengthAt(sid, NOW, DEFAULT_CONFIG)).toBeCloseTo(strengthAt(ls, NOW, DEFAULT_CONFIG), 10);
     expect(sid.lastSeenAt).toBeGreaterThan(ls.lastSeenAt);
     for (const seed of SEEDS) {
       const review = build(mastery, seed, { config: { reviewCount: 1 } }).filter((t) => t.band === 'review');
-      expect(`${review[0].primaryTarget}/${review[0].skill}`, seed).toBe('p/LETTER_SOUND');
+      expect(`${review[0].primaryTarget}/${review[0].skill}`, seed).toBe('i/LETTER_SOUND');
     }
   });
 

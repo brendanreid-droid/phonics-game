@@ -36,7 +36,16 @@ describe('design tokens', () => {
     expect(hitSlop(60)).toEqual({ top: 0, bottom: 0, left: 0, right: 0 });
   });
 
-  it('uses an infant-safe letter font stack with a single-storey a', () => {
+  it('uses Andika, the infant face with a single-storey a, for letters', () => {
     expect(tokens.font.letter).toContain('Andika');
+  });
+
+  it('names one loaded family per font, never a CSS stack', () => {
+    // React Native on iOS/Android cannot parse "A, B, sans-serif". A stack
+    // silently falls through to the system font, whose double-storey 'a' is
+    // not the letterform a child is being taught.
+    for (const family of [tokens.font.letter, tokens.font.ui]) {
+      expect(family).toMatch(/^[A-Za-z0-9_]+$/);
+    }
   });
 });

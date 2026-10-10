@@ -61,12 +61,21 @@ export const tokens = {
     /**
      * Letters must use an infant-safe face: single-storey 'a', single-storey
      * 'g', unambiguous 'l' and 'I'. Andika was designed for literacy learners
-     * and is the only acceptable default here. The fallbacks are ordered to
-     * degrade toward the least-decorative option available.
+     * and is the only acceptable face here.
+     *
+     * This is a single loaded family name, not a CSS stack. React Native on
+     * iOS and Android cannot parse a comma-separated list, so a stack silently
+     * falls through to the system font, whose double-storey 'a' is a shape a
+     * child learning letters has never been shown. The weight is part of the
+     * name (Andika_700Bold) for the same reason: expo-font registers each
+     * weight as its own family, so `fontWeight` is not needed and must not be
+     * set alongside it, or the browser fakes a second bolding.
+     *
+     * apps/game/src/fonts.ts maps this exact string to the font file.
      */
-    letter: 'Andika, "Comic Sans MS", Verdana, sans-serif',
-    /** Interface text, where decorative is fine. */
-    ui: 'Quicksand, Avenir, "Helvetica Neue", sans-serif',
+    letter: 'Andika_700Bold',
+    /** Interface text, where decorative is fine. Loaded by apps/game/src/fonts.ts. */
+    ui: 'Quicksand_600SemiBold',
   },
   motion: {
     /** Feedback must land fast or it reads as lag, not as reward. */

@@ -49,6 +49,21 @@ describe('curriculum purity', () => {
     expect(names).toEqual(expect.arrayContaining(['index.ts', 'graphemes.ts', 'words.ts']));
   });
 
+  it('extracts the specifiers a file really imports, so the import check cannot pass vacuously', () => {
+    const read = (name: string) => readFileSync(join(SRC, name), 'utf8');
+    expect(specifiers(read('lookups.ts')).sort()).toEqual(
+      ['./creatures', './graphemes', './levels', './trickyWords', './types', './words'],
+    );
+    // Barrel re-exports, including multi-line `export type { … } from`.
+    expect(specifiers(read('index.ts'))).toEqual(
+      expect.arrayContaining(['./types', './graphemes', './words', './lookups']),
+    );
+    // Forms no real file uses today but the check must still see.
+    expect(specifiers(`import 'a'; const b = require('b'); const c = await import('c');`).sort()).toEqual(
+      ['a', 'b', 'c'],
+    );
+  });
+
   it('imports only relative modules inside src, or an explicitly allowed specifier', () => {
     for (const file of sourceFiles(SRC)) {
       for (const spec of specifiers(readFileSync(file, 'utf8'))) {

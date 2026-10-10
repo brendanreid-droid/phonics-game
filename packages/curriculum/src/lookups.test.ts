@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { Grapheme } from './types';
 import {
   GRAPHEME_LIST,
   PICTURABLE_WORD_LIST,
@@ -32,6 +33,38 @@ vi.mock('./levels', async (importOriginal) => {
   };
 });
 
+// TEMPORARY, and necessary for two reasons. (1) GRAPHEME_LIST is authored in
+// sequenceIndex order, so an ordering test against the real data passes even if
+// graphemesForLevel never sorts. This mock hands the lookups the same graphemes
+// in a deliberately scrambled order, so the sort is the only thing that can put
+// them right. (2) It adds a grapheme taught at Level 2, which introductionGroupIndex
+// needs in order to answer "known, but taught later than this level". DELETE the
+// Level 2 grapheme when real Level 2 graphemes land; keep the scramble for as
+// long as the real list happens to be authored in order.
+vi.mock('./graphemes', async (importOriginal) => {
+  const original = await importOriginal<typeof import('./graphemes')>();
+  const taughtAtLevel2: Grapheme = {
+    id: 'n',
+    phoneme: '/n/',
+    letterName: 'en',
+    mnemonic: 'nest',
+    mnemonicEmoji: '🪹',
+    audio: { phoneme: 'ph.n', letterName: 'ln.n' },
+    introducedInLevel: 2,
+    sequenceIndex: 7,
+    confusableWith: [],
+  };
+  const inOrder = [...original.GRAPHEME_LIST, taughtAtLevel2];
+  const GRAPHEME_LIST = [3, 0, 6, 7, 2, 5, 1, 4].map((i) => inOrder[i]);
+  const GRAPHEMES = Object.fromEntries(inOrder.map((g) => [g.id, g]));
+  const getGrapheme = (id: string) => {
+    const grapheme = GRAPHEMES[id];
+    if (!grapheme) throw new Error(`Unknown grapheme: ${id}`);
+    return grapheme;
+  };
+  return { ...original, GRAPHEME_LIST, GRAPHEMES, getGrapheme };
+});
+
 describe('getLevel', () => {
   it('returns a level whose number matches the request', () => {
     const level = getLevel(1);
@@ -42,10 +75,14 @@ describe('getLevel', () => {
 });
 
 describe('graphemesForLevel', () => {
-  it('returns graphemes ordered by sequenceIndex', () => {
-    const indices = graphemesForLevel(1).map((g) => g.sequenceIndex);
-    expect(indices).toEqual([...indices].sort((a, b) => a - b));
-    expect(indices.length).toBeGreaterThan(0);
+  it('starts from a scrambled list, so a passing sort test cannot be an accident', () => {
+    const indices = GRAPHEME_LIST.map((g) => g.sequenceIndex);
+    expect(indices).not.toEqual([...indices].sort((a, b) => a - b));
+  });
+
+  it('returns graphemes ordered by sequenceIndex however the list is authored', () => {
+    expect(graphemesForLevel(1).map((g) => g.sequenceIndex)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(graphemesForLevel(2).map((g) => g.sequenceIndex)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
   });
 
   it('does not reorder the shared GRAPHEME_LIST', () => {
@@ -56,6 +93,10 @@ describe('graphemesForLevel', () => {
 });
 
 describe('wordsForLevel', () => {
+  // WEAK TODAY: every word is decodable at Level 1, so no word is ever above a
+  // requested level and the `<= levelNumber` filter is only really exercised by
+  // level 0. When Level 2 words exist, add: wordsForLevel(1) contains no word
+  // with decodableFromLevel 2, and wordsForLevel(2) contains both.
   it('excludes words above the level', () => {
     for (const level of [1, 2]) {
       for (const w of wordsForLevel(level)) {
@@ -67,7 +108,11 @@ describe('wordsForLevel', () => {
 });
 
 describe('picturableWordsForLevel', () => {
+  // WEAK TODAY: every word is decodable at Level 1, so the level cutoff cannot
+  // be exercised beyond level 0. When Level 2 words exist, add: a Level 2
+  // picturable word is absent from picturableWordsForLevel(1) and present in (2).
   it('returns only words with a picture', () => {
+    expect(picturableWordsForLevel(0)).toEqual([]);
     const words = picturableWordsForLevel(1);
     expect(words.length).toBeGreaterThan(0);
     for (const w of words) expect(w.picture).toBeDefined();
@@ -95,6 +140,11 @@ describe('introductionGroupIndex', () => {
 
   it('returns -1 for a grapheme taught at an earlier level, meaning "treat as oldest"', () => {
     expect(introductionGroupIndex(2, 's')).toBe(-1);
+  });
+
+  it('throws for a grapheme that exists but is taught later than the requested level', () => {
+    // 'n' is a test-only Level 2 grapheme (see the ./graphemes mock above).
+    expect(() => introductionGroupIndex(1, 'n')).toThrow(/n.*not taught.*level 1/i);
   });
 
   it('throws for a grapheme that does not exist at all', () => {

@@ -403,14 +403,16 @@ From the simulation harness, 30 seeds per profile, one quest per simulated day, 
 
 | Profile | Accuracy | Quests (min / mean / max) | Tasks (mean) | Completed |
 |---|---|---|---|---|
-| Fast | 95% | 11 / **13.6** / 19 | 191 | 30/30 |
-| Average | 80% | 12 / **18.8** / 31 | 264 | 30/30 |
-| Struggling | 70% | 16 / **29.4** / 65 | 411 | 30/30 |
-| Near-chance | 55% | 21 / 38.8 / 40 | 543 | 3/30 at a 40-quest cap |
+| Fast | 95% | 11 / **17.1** / 22 | 240 | 30/30 |
+| Average | 80% | 14 / **22.0** / 37 | 308 | 30/30 |
+| Struggling | 70% | 13 / **31.5** / 64 | 441 | 30/30 |
+| Near-chance | 55% | 25 / 39.5 / 40 | 553 | 1/30 at a 40-quest cap |
+
+These are measured with seven mini-games. Before Plan 3 added the second game per skill the same harness gave fast 14.7, average 21.5, struggling 29.6 mean quests (tasks 206 / 301 / 414). **Quest counts rose, most for the strong learner (+16%)**, and that is the correct direction: demanding two independent proofs costs more than demanding one, and that cost is what makes the anti-memorisation guarantee (§5.3) worth having. An earlier plan expected the counts to fall; they did not, and the ranges were re-set from the measurement rather than the other way round.
 
 Calibrated config: `initialHalfLifeHours` 24 (was 6 — indefensible for a once-a-day product), `growthFactor` 4, `slowLatencyMs` 7000, `focusTargetCount` 3. Every mastery guarantee is unchanged: 3 unscaffolded correct, 2 separate sessions, 0.8 strength, most recent answer correct.
 
-So a strong child needs about **14 quests, roughly 70 minutes of play**, to reach genuine mastery of seven sounds in both directions plus reading and spelling. That is more than this spec once claimed and it is the real number. For context it is also far less than the classroom time the same content takes, and it buys a demonstrable outcome rather than a completion count.
+So a strong child needs about **17 quests, roughly 85 minutes of play**, to reach genuine mastery of seven sounds in both directions plus reading and spelling. That is more than this spec once claimed and it is the real number. For context it is also far less than the classroom time the same content takes, and it buys a demonstrable outcome rather than a completion count.
 
 **Why it sits at roughly twice the structural floor**, and why that is the design rather than a bug: mastery is a live predicate, so a mastered sound that is not revisited decays below the 0.8 gate and must be re-proven. Mastered material leaves the practice pool except for the three win-back anchors, so it lapses. Completion needs every record fresh simultaneously. Traces show spelling words lagging sounds by several quests.
 
@@ -585,7 +587,7 @@ Conflict policy: `task_attempts` is append-only so it merges without conflict; `
 | `packages/curriculum` | Data integrity: every word decodable at its level; every audio key resolves; no word uses an unintroduced grapheme; every grapheme has a creature; at least 8 words per level carry a `picture`. |
 | Task components | Render, correct path, incorrect path, each hint tier, scaffolded completion. |
 | `packages/api` | Offline queue: enqueue while offline, flush on reconnect, no duplicate attempts. |
-| Simulation harness | Run synthetic children (fast / average / struggling / bad-day) through Level 1. **Ranges to be derived from the harness itself, then recorded here and in §5.7.1 as measured values alongside the config that produced them.** Once set, they are regression bounds with modest headroom — not aspirations. The prior entry here (fast 4–7, average 7–10, struggling 10–14) was invented and is withdrawn; it also disagreed with the plan's own numbers, which is how you can tell neither was measured. |
+| Simulation harness | Run synthetic children (fast / average / struggling / bad-day) through Level 1. **Ranges to be derived from the harness itself, then recorded here and in §5.7.1 as measured values alongside the config that produced them.** Once set, they are regression bounds with modest headroom — not aspirations. Re-measured with seven mini-games in Plan 3 (§5.7.1). The prior entry here (fast 4–7, average 7–10, struggling 10–14) was invented and is withdrawn; it also disagreed with the plan's own numbers, which is how you can tell neither was measured. |
 
 ### 11.1 Not every child should complete Level 1 by playing more
 
@@ -595,7 +597,7 @@ So the struggling profile is redefined to **70%**: a child finding it genuinely 
 
 A child at or near chance is a different case, and the correct product response is not a longer quest. It is to tell the grown-up. Plan 2 adds a "needs a hand" signal to the parent area, raised when a child's accuracy on current-focus material stays near chance across several sessions. That is a feature, not a failure mode: a five-year-old stuck at guessing needs a person sitting with them, and the most useful thing the app can do is say so plainly instead of grinding them through another fourteen tasks.
 
-Accordingly the harness asserts completion for fast, average and the redefined struggling profile, and asserts that a near-chance profile does not complete within a 40-quest cap (measured: 3 of 30 get through).
+Accordingly the harness asserts completion for fast, average and the redefined struggling profile, and asserts that a near-chance profile does not complete within a 40-quest cap (measured: 1 of 30 gets through with seven games; it was 3 of 30 with four).
 
 **But the gate is statistical, not a bright line, and an earlier draft of this section overclaimed.** Measured without a cap, 40 of 50 near-chance children eventually complete, at a mean of 72 quests. A child answering at 55% will pass any threshold built on counting correct answers, given enough attempts — and no such threshold can be made luck-proof, because every one of them is passable by trying often enough.
 

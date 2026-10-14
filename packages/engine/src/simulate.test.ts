@@ -12,12 +12,18 @@ import type { TaskInstance } from './types';
  * to get green.
  *
  * Measured (quests, min/mean/max; tasks mean), seeds 1 to 30, cap 100, with words gated
- * on known sounds (spec invariant 5a, wordReadinessCorrect 2):
- *   fast         12 / 14.7 / 19    tasks 206   (was 11 / 13.6 / 19, 191 before 5a)
- *   average      15 / 21.5 / 33    tasks 301   (was 12 / 18.8 / 31, 264)
- *   struggling   17 / 29.6 / 45    tasks 414   (was 16 / 29.4 / 65, 411)   (70% accurate)
- *   nearChance   cap 40: 3 of 30 finished, mean 39.7 quests (was 38.8)   (55% accurate)
- * The bounds below were not changed for 5a: they held with their original headroom.
+ * on known sounds (spec invariant 5a, wordReadinessCorrect 2) and SEVEN mini-games (Plan 3:
+ * Word Pick, Missing Letter and Picture Start added, so six of the seven sounds, every
+ * reading word and every spelling word need two different games before they count as proven):
+ *   fast         11 / 17.1 / 22    tasks 240   (was 12 / 14.7 / 19, 206 with four games)
+ *   average      14 / 22.0 / 37    tasks 308   (was 15 / 21.5 / 33, 301)
+ *   struggling   13 / 31.5 / 64    tasks 441   (was 17 / 29.6 / 45, 414)   (70% accurate)
+ *   nearChance   cap 40: 1 of 30 finished, mean 39.5 quests (was 3 of 30, 39.7)   (55% accurate)
+ * Quest counts ROSE for the strong learner (+16%) and barely moved for the others. That is the
+ * price of the anti-memorisation guarantee, not a defect: asking for two independent proofs
+ * costs more than asking for one, and that is what makes the guarantee worth having. The bounds
+ * below were re-set from these figures with modest headroom; nothing about mastery was weakened
+ * to reach them. The earlier bounds (fast <= 16 and so on) described four games and are retired.
  *
  * One quest per simulated day, so these are also days.
  */
@@ -48,20 +54,20 @@ describe('pacing simulation', { timeout: 60_000 }, () => {
   const nearChance = measure('nearChance', 40);
   const strugglingAtCap = measure('struggling', 40);
 
-  it('finishes Level 1 for every strong learner, in about 15 quests', () => {
+  it('finishes Level 1 for every strong learner, in about 17 quests', () => {
     expect(fast.completed).toBe(SEED_COUNT);
-    expect(fast.meanQuests).toBeGreaterThanOrEqual(11);
-    expect(fast.meanQuests).toBeLessThanOrEqual(16);
-    expect(fast.maxQuests).toBeLessThanOrEqual(24);
-    expect(fast.meanTasks).toBeLessThanOrEqual(240);
+    expect(fast.meanQuests).toBeGreaterThanOrEqual(12);
+    expect(fast.meanQuests).toBeLessThanOrEqual(19);
+    expect(fast.maxQuests).toBeLessThanOrEqual(26);
+    expect(fast.meanTasks).toBeLessThanOrEqual(265);
   });
 
   it('finishes Level 1 for every average learner, in about 22 quests', () => {
     expect(average.completed).toBe(SEED_COUNT);
     expect(average.meanQuests).toBeGreaterThanOrEqual(15);
-    expect(average.meanQuests).toBeLessThanOrEqual(23);
-    expect(average.maxQuests).toBeLessThanOrEqual(38);
-    expect(average.meanTasks).toBeLessThanOrEqual(330);
+    expect(average.meanQuests).toBeLessThanOrEqual(24);
+    expect(average.maxQuests).toBeLessThanOrEqual(41);
+    expect(average.meanTasks).toBeLessThanOrEqual(340);
   });
 
   it('finishes Level 1 for every struggling learner (70% accurate), in about 30 quests', () => {
@@ -85,7 +91,7 @@ describe('pacing simulation', { timeout: 60_000 }, () => {
   it('does not let a child performing near chance (55%) through within the quest cap', () => {
     // Chance on a two-choice task is 50%. A child at 55% is guessing, has not learned the
     // material, and must not be passed by volume. Of 30 children, 3 got through in 40
-    // quests, by luck on every gate at once; a 70% child got through 25 times.
+    // quests, by luck on every gate at once (1 of 30 with seven games); a 70% child got through 24 times.
     expect(nearChance.completed).toBeLessThanOrEqual(6);
     expect(nearChance.completed).toBeLessThan(strugglingAtCap.completed);
     expect(nearChance.meanQuests).toBeGreaterThanOrEqual(35);
@@ -100,7 +106,7 @@ describe('pacing simulation', { timeout: 60_000 }, () => {
 
   it('reports how often a quest still ends on a failure, which a swap cannot remove', () => {
     // The swap picks something the child got right, but a flat-accuracy child can still
-    // miss it. Measured: fast 6%, average 19%, struggling 31%. Scaffolded answers count.
+    // miss it. Measured: fast 6%, average 17%, struggling 29%. Scaffolded answers count.
     expect(fast.endingOnFailure).toBeLessThanOrEqual(0.1);
     expect(average.endingOnFailure).toBeLessThanOrEqual(0.25);
     expect(struggling.endingOnFailure).toBeLessThanOrEqual(0.4);
@@ -252,28 +258,45 @@ describe('closingTask: the runner promise that a quest does not close on a fluff
 });
 
 describe('simulation: the closing swap in play', () => {
-  it('swaps the close for a struggling child, and counts quests that still end badly', () => {
-    const result = simulateChild({ profile: 'struggling', seed: 1, maxQuests: 8 });
-    expect(result.closingSwaps).toBeGreaterThan(0);
+  // Sampled across seeds. A single seed pins one random stream, so any change to how the engine draws
+  // numbers flips it for no reason that matters; the difference between a struggling child and a strong
+  // one is large and robust (measured over 40 seeds of 8 quests: 1.93 swaps for struggling, 0.97 for
+  // average, 0.20 for fast), and that is what is asserted.
+  const swapsPerQuest = (profile: ChildProfile, config?: Record<string, number>) => {
+    const runs = Array.from({ length: 20 }, (_, i) => simulateChild({ profile, seed: i + 1, maxQuests: 8, config }));
+    return {
+      swaps: runs.reduce((a, r) => a + r.closingSwaps, 0) / runs.length,
+      scaffolded: runs.reduce((a, r) => a + r.scaffoldedAnswers, 0),
+      failedEndings: runs.reduce((a, r) => a + r.questsEndingOnFailure, 0),
+      quests: runs.reduce((a, r) => a + r.quests, 0),
+      endedOnFailure: runs.reduce((a, r) => a + r.questsEndingOnFailure, 0),
+    };
+  };
+
+  it('swaps the close for struggling children, and counts quests that still end badly', () => {
+    const struggling = swapsPerQuest('struggling');
+    expect(struggling.swaps).toBeGreaterThanOrEqual(1);
     // The swap picks something the child answered right, but they can still
     // get it wrong this time: a flat-accuracy child cannot be promised a win.
-    expect(result.questsEndingOnFailure).toBeLessThanOrEqual(result.quests);
+    expect(struggling.endedOnFailure).toBeLessThanOrEqual(struggling.quests);
   });
 
   it('counts an answer the child was handed as a failure, for the ending and for the swap', () => {
     // Every wrong answer is scaffolded straight away, so a child is never
     // recorded as wrong, only as shown the answer. Those must still count as
     // failures: they did not succeed.
-    const config = { scaffoldAfterErrors: 1, abandonAfterErrors: 9 };
-    const result = simulateChild({ profile: 'struggling', seed: 1, maxQuests: 10, config });
-    expect(result.scaffoldedAnswers).toBeGreaterThan(0);
-    expect(result.questsEndingOnFailure).toBeGreaterThan(0);
-    expect(result.closingSwaps).toBeGreaterThan(0);
+    const handed = swapsPerQuest('struggling', { scaffoldAfterErrors: 1, abandonAfterErrors: 9 });
+    expect(handed.scaffolded).toBeGreaterThan(0);
+    expect(handed.failedEndings).toBeGreaterThan(0);
+    expect(handed.swaps).toBeGreaterThan(0);
   });
 
-  it('a strong child is rarely swapped', () => {
-    const fast = simulateChild({ profile: 'fast', seed: 1, maxQuests: 8 });
-    const slow = simulateChild({ profile: 'struggling', seed: 1, maxQuests: 8 });
-    expect(fast.closingSwaps).toBeLessThan(slow.closingSwaps);
+  it('a strong child is rarely swapped, and far less often than a struggling one', () => {
+    const fast = swapsPerQuest('fast');
+    const slow = swapsPerQuest('struggling');
+    expect(fast.swaps).toBeLessThan(slow.swaps);
+    expect(slow.swaps).toBeGreaterThanOrEqual(2 * fast.swaps);
+    expect(fast.swaps).toBeLessThanOrEqual(0.6);
   });
 });
+

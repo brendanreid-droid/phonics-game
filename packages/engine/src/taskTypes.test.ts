@@ -120,20 +120,23 @@ describe('provingTaskTypeCount', () => {
   it('counts a skill\'s own type plus every type that grants it secondary credit', () => {
     // SOUND_ID: sound-hunt directly, plus picture-match and word-builder through
     // secondary credit. The other three skills get no composite credit.
-    expect(provingTaskTypeCount('SOUND_ID')).toBe(3);
-    expect(provingTaskTypeCount('LETTER_SOUND')).toBe(1);
-    expect(provingTaskTypeCount('BLEND_READ')).toBe(1);
-    expect(provingTaskTypeCount('SEGMENT_SPELL')).toBe(1);
+    expect(provingTaskTypeCount('SOUND_ID', 's')).toBe(3);
+    expect(provingTaskTypeCount('LETTER_SOUND', 's')).toBe(1);
+    expect(provingTaskTypeCount('BLEND_READ', 'mat')).toBe(1);
+    expect(provingTaskTypeCount('SEGMENT_SPELL', 'mat')).toBe(1);
   });
 
-  it('is zero for a skill nothing can prove', () => {
-    expect(provingTaskTypeCount('TRICKY_READ')).toBe(0);
+  it('is at least 1 even for a skill nothing can prove, so nothing is unmasterable', () => {
+    // Floored, not zero: with no floor, `Math.min(masteryTaskTypes, 0)` would make
+    // the task-type condition `seen >= 0`, true of any record whatever.
+    expect(provingTaskTypeCount('TRICKY_READ', 'the')).toBe(1);
+    expect(provingTaskTypeCount('SENTENCE_READ', 'sat')).toBe(1);
   });
 
   it('rises on its own when a second mini-game is added for a skill', () => {
     const pool = [...TASK_TYPES, type({ id: 'singer-two', skill: 'LETTER_SOUND', difficulty: 6 })];
-    expect(provingTaskTypeCount('LETTER_SOUND', pool)).toBe(2);
-    expect(provingTaskTypeCount('LETTER_SOUND', TASK_TYPES)).toBe(1);
+    expect(provingTaskTypeCount('LETTER_SOUND', 's', pool)).toBe(2);
+    expect(provingTaskTypeCount('LETTER_SOUND', 's', TASK_TYPES)).toBe(1);
   });
 
   it('counts secondary-credit types only for the skill that receives the credit', () => {
@@ -142,14 +145,15 @@ describe('provingTaskTypeCount', () => {
       type({ id: 'composite', skill: 'BLEND_READ', secondaryTargets: 'graphemes' }),
       type({ id: 'plain', skill: 'BLEND_READ', secondaryTargets: 'none' }),
     ];
-    expect(provingTaskTypeCount('SOUND_ID', pool)).toBe(2);
-    expect(provingTaskTypeCount('BLEND_READ', pool)).toBe(2);
-    expect(provingTaskTypeCount('LETTER_SOUND', pool)).toBe(0);
+    expect(provingTaskTypeCount('SOUND_ID', 's', pool)).toBe(2);
+    expect(provingTaskTypeCount('BLEND_READ', 'mat', pool)).toBe(2);
+    // Nothing in the pool serves LETTER_SOUND: floored to 1, not 0.
+    expect(provingTaskTypeCount('LETTER_SOUND', 's', pool)).toBe(1);
   });
 
   it('does not count a SOUND_ID type twice when it also grants secondary credit', () => {
     const pool = [type({ id: 'both', skill: 'SOUND_ID', secondaryTargets: 'graphemes' })];
-    expect(provingTaskTypeCount('SOUND_ID', pool)).toBe(1);
+    expect(provingTaskTypeCount('SOUND_ID', 's', pool)).toBe(1);
   });
 
   it('agrees with the evidence taskOutcome actually emits, so the two cannot drift apart', () => {
@@ -166,7 +170,71 @@ describe('provingTaskTypeCount', () => {
           if (a.skill === skill) emitted.add(a.taskTypeId);
         }
       }
-      expect(provingTaskTypeCount(skill), skill).toBe(emitted.size);
+      expect(provingTaskTypeCount(skill, 'pat'), skill).toBe(emitted.size);
     }
+  });
+});
+
+describe('provingTaskTypeCount, per target', () => {
+  const type = (over: Partial<TaskTypeMeta> & { id: string }): TaskTypeMeta => ({
+    skill: 'LETTER_SOUND', difficulty: 1, minChoices: 2, maxChoices: 3, secondaryTargets: 'none', ...over,
+  });
+  // Stands in for Plan 3's picture-start: provable for `m` but not for `a`.
+  const onlyForM = type({ id: 'only-for-m', canServeTarget: (target) => target === 'm' });
+
+  it('counts the task types that could actually be scheduled for this target', () => {
+    // SOUND_ID is provable directly by sound-hunt and indirectly by the two
+    // word games' secondary credit.
+    expect(provingTaskTypeCount('SOUND_ID', 's')).toBeGreaterThanOrEqual(2);
+  });
+
+  it('never exceeds what is schedulable, so mastery can never deadlock', () => {
+    for (const skill of ['SOUND_ID', 'LETTER_SOUND', 'BLEND_READ', 'SEGMENT_SPELL'] as const) {
+      for (const target of ['s', 'a', 't', 'p', 'i', 'm', 'f', 'mat', 'at']) {
+        expect(provingTaskTypeCount(skill, target), `${skill}/${target}`).toBeGreaterThanOrEqual(1);
+        // Each shipped type serves any target of its skill, so the count is
+        // exactly what the skill-wide answer was before this change.
+        expect(provingTaskTypeCount(skill, target), `${skill}/${target}`).toBe(
+          provingTaskTypeCount(skill, 's'),
+        );
+      }
+    }
+  });
+
+  it('is at least 1 even for a target nothing can prove, so nothing is unmasterable', () => {
+    expect(provingTaskTypeCount('SENTENCE_READ', 'sat')).toBeGreaterThanOrEqual(1);
+  });
+
+  it('gives a different answer for different targets of the same skill', () => {
+    const pool = [...TASK_TYPES, onlyForM];
+    expect(provingTaskTypeCount('LETTER_SOUND', 'm', pool)).toBe(2);
+    expect(provingTaskTypeCount('LETTER_SOUND', 'a', pool)).toBe(1);
+  });
+
+  it('asks the type about the target it was given, not some other', () => {
+    const asked: string[] = [];
+    const spy = type({ id: 'spy', canServeTarget: (target) => { asked.push(target); return true; } });
+    provingTaskTypeCount('LETTER_SOUND', 'f', [spy]);
+    expect(asked).toEqual(['f']);
+  });
+
+  it('floors at 1 when the only type of the skill cannot serve the target', () => {
+    const pool = [onlyForM];
+    expect(provingTaskTypeCount('LETTER_SOUND', 'a', pool)).toBe(1);
+  });
+
+  it('does not ask whether a type of another skill can serve the target', () => {
+    // A BLEND_READ type's `canServeTarget` is about WORD targets. It says nothing
+    // about whether `s` can be proved, so it must not be consulted for LETTER_SOUND.
+    const wordOnly = type({ id: 'word-only', skill: 'BLEND_READ', canServeTarget: () => false });
+    const plain = type({ id: 'plain' });
+    expect(provingTaskTypeCount('LETTER_SOUND', 's', [wordOnly, plain])).toBe(1);
+  });
+
+  it('counts a type with no constraint as serving every target', () => {
+    expect(provingTaskTypeCount('LETTER_SOUND', 'anything', [type({ id: 'free' })])).toBe(1);
+    expect(
+      provingTaskTypeCount('LETTER_SOUND', 'anything', [type({ id: 'free' }), type({ id: 'free-2' })]),
+    ).toBe(2);
   });
 });

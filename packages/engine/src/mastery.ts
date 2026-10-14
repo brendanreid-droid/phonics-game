@@ -191,10 +191,12 @@ export function applyAttempt(
  *
  * The two conditions people try to remove are the two that matter.
  * `masteryTaskTypes` stops a child "mastering" a sound by memorising the shape
- * of one mini-game. It is capped by `provingTaskTypeCount(skill)`: a skill that
- * only one mini-game can prove could otherwise never reach two types and could
- * never be mastered, which made Level 1 impossible to finish. Where several
- * mini-games can prove a skill the full requirement still applies.
+ * of one mini-game. It is capped by `provingTaskTypeCount(skill, targetId)`: a
+ * target that only one mini-game can prove could otherwise never reach two
+ * types and could never be mastered, which made Level 1 impossible to finish.
+ * The cap is per target, not per skill, because one skill can be provable two
+ * ways for one sound and one way for another. Where several mini-games can
+ * prove a target the full requirement still applies.
  * `masterySessions` requires retention across a gap rather than same-sitting
  * recall; only sessions containing unscaffolded correct
  * evidence count (see `MasteryRecord.sessionsProven`).
@@ -218,7 +220,7 @@ export function isMastered(record: MasteryRecord, now: number, config: EngineCon
     record.primaryCorrectCount >= 1 &&
     record.consecutiveCorrect >= 1 &&
     record.taskTypesSeen.length >=
-      Math.min(config.masteryTaskTypes, provingTaskTypeCount(record.skill)) &&
+      Math.min(config.masteryTaskTypes, provingTaskTypeCount(record.skill, record.targetId)) &&
     record.sessionsProven >= config.masterySessions
   );
 }

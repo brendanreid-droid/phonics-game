@@ -1,4 +1,4 @@
-import type { Skill } from '@soundlings/curriculum';
+import type { Skill, TargetId } from '@soundlings/curriculum';
 
 export interface TaskTypeMeta {
   id: string;
@@ -13,6 +13,15 @@ export interface TaskTypeMeta {
    * the two-task-type mastery bar for a sound without four separate sound games.
    */
   secondaryTargets: 'graphemes' | 'none';
+  /**
+   * Whether this type can be scheduled for the given PRIMARY target of its own
+   * skill. Absent means "any target of its skill", which is true of every
+   * shipped type today. A mini-game that only works for some targets (Plan 3's
+   * Picture Start needs a picturable word beginning with the sound) declares
+   * that here, so `provingTaskTypeCount` and the session builder agree on what
+   * is schedulable. It says nothing about secondary credit.
+   */
+  canServeTarget?: (targetId: TargetId) => boolean;
 }
 
 /**
@@ -82,20 +91,37 @@ export function easiestTaskTypeForSkill(
 const SECONDARY_CREDIT_SKILL: Skill = 'SOUND_ID';
 
 /**
- * How many distinct task types can contribute evidence for this skill: its own
- * direct types, plus (for the skill that receives it) every type that grants
+ * How many distinct task types can contribute evidence for this particular
+ * sound or word: the types of its own skill that could actually be scheduled
+ * for it, plus (for the skill that receives it) every type that grants
  * secondary credit. Derived from the pool, so adding a mini-game raises it
  * without anyone remembering to.
  *
+ * Per target rather than per skill because one skill can be provable two ways
+ * for one sound and one way for another (see `TaskTypeMeta.canServeTarget`).
+ *
  * `isMastered` caps its task-type condition by this number. Without the cap a
- * skill that only one mini-game can prove could never reach two task types,
+ * target that only one mini-game can prove could never reach two task types,
  * and could never be mastered.
+ *
+ * Never less than 1. A target nothing can prove must still be masterable on the
+ * other five conditions, so the cap is a floor of one task type, never zero:
+ * at zero, `Math.min(masteryTaskTypes, count)` would turn the task-type
+ * condition into `seen >= 0`, which any record satisfies, and the guarantee
+ * would quietly stop meaning anything.
  */
-export function provingTaskTypeCount(skill: Skill, pool: readonly TaskTypeMeta[] = TASK_TYPES): number {
+export function provingTaskTypeCount(
+  skill: Skill,
+  targetId: TargetId,
+  pool: readonly TaskTypeMeta[] = TASK_TYPES,
+): number {
   const ids = new Set<string>();
   for (const type of pool) {
-    if (type.skill === skill) ids.add(type.id);
-    else if (skill === SECONDARY_CREDIT_SKILL && type.secondaryTargets === 'graphemes') ids.add(type.id);
+    if (type.skill === skill) {
+      if (type.canServeTarget === undefined || type.canServeTarget(targetId)) ids.add(type.id);
+    } else if (skill === SECONDARY_CREDIT_SKILL && type.secondaryTargets === 'graphemes') {
+      ids.add(type.id);
+    }
   }
-  return ids.size;
+  return Math.max(1, ids.size);
 }

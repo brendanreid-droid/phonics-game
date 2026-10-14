@@ -68,7 +68,8 @@ const ASSEMBLY_TASKS: ReadonlySet<string> = new Set(['word-builder']);
  */
 function groupIndexOf(targetId: string, level: number): number | null {
   const groups = getLevel(level).introductionGroups;
-  const ids = targetId in GRAPHEMES ? [targetId] : targetId in WORDS ? WORDS[targetId].graphemes : null;
+  const has = (table: object) => Object.prototype.hasOwnProperty.call(table, targetId);
+  const ids = has(GRAPHEMES) ? [targetId] : has(WORDS) ? WORDS[targetId].graphemes : null;
   if (ids === null) return null;
   const indexes = ids.map((id) => groups.findIndex((group) => group.includes(id)));
   return Math.max(...indexes);

@@ -342,9 +342,9 @@ describe('needsAHand', () => {
       expect(trialsFrom(log).map((t) => t.correct)).toEqual([false, true]);
     });
 
-    it('counts a word built correctly as strong evidence that the child is not guessing', () => {
-      // Word Builder cannot be passed by tapping at random, so a child who builds
-      // words is not stuck, even if they coin-flip the sound questions.
+    it('does not let word building stand in for taps: a child who coin-flips the taps is still raised', () => {
+      // The engine's own near-chance children pass Word Builder as often as they
+      // pass anything, so counting a build as "not guessing" would hide them.
       const sounds = sittings(3, 14, coinFlip, 's');
       const builds = sittings(3, 14, allRight, 's', { type: 'word-builder', skill: 'SEGMENT_SPELL', target: 'sat' });
       const interleaved = attempts([
@@ -352,11 +352,12 @@ describe('needsAHand', () => {
         ...sounds.slice(14, 28), ...builds.slice(14, 28),
         ...sounds.slice(28), ...builds.slice(28),
       ]);
-      expect(needsAHand(interleaved).raised).toBe(false);
+      expect(needsAHand(interleaved).raised).toBe(true);
     });
 
     it('does not count a word that was built wrong as a sign of guessing', () => {
       // Failing to assemble a word says the word is hard, not that taps are random.
+      // (Word building does not count either way, so this is the same as no builds.)
       const sounds = sittings(3, 14, allRight, 's');
       const builds = sittings(3, 14, () => false, 's', { type: 'word-builder', skill: 'SEGMENT_SPELL', target: 'sat' });
       const interleaved = attempts([
@@ -476,8 +477,9 @@ describe('needsAHand', () => {
       expect(trialsFrom(log)).toHaveLength(1);
     });
 
-    it('is nothing for a word built from tiles, which luck cannot give', () => {
-      expect(chances([{ session: 'q', correct: true, target: 'sat', type: 'word-builder', skill: 'SEGMENT_SPELL' }])).toEqual([0]);
+    it('is left out for a word built from tiles, which is not a tap among choices', () => {
+      expect(chances([{ session: 'q', correct: true, target: 'sat', type: 'word-builder', skill: 'SEGMENT_SPELL' }])).toEqual([]);
+      expect(chances([{ session: 'q', correct: false, target: 'sat', type: 'word-builder', skill: 'SEGMENT_SPELL' }])).toEqual([]);
     });
 
     it('skips a game it does not know', () => {

@@ -198,6 +198,26 @@ describe('practiceSuggestions', () => {
     }
   });
 
+  it('prefers words made of sounds the child has met, because a word they cannot read is not practice', () => {
+    // s, a and t have been met; p, i, m and f have not. `sat` is all met; `sit`
+    // and `sip` and `sap` each bring in a sound the child has never been taught.
+    const rows = rowsFrom({ s: 'wrong', a: 'wrong', t: 'wrong' });
+    const [first] = practiceSuggestions(input({ soundRows: rows }));
+    expect(first.about).toBe('s');
+    expect(first.words[0]).toBe('sat');
+  });
+
+  it('does not suggest a word with two sounds the child has not met when one with fewer exists', () => {
+    const rows = rowsFrom({ t: 'wrong', a: 'wrong' });
+    const [first] = practiceSuggestions(input({ soundRows: rows }));
+    expect(first.about).toBe('a');
+    expect(first.words).toContain('at');
+  });
+
+  it('still suggests something when the child has met only the one sound', () => {
+    expect(practiceSuggestions(input({ soundRows: strugglingWith('s') }))[0].words).toHaveLength(2);
+  });
+
   it('keeps names out even when they would be the easiest words on offer', () => {
     // With a and m secure, `sam` has nothing new in it and would rank first on
     // ease alone. Only the rule against names keeps it out.

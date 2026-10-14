@@ -42,10 +42,12 @@ const HOW_TO = 'say each word slowly and point to the letters as you go';
  *    to be readable cannot get in on its say-so.
  *  - Names are left out: a child can sound out `Sam`, but a lower-case "sam"
  *    read aloud in the car is not a word.
- *  - Best first: not containing the sound it was mistaken for (so the contrast
- *    is clean), then made of sounds the child already knows (so only one thing
- *    is new), then a word with a picture, then a three-sound word, then
- *    alphabetical so the answer never shuffles between visits.
+ *  - Best first: made of sounds the child has MET (a word they cannot yet read
+ *    is not practice), then not containing the sound it was mistaken for (so the
+ *    contrast is clean), then made of sounds they already know (so only one
+ *    thing is new), then a word with a picture, then a three-sound word, then
+ *    alphabetical so the answer never shuffles between visits. Met is ranked,
+ *    not required: a child who has met two sounds still gets a suggestion.
  */
 function wordsFor(
   about: string,
@@ -55,6 +57,8 @@ function wordsFor(
   taught: ReadonlySet<string>,
 ): string[] {
   const secure = new Set(rows.filter((r) => r.state === 'secure').map((r) => r.grapheme.id));
+  const met = new Set(rows.filter((r) => r.state !== 'not-started').map((r) => r.grapheme.id));
+  const unmetOthers = (w: Word) => w.graphemes.filter((g) => g !== about && !met.has(g)).length;
   const unknownOthers = (w: Word) => w.graphemes.filter((g) => g !== about && !secure.has(g)).length;
 
   return pool
@@ -66,6 +70,7 @@ function wordsFor(
     )
     .sort(
       (a, b) =>
+        unmetOthers(a) - unmetOthers(b) ||
         Number(avoid !== null && a.graphemes.includes(avoid)) - Number(avoid !== null && b.graphemes.includes(avoid)) ||
         unknownOthers(a) - unknownOthers(b) ||
         Number(b.picture !== undefined) - Number(a.picture !== undefined) ||

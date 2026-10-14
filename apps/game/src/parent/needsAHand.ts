@@ -57,7 +57,7 @@ const MIN_TRIALS_TOTAL = 30;
  */
 const Z_LIMIT = 1.5;
 
-/** A tap among choices cannot be passed by luck once it is a word to be assembled. */
+/** Games that assemble something from tiles rather than tap one of several choices. */
 const ASSEMBLY_TASKS: ReadonlySet<string> = new Set(['word-builder']);
 
 // --- how many choices the child saw -----------------------------------------
@@ -145,7 +145,7 @@ export function choiceCountsSeen(attempts: readonly Attempt[], level = 1): Array
 export interface Trial {
   sessionId: string;
   correct: boolean;
-  /** The probability of being right by luck. 0 for an answer that luck cannot give. */
+  /** The probability of being right by luck: one over the choices, at least one half if hinted. */
   chance: number;
 }
 
@@ -157,16 +157,19 @@ export interface Trial {
  *  - Answers where the child was shown the answer: they prove nothing either way.
  *  - The credit a word task gives its letters: not questions the child was asked.
  *  - A game this build does not know.
+ *  - Word Builder, which assembles a word from tiles and is not a tap among
+ *    choices. A word is not something luck builds, so a success there would say
+ *    "not guessing" loudly, but a child who cannot yet do the taps cannot do it
+ *    either, and the engine's own near-chance children pass it as often as they
+ *    pass anything. Counting it would hide exactly the child this is for. Left
+ *    out, the signal rests on the taps alone.
  *  - The right tap that follows a wrong one on the same sound. The wrong tap
  *    narrows the choices and the child then taps the one that is left; logged
  *    as a second answer, a child guessing between two would read as 75% right
  *    and the signal would miss exactly the child it is for.
  *
  * A right answer after a hint narrowed the choices before any tap is real but
- * partly a coin flip, so its chance is at least one half. A word built from
- * tiles has a chance of 0: it cannot be got right by tapping at random, so a
- * child who builds words is plainly not guessing, and one who cannot builds
- * nothing to say about their taps.
+ * partly a coin flip, so its chance is at least one half.
  */
 export function trialsFrom(attempts: readonly Attempt[], level = 1): Trial[] {
   const choices = choiceCountsSeen(attempts, level);
@@ -188,13 +191,13 @@ export function trialsFrom(attempts: readonly Attempt[], level = 1): Trial[] {
 
     if (attempt.scaffolded || retry) return;
     const count = choices[index];
-    // Word Builder (null here, being a primary answer of a known game) cannot be luck.
-    const base = count === null ? 0 : 1 / count;
+    if (count === null) return; // Word Builder: see above.
+    const base = 1 / count;
     const aided = attempt.correct && attempt.weight < 1;
     trials.push({
       sessionId: attempt.sessionId,
       correct: attempt.correct,
-      chance: aided && base > 0 ? Math.max(base, 0.5) : base,
+      chance: aided ? Math.max(base, 0.5) : base,
     });
   });
 
@@ -218,9 +221,8 @@ function score(trials: readonly Trial[]): Score {
     if (trial.correct) right += 1;
     expected += trial.chance;
     variance += trial.chance * (1 - trial.chance);
-    if (trial.chance > 0) taps += 1;
+    taps += 1;
   }
-  // No tap among choices at all means nothing to judge; callers screen that out.
   return { z: variance === 0 ? 0 : (right - expected) / Math.sqrt(variance), taps };
 }
 
@@ -233,7 +235,7 @@ function realSittings(trials: readonly Trial[]): Trial[][] {
     bySitting.set(trial.sessionId, [...(bySitting.get(trial.sessionId) ?? []), trial]);
   }
   return [...bySitting.values()].filter(
-    (sitting) => sitting.filter((t) => t.chance > 0).length >= MIN_TRIALS_PER_SITTING,
+    (sitting) => sitting.length >= MIN_TRIALS_PER_SITTING,
   );
 }
 

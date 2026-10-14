@@ -54,8 +54,25 @@ describe('attemptsForTask', () => {
       scaffolded: false,
       latencyMs: 1500,
       weight: 1,
+      choiceCount: 4,
       at: 5 * HOUR,
     });
+  });
+
+  it('records how many choices were on the screen, on the primary attempt', () => {
+    const [primary] = attemptsForTask(task({ choices: ['s', 'a', 't'] }), outcome(), DEFAULT_CONFIG);
+    expect(primary.choiceCount).toBe(3);
+  });
+
+  it('records it for a wrong answer too, since that is where it matters', () => {
+    const [primary] = attemptsForTask(task({ choices: ['s', 'a'] }), outcome({ correct: false, chosen: 'a' }), DEFAULT_CONFIG);
+    expect(primary.choiceCount).toBe(2);
+  });
+
+  it('does not put it on the credit a word task gives its letters, which had no choices', () => {
+    const attempts = attemptsForTask(task(), outcome(), DEFAULT_CONFIG);
+    expect(attempts.length).toBeGreaterThan(1);
+    for (const secondary of attempts.slice(1)) expect(secondary).not.toHaveProperty('choiceCount');
   });
 
   it('emits one SOUND_ID attempt per secondary target, weighted from the config', () => {

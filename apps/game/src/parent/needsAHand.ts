@@ -94,18 +94,21 @@ function isPrimary(attempt: Attempt): boolean {
  * not a number of choices (the credit a word task gives its letters, a game this
  * build does not know, or Word Builder, which assembles a word from tiles).
  *
- * The attempt log does not record it, so it is reconstructed the way the
- * session builder chose it: a quest shows `met - 1` choices, kept between the
- * game's own minimum and maximum (`makeTask` in the engine's sessionBuilder),
- * where `met` is how many sounds the child has been introduced to. A child's
- * introduction is read from the furthest group of sounds they have been asked
- * about by the end of that sitting, which is exact for the builder's rule once a
- * sitting has touched the newest group, as a quest on it always does.
+ * Read from `Attempt.choiceCount`, which the quest runner now writes down. The
+ * rest of this function is the fallback for attempts logged before that field
+ * existed, whose history must keep working: there the count is reconstructed the
+ * way the session builder chose it. A quest shows `met - 1` choices, kept
+ * between the game's own minimum and maximum (`makeTask` in the engine's
+ * sessionBuilder), where `met` is how many sounds the child has been introduced
+ * to. Introduction is read from the furthest group of sounds the child has been
+ * asked about by the end of that sitting, which is exact for the builder's rule
+ * once a sitting has touched the newest group, as a quest on it always does.
  *
- * Exported for the test that checks it against the sessions the engine builds.
- * It can only be wrong in the direction of too few choices, which makes chance
- * look higher than it was and so makes the signal slightly easier to raise,
- * never harder: a missed guesser costs more than a flag that clears itself.
+ * The reconstruction is checked against the sessions the engine really builds
+ * (needsAHand.test.ts), with the recorded field stripped. It can only be wrong
+ * in the direction of too few choices, which makes chance look higher than it
+ * was and so makes the signal slightly easier to raise, never harder: a missed
+ * guesser costs more than a flag that clears itself.
  */
 export function choiceCountsSeen(attempts: readonly Attempt[], level = 1): Array<number | null> {
   // The furthest group reached by the end of each sitting, cumulatively.
@@ -129,6 +132,9 @@ export function choiceCountsSeen(attempts: readonly Attempt[], level = 1): Array
   return attempts.map((attempt) => {
     const type = typeOf(attempt.taskTypeId);
     if (type === undefined || !isPrimary(attempt) || ASSEMBLY_TASKS.has(type.id)) return null;
+    // A recorded count wins. Anything that is not a whole number of at least two
+    // cannot be a count of choices and is treated as not recorded.
+    if (Number.isInteger(attempt.choiceCount) && attempt.choiceCount! >= 2) return attempt.choiceCount!;
     const met = metCount(level, reached.get(attempt.sessionId)!);
     return Math.min(type.maxChoices, Math.max(type.minChoices, met - 1));
   });

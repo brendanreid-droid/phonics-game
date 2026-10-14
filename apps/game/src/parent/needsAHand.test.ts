@@ -537,6 +537,52 @@ describe('needsAHand', () => {
   });
 });
 
+describe('the recorded choice count', () => {
+  const log = (rest: Partial<Attempt>): Attempt[] => [
+    { sessionId: 'q', targetId: 's', skill: 'SOUND_ID', taskTypeId: 'sound-hunt', correct: true, scaffolded: false, latencyMs: 1, weight: 1, at: 1, ...rest },
+  ];
+
+  it('is used when it is there, instead of working it out', () => {
+    // Only s has been met, so the reconstruction would say two. The log says four.
+    expect(choiceCountsSeen(log({ choiceCount: 4 }))).toEqual([4]);
+    expect(trialsFrom(log({ choiceCount: 4 }))[0].chance).toBe(0.25);
+  });
+
+  it('is what the verdict is made from: half right on four recorded choices is not guessing', () => {
+    const rows = Array.from({ length: 3 }, (_, n) =>
+      Array.from({ length: 14 }, (_, i): Attempt => ({
+        sessionId: `r${n}`, targetId: 's', skill: 'SOUND_ID', taskTypeId: 'sound-hunt', correct: i % 2 === 0,
+        scaffolded: false, latencyMs: 1, weight: 1, at: n * 100 + i, choiceCount: 4,
+      })),
+    ).flat();
+    expect(needsAHand(rows).raised).toBe(false);
+    expect(needsAHand(rows.map(({ choiceCount: _c, ...rest }) => rest)).raised).toBe(true);
+  });
+
+  it('falls back to reconstruction for an attempt logged before the field existed', () => {
+    expect(choiceCountsSeen(log({}))).toEqual([2]);
+  });
+
+  it('ignores a value that cannot be a number of choices', () => {
+    for (const bad of [1, 0, -3, 2.5, Number.NaN, Number.POSITIVE_INFINITY, '4' as unknown as number]) {
+      expect(choiceCountsSeen(log({ choiceCount: bad })), String(bad)).toEqual([2]);
+    }
+  });
+
+  it('is not used for Word Builder, which has tiles and not choices', () => {
+    expect(choiceCountsSeen(log({ taskTypeId: 'word-builder', skill: 'SEGMENT_SPELL', targetId: 'sat', choiceCount: 5 }))).toEqual([null]);
+  });
+
+  it('is written by the engine for every kind of task, and read back unchanged', () => {
+    const plan = buildSession({ sessionId: 'rec', level: 1, mastery: masteredSounds(['s', 'a', 't', 'p', 'i'], 1e9), confusions: {}, now: 1e9 });
+    for (const task of plan) {
+      const [primary] = attemptsForTask(task, { sessionId: 'rec', correct: true, scaffolded: false, latencyMs: 1, at: 1e9 }, DEFAULT_CONFIG);
+      expect(primary.choiceCount, task.taskTypeId).toBe(task.choices.length);
+      if (task.taskTypeId !== 'word-builder') expect(choiceCountsSeen([primary])[0]).toBe(task.choices.length);
+    }
+  });
+});
+
 describe('choiceCountsSeen agrees with the sessions the engine really builds', () => {
   // The attempt log does not record how many choices were on the screen. They
   // are worked out from what the child had met, using the same rule as the
@@ -571,7 +617,9 @@ describe('choiceCountsSeen agrees with the sessions the engine really builds', (
     it(`for ${name}`, () => {
       const plan = buildSession({ sessionId: `check-${name}`, level: 1, mastery, confusions: {}, now: NOW });
       const { log, perTask } = logFor(plan);
-      const seen = choiceCountsSeen(log, 1);
+      // Strip the recorded count: this is the check on the reconstruction that
+      // attempts logged before the field existed rely on.
+      const seen = choiceCountsSeen(log.map(({ choiceCount: _recorded, ...rest }) => rest), 1);
       expect(seen).toHaveLength(log.length);
 
       let checked = 0;

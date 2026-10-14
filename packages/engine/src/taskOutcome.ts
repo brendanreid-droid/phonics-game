@@ -56,6 +56,7 @@ export function attemptsForTask(
     targetId: task.primaryTarget,
     skill: task.skill,
     weight: scale,
+    choiceCount: task.choices.length,
   };
   if (!outcome.correct && outcome.chosen !== undefined) primary.chosen = outcome.chosen;
 

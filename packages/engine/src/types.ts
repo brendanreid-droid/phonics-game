@@ -70,6 +70,18 @@ export interface Attempt {
   weight: number;
   /** What the child picked when wrong. Feeds the confusion map. */
   chosen?: TargetId;
+  /**
+   * How many choices were on the screen: `task.choices.length`. Recorded on the
+   * task's own (primary) attempt only, since the credit a word task gives its
+   * letters is not a question with choices. It is what the chance of a lucky
+   * answer is made from, so the parent area's near-chance signal reads it rather
+   * than rebuilding it. Optional because logs written before it existed do not
+   * have it, and a child's history must not break on an update: consumers fall
+   * back to reconstructing it (see apps/game/src/parent/needsAHand.ts).
+   *
+   * For Word Builder this counts tiles, not options to pick between.
+   */
+  choiceCount?: number;
   at: number;
 }
 

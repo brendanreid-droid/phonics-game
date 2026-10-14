@@ -48,6 +48,8 @@ const HOW_TO = 'say each word slowly and point to the letters as you go';
  *    thing is new), then a word with a picture, then a three-sound word, then
  *    alphabetical so the answer never shuffles between visits. Met is ranked,
  *    not required: a child who has met two sounds still gets a suggestion.
+ *  - Words already offered to the parent for an earlier suggestion rank after
+ *    ones that have not been, so the cards differ where they can.
  */
 function wordsFor(
   about: string,
@@ -55,6 +57,7 @@ function wordsFor(
   rows: readonly SoundRow[],
   pool: readonly Word[],
   taught: ReadonlySet<string>,
+  used: ReadonlySet<string>,
 ): string[] {
   const secure = new Set(rows.filter((r) => r.state === 'secure').map((r) => r.grapheme.id));
   const met = new Set(rows.filter((r) => r.state !== 'not-started').map((r) => r.grapheme.id));
@@ -71,6 +74,7 @@ function wordsFor(
     .sort(
       (a, b) =>
         unmetOthers(a) - unmetOthers(b) ||
+        Number(used.has(a.id)) - Number(used.has(b.id)) ||
         Number(avoid !== null && a.graphemes.includes(avoid)) - Number(avoid !== null && b.graphemes.includes(avoid)) ||
         unknownOthers(a) - unknownOthers(b) ||
         Number(b.picture !== undefined) - Number(a.picture !== undefined) ||
@@ -96,6 +100,12 @@ const STATE_PRIORITY: Partial<Record<SoundState, number>> = { learning: 0, 'need
  *  3. A sound that only needs a revisit.
  * A sound the child has not met is not here: that is the next lesson, not
  * practice. A sound appears once, however many ways it qualifies.
+ *
+ * No two suggestions carry the same words. When a later reason would offer words
+ * already on a card it takes others if there are any, and is left out if there
+ * are not: a child who has met three sounds has only a handful of readable
+ * words, and two different cards beat three of which two are the same. So the
+ * list can be shorter than three.
  */
 export function practiceSuggestions(input: PracticeInput): PracticeSuggestion[] {
   const { soundRows, confusions, level } = input;
@@ -103,13 +113,22 @@ export function practiceSuggestions(input: PracticeInput): PracticeSuggestion[] 
   const taught = new Set(graphemesForLevel(level).map((g) => g.id));
   const out: PracticeSuggestion[] = [];
   const done = new Set<string>();
+  const usedWords = new Set<string>();
+  const shownPairs = new Set<string>();
+  /** True when these exact words are already on a card: two identical cards are worse than one. */
+  const repeats = (words: readonly string[]) => shownPairs.has([...words].sort().join('|'));
+  const remember = (words: readonly string[]) => {
+    shownPairs.add([...words].sort().join('|'));
+    for (const w of words) usedWords.add(w);
+  };
 
   for (const c of confusions) {
     if (out.length >= MAX_SUGGESTIONS) break;
     if (done.has(c.target)) continue;
-    const words = wordsFor(c.target, c.mistakenFor, soundRows, pool, taught);
-    if (words.length === 0) continue;
+    const words = wordsFor(c.target, c.mistakenFor, soundRows, pool, taught, usedWords);
+    if (words.length === 0 || repeats(words)) continue;
     done.add(c.target);
+    remember(words);
     out.push({
       about: c.target,
       kind: 'confusion',
@@ -127,9 +146,10 @@ export function practiceSuggestions(input: PracticeInput): PracticeSuggestion[] 
     if (out.length >= MAX_SUGGESTIONS) break;
     const about = row.grapheme.id;
     if (done.has(about)) continue;
-    const words = wordsFor(about, null, soundRows, pool, taught);
-    if (words.length === 0) continue;
+    const words = wordsFor(about, null, soundRows, pool, taught, usedWords);
+    if (words.length === 0 || repeats(words)) continue;
     done.add(about);
+    remember(words);
     const sound = `${about}, the ${row.grapheme.mnemonic} sound`;
     out.push({
       about,

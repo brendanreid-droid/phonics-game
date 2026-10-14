@@ -341,6 +341,88 @@ describe('practiceSuggestions', () => {
     });
   });
 
+  describe('no two cards carry the same words', () => {
+    const pairKey = (words: readonly string[]) => [...words].sort().join('|');
+    const distinct = (got: Array<{ words: string[] }>) => new Set(got.map((s) => pairKey(s.words))).size === got.length;
+
+    it('for a child who has met only s, a and t, where the pool of readable words is smallest', () => {
+      // The real early-game case: a mix-up and two sounds still being learned
+      // all want the same two or three words.
+      const rows = rowsFrom({ s: 'wrong', a: 'wrong', t: 'wrong' });
+      const got = practiceSuggestions(input({ soundRows: rows, confusions: [confusion('t', 'a', 4), confusion('s', 'a', 3)] }));
+      expect(got.length).toBeGreaterThan(0);
+      expect(distinct(got)).toBe(true);
+    });
+
+    it('for the same child with nothing mixed up', () => {
+      const got = practiceSuggestions(input({ soundRows: rowsFrom({ s: 'wrong', a: 'wrong', t: 'wrong' }) }));
+      expect(distinct(got)).toBe(true);
+    });
+
+    it('for every combination of sounds met and being learned, with and without a mix-up', () => {
+      const ids = graphemesForLevel(1).map((g) => g.id);
+      for (let mask = 1; mask < 1 << ids.length; mask += 1) {
+        const spec: Record<string, 'wrong' | 'mastered'> = {};
+        ids.forEach((id, i) => {
+          spec[id] = mask & (1 << i) ? 'wrong' : 'mastered';
+        });
+        for (const confusions of [[], [confusion(ids[mask % ids.length], ids[(mask + 2) % ids.length])]]) {
+          const got = practiceSuggestions(input({ soundRows: rowsFrom(spec), confusions }));
+          expect(distinct(got), `${mask}: ${JSON.stringify(got.map((s) => s.words))}`).toBe(true);
+        }
+      }
+    });
+
+    it('takes different words for a later card when there are equally readable ones, rather than dropping it', () => {
+      const pool: Word[] = ['sat', 'sit', 'tat', 'tit'].map((id) => ({
+        id, text: id, graphemes: id.split(''), pattern: 'cvc' as const, audio: `wd.${id}`, decodableFromLevel: 1,
+      }));
+      const rows = rowsFrom({ s: 'wrong', t: 'wrong', a: 'wrong', i: 'wrong' });
+      const got = practiceSuggestions(input({ soundRows: rows, words: pool }));
+      expect(got.map((s) => s.about)).toEqual(['s', 'a', 't']);
+      expect(distinct(got)).toBe(true);
+      // `a` takes the words `s` did not, instead of repeating them.
+      expect(got[1].words).not.toEqual(got[0].words);
+    });
+
+    it('gives the later card the unshown words when they are as readable', () => {
+      const pool: Word[] = ['sat', 'sit', 'tat', 'tit'].map((id) => ({
+        id, text: id, graphemes: id.split(''), pattern: 'cvc' as const, audio: `wd.${id}`, decodableFromLevel: 1,
+      }));
+      const rows = rowsFrom({ s: 'wrong', t: 'wrong', a: 'mastered', i: 'mastered' });
+      const got = practiceSuggestions(input({ soundRows: rows, words: pool }));
+      expect(got.map((s) => [s.about, s.words.slice().sort()])).toEqual([['s', ['sat', 'sit']], ['t', ['tat', 'tit']]]);
+    });
+
+    it('prefers words not yet shown over ones that were, when they are equally readable', () => {
+      // Four words holding both s and t, all made of sounds the child knows. Alphabetical
+      // order alone would offer the same two to both cards.
+      const pool: Word[] = ['a', 'i', 'm', 'p'].map((v) => ({
+        id: `st${v}`, text: `st${v}`, graphemes: ['s', 't', v], pattern: 'cvc' as const, audio: `wd.st${v}`, decodableFromLevel: 1,
+      }));
+      const rows = rowsFrom({ s: 'wrong', t: 'wrong', a: 'mastered', i: 'mastered', m: 'mastered', p: 'mastered' });
+      const got = practiceSuggestions(input({ soundRows: rows, words: pool }));
+      expect(got.map((c) => c.words.slice().sort())).toEqual([['sta', 'sti'], ['stm', 'stp']]);
+    });
+
+    it('does not repeat words between two mix-ups either', () => {
+      const pool: Word[] = ['sat', 'sit'].map((id) => ({
+        id, text: id, graphemes: id.split(''), pattern: 'cvc' as const, audio: `wd.${id}`, decodableFromLevel: 1,
+      }));
+      const got = practiceSuggestions(input({ confusions: [confusion('s', 'f', 5), confusion('t', 'p', 4)], words: pool }));
+      expect(got.map((s) => s.about)).toEqual(['s']);
+    });
+
+    it('leaves a later card out when the words it would offer are ones already shown', () => {
+      const pool: Word[] = ['sat', 'sit'].map((id) => ({
+        id, text: id, graphemes: id.split(''), pattern: 'cvc' as const, audio: `wd.${id}`, decodableFromLevel: 1,
+      }));
+      const rows = rowsFrom({ s: 'wrong', t: 'wrong' });
+      const got = practiceSuggestions(input({ soundRows: rows, words: pool }));
+      expect(got.map((s) => s.about)).toEqual(['s']);
+    });
+  });
+
   it('holds its promises for every combination of sounds the child could be learning', () => {
     const ids = graphemesForLevel(1).map((g) => g.id);
     const level1 = new Set(wordsForLevel(1).map((w) => w.id));

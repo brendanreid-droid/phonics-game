@@ -156,7 +156,7 @@ export default function Parent() {
                   <Text style={styles.body}>Nothing in particular to practise right now. More quests together will do.</Text>
                 ) : (
                   summary.practice.map((p) => (
-                    <View key={p.about} style={styles.tryCard}>
+                    <View key={`${p.kind}:${p.about}`} style={styles.tryCard}>
                       <Text accessibilityLabel={`Words to try: ${p.words.join(' and ')}`} style={styles.tryWords}>
                         {p.words.join('   ')}
                       </Text>

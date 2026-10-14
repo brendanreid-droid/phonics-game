@@ -479,13 +479,17 @@ Boot
 
 ### 7.1 Parent area
 
-PIN-gated (four digits, set on first run). Contains:
-- Per-sound mastery heatmap — which sounds are solid, shaky, not started
-- Confusion pairs detected — "mixes up `m` and `n`"
-- Time played, by day
-- "Practise these in the car" — three specific words, no app required
+**Built in Plan 4.** Reached from a small "Grown-ups" link on the island and gated by a four-digit PIN, chosen on first use. The PIN is stored as a salted hash and is a gate for a child, not a security boundary: there are 10,000 possible PINs and anyone holding the device can clear its storage. A "forgotten it" path clears the PIN and says so before confirming, because locking a parent out of their own child's data would be worse than the weak gate. The same PIN guards **deleting** a profile; adding one is ungated. This replaced the two-second hold that Plan 2 used, which a keyboard or screen reader could not operate.
 
-This is a deliberate differentiator. Phonics Hero reports level progress; a parent wants to know *which sound their child can't hear*.
+It answers three questions, in the order a worried parent would stop reading: is a person needed, which sounds does my child know, what are they mixing up, and what do I do about it. It contains no charts and no percentages, because a parent reads "68% correct" as a school mark and says so to the child.
+
+1. **"Needs a hand"**, if raised (§11.1), first and written as help.
+2. **The sounds.** One row per sound with **hearing** (`SOUND_ID`) and **seeing** (`LETTER_SOUND`) shown separately, each as a colour and a word: *Knows it*, *Still learning*, *Worth a quick revisit* (a sound that was answered and has since faded; not "forgotten", which a parent would repeat to the child) and *Not met yet*. This is the **live** calculation, as on the island: "what can they do right now?". The level-select badge reads the latch ("did they finish it?"). They can disagree after a long gap, and neither is to be changed to match the other.
+3. **What they are mixing up.** Pairs of sounds, merged when mixed up both ways. A pair is reported only when seen at least twice (once is a slip), and only from the child's **last three real sittings**, read from the attempt log (`chosen` on wrong answers). It is deliberately *not* read from the running `ConfusionMap`: that counts for a lifetime, which is right for the distractor picker ("a sound ever confused is worth contrasting again") and wrong for a parent, who would be told about a first-month mix-up for ever. The two answer different questions and must not be unified.
+4. **Try this.** At most three suggestions, each naming two **real words** a parent can say in the car: containing the sound, decodable at the level, ranked towards sounds the child has met, with names excluded. Mix-ups first, then sounds still being learned, then sounds that only need a revisit. A sound not yet met is the next lesson, not practice.
+5. **Plain counts**, last and small: quests played, days played, sounds known out of the level's total.
+
+All of it is derived by pure functions over the mastery map and attempt log (`apps/game/src/parent/`), assembled by `parentSummary`, so the screen holds no logic. Time is injected. This is a deliberate differentiator. Phonics Hero reports level progress; a parent wants to know *which sound their child can't hear*.
 
 ### 7.2 Save / resume
 
@@ -565,7 +569,7 @@ Cost traps to handle at contract time:
 | `levels` | seeded from `curriculum`; kept in DB only for reporting joins |
 | `mastery_records` | one row per (profile, target, skill) |
 | `sessions` | one per quest: plan, started_at, completed_at, stars, degraded flag |
-| `task_attempts` | **append-only** — correct, latency, scaffolded, chosen distractor |
+| `task_attempts` | **append-only** — correct, latency, scaffolded, chosen distractor, number of choices shown |
 | `creatures_unlocked` | profile, grapheme, unlocked_at |
 | `high_scores` | profile, level, best stars, best streak, fastest clean quest |
 
@@ -599,13 +603,22 @@ The simulated "struggling" profile answered correctly 55% of the time. On a two-
 
 So the struggling profile is redefined to **70%**: a child finding it genuinely hard but learning. That is the case the adaptive engine exists to serve, and it must complete, with materially more practice than a strong learner.
 
-A child at or near chance is a different case, and the correct product response is not a longer quest. It is to tell the grown-up. Plan 2 adds a "needs a hand" signal to the parent area, raised when a child's accuracy on current-focus material stays near chance across several sessions. That is a feature, not a failure mode: a five-year-old stuck at guessing needs a person sitting with them, and the most useful thing the app can do is say so plainly instead of grinding them through another fourteen tasks.
+A child at or near chance is a different case, and the correct product response is not a longer quest. It is to tell the grown-up. **This is built (Plan 4, `apps/game/src/parent/needsAHand.ts`)** as a "needs a hand" signal at the top of the parent area. It is raised when, over the child's last three real sittings (six or more answers each, thirty or more in total), every sitting and the three together are no better than about 1.5 standard deviations above what **guessing among the choices the child actually saw** would give. That is a feature, not a failure mode: a five-year-old stuck at guessing needs a person sitting with them, and the most useful thing the app can do is say so plainly instead of grinding them through another fourteen tasks.
+
+How it is derived, and why:
+
+- **Chance comes from the choices on the screen, not a flat rate.** Two choices means 50%; four means 25%. A flat threshold flags a child doing fine on four-way questions and misses one guessing on two-way ones. The count is recorded on each attempt (`Attempt.choiceCount`, the task's `choices.length`, on the task's own attempt only); logs from before it existed fall back to a reconstruction of the session builder's rule (`met - 1`, clamped to the game's own range), which a test checks against real built sessions.
+- **It rests on taps among choices.** Skipped: answers where the answer was shown, the letter credit a word task gives, and Word Builder (assembling tiles is not a tap, and the engine's own near-chance profile passes it as often as anything, so counting it would hide exactly the child this is for). The right tap that follows a wrong one on the same sound is a retry, not a second answer: counted, a child guessing between two would read as 75% right and be missed. A right answer after a hint narrowed the choices counts at no less than one-half chance.
+- **A pattern, not a moment.** One bad afternoon must not raise it, because a flag that cries wolf teaches a parent to ignore it. One clearly good sitting in the window clears it, and it clears of its own accord as the child improves, because it is a pure function of the log over a sliding window.
+- **The wording** goes to a parent about their five-year-old and is fixed: it names no number and no verdict, says to sit together, and does no harm if repeated to the child.
+
+What it catches, simulated at fourteen answers a sitting: a child guessing on two or four choices is raised at some point in ten sittings about 99% of the time; one right 80% of the time on two choices about 1%; one right 70% of the time about 27% (a child that unsure on two choices is plausibly worth a visit, and the message is gentle). **It measures "at chance given the choices", which is stricter than the 55% profile above:** 55% is barely above chance on two choices but well above it on four, so that profile is flagged in roughly half of runs within ten quests. The threshold is a single constant if real children say it should move.
 
 Accordingly the harness asserts completion for fast, average and the redefined struggling profile, and asserts that a near-chance profile does not complete within a 40-quest cap (measured: 1 of 30 gets through with seven games; it was 3 of 30 with four).
 
 **But the gate is statistical, not a bright line, and an earlier draft of this section overclaimed.** Measured without a cap, 40 of 50 near-chance children eventually complete, at a mean of 72 quests. A child answering at 55% will pass any threshold built on counting correct answers, given enough attempts — and no such threshold can be made luck-proof, because every one of them is passable by trying often enough.
 
-So the honest position: the mastery gate makes passing-by-luck *slow and unlikely in any realistic number of sessions*, and that is all it does. The thing that actually protects a child performing at chance is the product telling their grown-up, which is therefore **required rather than a nice-to-have**. A near-chance child grinding through seventy quests is a failure of the product even though the gate technically held for the first forty.
+So the honest position: the mastery gate makes passing-by-luck *slow and unlikely in any realistic number of sessions*, and that is all it does. The thing that actually protects a child performing at chance is the product telling their grown-up, which is therefore **required rather than a nice-to-have**, and is now built. A near-chance child grinding through seventy quests is a failure of the product even though the gate technically held for the first forty.
 | Manual | iPad simulator, every review gate. |
 
 ---

@@ -1,7 +1,30 @@
 # Review gate: playable Level 1, with the shell around it
 
-**Built:** Plan 1 (tasks 1–29), Plan 2 (tasks 1–10) and Plan 3 (tasks 1–8).
-**Tests:** 1,345 passing across 59 files.
+**Built:** Plan 1 (tasks 1–29), Plan 2 (tasks 1–10), Plan 3 (tasks 1–8) and Plan 4 (the parent area).
+**Tests:** 1,611 passing across 67 files.
+
+## New in Plan 4: the grown-up's view
+
+Until now nobody, parent or developer, could see what the adaptive engine knew. There is now a parent area.
+
+**How to reach it.** Pick a profile, and on the island tap the small **Grown-ups** link at the bottom (beside Levels and Trophies, deliberately as plain as they are: a child can find it and lose interest). The first time, it asks you to **choose a four-digit PIN** and type it twice. After that it asks for the PIN. "Forgotten it?" clears the PIN and says, before you confirm, that anyone holding the device can do the same.
+
+**The PIN stops a child, not an adult.** It is stored as a salted hash only so that it is not sitting in storage as plain digits; there are only 10,000 four-digit PINs, and a grown-up with the device can clear its storage. It is a gate for a five-year-old and the screen says so. It replaces the two-second hold: **adding a profile no longer needs anything** (it destroys nothing), and **deleting one asks for the PIN**. A hold cannot be done from a keyboard or a screen reader and a PIN field can.
+
+**What it shows, in the order a worried parent would stop reading:**
+
+1. **"A grown-up beside them will help most"**, only if the "needs a hand" signal is raised. Written as help, never as a verdict; no numbers.
+2. **The sounds.** One row per sound, **hearing** and **seeing** apart (a child often has one without the other, and the practice that helps differs), each a colour and a word: *Knows it*, *Still learning*, *Worth a quick revisit*, *Not met yet*. A live reading of "what can they do right now", so a sound known last month and not since shows as worth a revisit, while the level-select badge, which is a latch, stays earned. The two can disagree, on purpose.
+3. **What they are mixing up.** Pairs the child has mixed up at least twice in their last three sittings. Read from the attempt log, not the lifetime confusion map, so an old mix-up does not follow them for ever.
+4. **Try this.** Up to three things, each naming two real words (`sit  sip`) that contain the sound and use sounds the child has met.
+5. **Plain counts**, small, last.
+
+No charts and no percentages anywhere, on purpose: "68% correct" reads as a school mark.
+
+**How "needs a hand" is derived.** Over the child's last three real sittings (six or more answers each, thirty or more in all): every one of them, and the three together, must be no better than about 1.5 standard deviations above what *guessing among the choices they actually saw* would give. Two choices means 50% is chance; four means 25%; a flat threshold is wrong in both directions. The choice count is now written onto each attempt (older logs fall back to a reconstruction). It rests on the taps alone: Word Builder is left out, because the engine's own near-chance children pass it as often as anything. One good sitting clears it, and it clears of its own accord when the child improves.
+
+**What that does and does not catch.** Simulated, at 14 answers a sitting, the chance it is raised at some point in the first ten sittings is about 99% for a child guessing on two or four choices, about 1% for a child right 80% of the time on two choices, and about 27% for one right 70% of the time. **It measures "at chance given the choices", which is stricter than the 55% "near-chance" profile in §11.1.** 55% is chance on two choices but well above it on four, so that profile is flagged in roughly half of runs within ten quests, not nearly always. The threshold is one constant (`Z_LIMIT`) if real children say it should move.
+
 
 ## New in Plan 3: a second way to prove each skill
 
@@ -28,7 +51,7 @@ The game now belongs to a child rather than to a hard-coded id.
 - **Streaks** count local calendar days, not 24-hour periods: 7pm Monday then 8am Tuesday is two days running. A broken streak is never shown.
 - **Deleting a profile deletes that child's record** — mastery, attempts, confusions, sessions, scores, everything. The dialog promises it, so it has to be true.
 
-Creating and deleting a profile need a two-second hold; choosing one does not. The hold is beyond an idle five-year-old's patience and trivial for an adult who means it. The PIN arrives with the parent area in Plan 4; two different gates would be worse than one.
+Choosing a profile is never gated. (This section originally described a two-second hold for creating and deleting a profile; Plan 4 replaced it with a PIN for deleting, and nothing for adding. See above.)
 
 ---
 
@@ -56,7 +79,7 @@ Real touch, real speakers, real screen size. This is the one that counts for a c
 
 ## What to try
 
-1. **Make a profile.** The add sheet opens by itself the first time. Note that "Hold to add" genuinely needs holding — a tap does nothing, deliberately.
+1. **Make a profile.** The add sheet opens by itself the first time. Type a name, pick a face, tap Add.
 2. **Tap your face** to land on the island.
 3. **Play a full quest.** Fourteen tasks, about five minutes.
 4. **Play far enough to meet all seven mini-games.** This is the most important new thing to try. Sound Hunt, Sound Singer and Picture Start arrive on day one. **Picture Match, Word Pick, Word Builder and Missing Letter need words, so they arrive several quests in**, once a few sounds are known: until then a child is asked about sounds only. Picture Match in particular has been built and tested since Plan 1 and **nobody has ever seen it running**. Play on until all seven have come up, and judge each one by looking: are the pictures recognisable, do the three written words in Word Pick read at a glance, does the gap in Missing Letter read as a gap.
@@ -67,24 +90,24 @@ Real touch, real speakers, real screen size. This is the one that counts for a c
 
 ## What to listen for
 
-**This is the thing nobody has been able to check.** Neither I nor any agent on this project can hear audio, and audio is the game — every task is a sound.
+The placeholder voice **has been listened to by a person and judged usable for testing.** That is all it has been judged. It is machine-generated, and when a human voice replaces it, **check every phoneme individually**, not by sampling: two of them were wrong in earlier versions and were found by analysis rather than by ear, which is exactly the kind of fault a quick listen would miss. Audio is the game; every task is a sound.
 
 - `s` must say **"sss"**, not "ess". A letter *name* where a letter *sound* belongs is the single most common way phonics software gets it wrong, and it actively teaches a child something false.
 - `a` must be the short /a/ of **cat**, not the long "ah" of *father*. This one was wrong and was fixed by cutting the vowel out of the word "at"; it has been verified by formant analysis but never by a human ear.
 - `i` must be the short /i/ of **sit**. This was previously the letter name "eye" — exactly the error above — and was caught late.
 - `m` must be **"mmm"**, not "em".
 
-If any of those are wrong, the fix is in `scripts/generate-placeholder-audio.sh`.
+If any of those are wrong in the placeholder, the fix is in `scripts/generate-placeholder-audio.sh`; in a human recording, it is a re-take.
 
 ---
 
 ## What is deliberately not here
 
-- **The voice is a placeholder** generated by macOS `say`. Fine for judging the game, **not fine for a real child**. A human voice pack is a prerequisite for child testing — see spec §9.3 for costs and the recommended hybrid approach.
+- **The voice is a machine-generated placeholder** (macOS `say`). It has been heard and is usable for testing, but **a human voice is still needed before wider use** — see spec §9.3 for costs and the recommended hybrid approach — and each phoneme should be checked individually when it lands.
 - **Pictures are emoji** standing in for illustration. Picture Start's pictures were chosen to be named unambiguously, but they are still emoji and still need the real-artwork test (can a five-year-old name each one unprompted?). The *word* pictures used by Picture Match and Word Pick are survivable when ambiguous, because the child reads the word; the mat (a person doing yoga) and fit (a muscle) are the weakest.
-- **No parent area** — Plan 4. That is where the honest diagnostic picture lives: the per-sound heatmap, the confusion pairs, and the "needs a hand" signal for a child answering near chance.
-- **No backend.** Progress is on-device, per profile. Supabase and cross-device sync are Plan 4.
-- **Only Level 1.** Levels 2–6 are Plan 5. The second mini-game per skill is done (Plan 3), except for `i`'s letter-to-sound, which has only one.
+- **The parent area is on-device only.** It reads this device's record for this profile; there is no account, no sync and no way to see it from another device.
+- **No backend.** Progress is on-device, per profile. Supabase and cross-device sync are Plan 5.
+- **Only Level 1.** Levels 2–6 come later. The second mini-game per skill is done (Plan 3), except for `i`'s letter-to-sound, which has only one.
 - **No voice recognition.** The `SAY_IT` skill exists in the type system; nothing implements it.
 
 ## What the browser cannot tell you
@@ -120,6 +143,7 @@ A child who completes Level 1 can read `sat, pat, tip, mat, fit, map` — cold, 
 ## Known limits, stated plainly
 
 - **We do not claim fewer tasks than the 40-game competitor.** An earlier version of the spec did; simulation showed it was false and it was withdrawn.
-- **The mastery gate is statistical, not absolute.** A child answering at chance will eventually pass it given enough attempts — measured at about 72 quests. The real safeguard is telling the grown-up, which is a Plan 2 feature and is required, not optional.
+- **The mastery gate is statistical, not absolute.** A child answering at chance will eventually pass it given enough attempts — measured at about 72 quests. The real safeguard is telling the grown-up, which the parent area's "needs a hand" signal now does (see above).
 - **`growthFactor: 4` is measured, not principled.** It implies two months' retention from three correct answers. It produced the best pacing in a grid search; it deserves checking against real children.
-- **Nobody has heard the audio.** See above.
+- **No child has played it.** Everything here has been judged by adults and by simulated children. The pacing numbers are a simulation, the "needs a hand" thresholds have never met a real five-year-old, and whether a child can name each picture, tell the sounds apart and sit through a quest is untested.
+- **The audio is a placeholder.** See above.

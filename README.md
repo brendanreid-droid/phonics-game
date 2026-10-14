@@ -16,7 +16,7 @@ Then open <http://localhost:8081>.
 On a real iPad — which is the version that counts for a children's app — install **Expo Go** from the App Store, run `npx expo start` from `apps/game`, and scan the QR code. No Xcode needed.
 
 ```bash
-npm test          # 1183 tests
+npm test          # 1611 tests
 npm run typecheck
 ```
 
@@ -46,19 +46,21 @@ Three principles that look like fussiness and are not:
 
 ## Current state
 
-Level 1 is playable end to end: profiles, the island, four mini-games, a fourteen-task quest, results, trophies.
+Level 1 is playable end to end: profiles, the island, **seven mini-games**, a fourteen-task quest, results, trophies, and a PIN-gated parent area.
 
 Measured pacing, from the simulation harness over 30 synthetic children per profile:
 
 | Learner | Quests to finish Level 1 |
 |---|---|
-| Strong | 12–19, mean 15 |
-| Average | 15–33, mean 22 |
-| Struggling | 17–45, mean 30 |
+| Strong | 11–22, mean 17 |
+| Average | 14–37, mean 22 |
+| Struggling | 13–64, mean 32 |
 
-**Not done:** real voice, illustrated pictures, the parent dashboard, Supabase and cross-device sync, Levels 2–6, and a second mini-game per skill.
+Counts rose when the second mini-game per skill landed, which is the intended trade: proving a sound two independent ways costs more than proving it one way, and that cost is what makes the claim worth making.
 
-**Not verified by anyone:** nobody has heard the audio, and no child has played it. The voice pack is machine-generated placeholder and must be replaced before testing with a real child — see spec §9.3.
+**Not done:** real voice, illustrated artwork, Supabase and cross-device sync, Levels 2–6, `SAY_IT` voice tasks.
+
+**Not verified by anyone:** **no child has played it.** The pacing figures are simulated children, the pictures are emoji standing in for artwork, and the voice is machine-generated — usable for testing, but a human voice is needed before wider use. When it lands, check each phoneme individually: two were wrong before and were caught by acoustic analysis rather than by ear.
 
 ## Config worth knowing about
 

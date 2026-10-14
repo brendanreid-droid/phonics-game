@@ -7,10 +7,10 @@ import type { Attempt, MasteryRecord } from './types';
 
 const HOUR = 3_600_000;
 
-/** Four fast unscaffolded correct answers across three sessions, on the given task types in turn. */
+/** At least four fast unscaffolded correct answers across three sessions, on the given task types in turn (one per type if there are more than four). */
 function proven(skill: Skill, taskTypeIds: string[], config: EngineConfig = DEFAULT_CONFIG): MasteryRecord {
   let record = emptyRecord('x', skill, config);
-  for (let i = 0; i < 4; i += 1) {
+  for (let i = 0; i < Math.max(4, taskTypeIds.length); i += 1) {
     const base: Attempt = {
       sessionId: `session-${i % 3}`, targetId: 'x', skill,
       taskTypeId: taskTypeIds[i % taskTypeIds.length],
@@ -39,8 +39,13 @@ describe('isMastered: the task-type condition is capped by what can prove the sk
     expect(isMastered(proven('BLEND_READ', ['picture-match', 'word-pick']), NOW, DEFAULT_CONFIG)).toBe(true);
   });
 
-  it('lets SEGMENT_SPELL be mastered on its only task type', () => {
-    expect(isMastered(proven('SEGMENT_SPELL', ['word-builder']), NOW, DEFAULT_CONFIG)).toBe(true);
+  it('no longer lets SEGMENT_SPELL be mastered on one task type, now that Missing Letter is a second', () => {
+    // Plan 3 Task 4. This used to assert the opposite, when Word Builder was the
+    // only spelling game and the condition was capped at one.
+    const one = proven('SEGMENT_SPELL', ['word-builder']);
+    expect(one.taskTypesSeen).toEqual(['word-builder']);
+    expect(isMastered(one, NOW, DEFAULT_CONFIG)).toBe(false);
+    expect(isMastered(proven('SEGMENT_SPELL', ['word-builder', 'missing-letter']), NOW, DEFAULT_CONFIG)).toBe(true);
   });
 
   it('still refuses SOUND_ID proven on one task type, because several can prove it', () => {
@@ -68,12 +73,12 @@ describe('isMastered: the task-type condition is capped by what can prove the sk
   });
 
   it('does not demand the impossible when masteryTaskTypes exceeds what can prove the skill', () => {
-    const five = withDefaults({ masteryTaskTypes: 5 });
-    // Four task types can prove SOUND_ID (the hunt, and three word games through secondary credit).
-    const all = ['sound-hunt', 'picture-match', 'word-pick', 'word-builder'];
-    expect(isMastered(proven('SOUND_ID', all.slice(0, 3), five), NOW, five)).toBe(false);
-    expect(isMastered(proven('SOUND_ID', all, five), NOW, five)).toBe(true);
-    expect(isMastered(proven('LETTER_SOUND', ['sound-singer'], five), NOW, five)).toBe(true);
+    const six = withDefaults({ masteryTaskTypes: 6 });
+    // Five task types can prove SOUND_ID (the hunt, and four word games through secondary credit).
+    const all = ['sound-hunt', 'picture-match', 'word-pick', 'word-builder', 'missing-letter'];
+    expect(isMastered(proven('SOUND_ID', all.slice(0, 4), six), NOW, six)).toBe(false);
+    expect(isMastered(proven('SOUND_ID', all, six), NOW, six)).toBe(true);
+    expect(isMastered(proven('LETTER_SOUND', ['sound-singer'], six), NOW, six)).toBe(true);
   });
 
   it('keeps every other condition in force for a single-type skill', () => {

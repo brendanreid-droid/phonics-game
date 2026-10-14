@@ -10,6 +10,7 @@ import type { GraphemeId, Skill, TargetId, WordId } from '@soundlings/curriculum
 import { withDefaults } from './config';
 import type { EngineConfig } from './config';
 import { pickGraphemeDistractors, pickTileDistractors, pickWordDistractors } from './distractors';
+import { blankPositionFor } from './missingLetter';
 import { getRecord, isMastered, strengthAt } from './mastery';
 import { graphemesMetAt, wordsDecodableFrom } from './metGraphemes';
 import { deriveSeed, makeRng, seedFromString, shuffle } from './rng';
@@ -658,6 +659,7 @@ function makeTask(args: MakeTaskArgs): TaskInstance {
 
   let choices: TargetId[];
   let secondaryTargets: TargetId[] = [];
+  let blankIndex: number | undefined;
 
   if (type.skill === 'SOUND_ID' || type.skill === 'LETTER_SOUND') {
     const distractors = pickGraphemeDistractors({
@@ -685,8 +687,28 @@ function makeTask(args: MakeTaskArgs): TaskInstance {
     });
     choices = shuffle([pairing.targetId, ...distractors], rng);
     secondaryTargets = [...new Set(getWord(pairing.targetId).graphemes)];
+  } else if (type.id === 'missing-letter') {
+    // One position of the word is blanked and the choices are LETTERS for that
+    // gap: the right one plus wrong ones ranked like Sound Hunt's, so a letter
+    // the child keeps mixing up with it is on the screen. The position is decided
+    // here, not by the component, so a resumed quest asks about the same gap.
+    // `correctChoice` stays the word id; the component reports the word with the
+    // child's letter in the gap and the runner compares that.
+    const word = getWord(pairing.targetId);
+    blankIndex = blankPositionFor(word.graphemes, rng);
+    const letter = word.graphemes[blankIndex];
+    const distractors = pickGraphemeDistractors({
+      target: letter,
+      count: choiceCount - 1,
+      level,
+      confusions,
+      allowed: allowedGraphemes,
+      rng,
+    });
+    choices = shuffle([letter, ...distractors], rng);
+    secondaryTargets = [...new Set(word.graphemes)];
   } else {
-    // SEGMENT_SPELL: choices are letter tiles, the word's own letters as a
+    // SEGMENT_SPELL (Word Builder): choices are letter tiles, the word's own letters as a
     // MULTISET (`pip` needs two p tiles) plus one or two extras, shuffled so
     // the correct order is never the tile order. `correctChoice` stays the
     // word id; the quest runner compares the assembled word to it.
@@ -715,5 +737,6 @@ function makeTask(args: MakeTaskArgs): TaskInstance {
     anchor,
     difficulty: type.difficulty,
     seed,
+    ...(blankIndex === undefined ? {} : { blankIndex }),
   };
 }

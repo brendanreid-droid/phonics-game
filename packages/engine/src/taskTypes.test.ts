@@ -64,10 +64,13 @@ describe('task types', () => {
     expect(taskTypeById('word-builder').secondaryTargets).toBe('graphemes');
   });
 
-  it('orders difficulty sound-hunt < sound-singer < the two reading games < word-builder', () => {
+  it('orders difficulty sound-hunt < sound-singer < the two reading games and Missing Letter < word-builder', () => {
     // The frustration guard caps difficulty, so this order is behaviour. Picture
-    // Match and Word Pick are the same skill at the same stage and share a rung.
+    // Match and Word Pick are the same skill at the same stage and share a rung;
+    // Missing Letter, one gap of a spelling, sits on the same one.
     const rank = (id: string) => taskTypeById(id).difficulty;
+    expect(rank('missing-letter')).toBe(rank('picture-match'));
+    expect(rank('missing-letter')).toBeLessThan(rank('word-builder'));
     expect(rank('sound-hunt')).toBeLessThan(rank('sound-singer'));
     expect(rank('sound-singer')).toBeLessThan(rank('picture-match'));
     expect(rank('word-pick')).toBe(rank('picture-match'));
@@ -81,6 +84,7 @@ describe('task types', () => {
       'sound-singer': [2, 3],
       'picture-match': [2, 3],
       'word-pick': [2, 3],
+      'missing-letter': [2, 4],
       'word-builder': [3, 5],
     });
   });
@@ -101,7 +105,8 @@ describe('task types', () => {
   });
 
   it('picks the lowest-difficulty task type for a skill, and throws when there is none', () => {
-    expect(easiestTaskTypeForSkill('SEGMENT_SPELL').id).toBe('word-builder');
+    // Missing Letter sits a rung below Word Builder, so it is the one the frustration guard falls back to.
+    expect(easiestTaskTypeForSkill('SEGMENT_SPELL').id).toBe('missing-letter');
     expect(() => easiestTaskTypeForSkill('TRICKY_READ')).toThrow(/no task type for skill/i);
   });
 
@@ -126,12 +131,12 @@ describe('provingTaskTypeCount', () => {
   });
 
   it('counts a skill\'s own type plus every type that grants it secondary credit', () => {
-    // SOUND_ID: sound-hunt directly, plus picture-match, word-pick and word-builder
-    // through secondary credit. The other three skills get no composite credit.
-    expect(provingTaskTypeCount('SOUND_ID', 's')).toBe(4);
+    // SOUND_ID: sound-hunt directly, plus picture-match, word-pick, missing-letter and
+    // word-builder through secondary credit. The other three skills get no composite credit.
+    expect(provingTaskTypeCount('SOUND_ID', 's')).toBe(5);
     expect(provingTaskTypeCount('LETTER_SOUND', 's')).toBe(1);
     expect(provingTaskTypeCount('BLEND_READ', 'mat')).toBe(2);
-    expect(provingTaskTypeCount('SEGMENT_SPELL', 'mat')).toBe(1);
+    expect(provingTaskTypeCount('SEGMENT_SPELL', 'mat')).toBe(2);
   });
 
   it('is at least 1 even for a skill nothing can prove, so nothing is unmasterable', () => {

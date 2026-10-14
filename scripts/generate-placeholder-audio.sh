@@ -86,6 +86,7 @@ ui.all_done|All done!
 ui.try_this_one|Try this one
 ui.which_sound|Which sound does it make?
 ui.find_word|Which word is it?
+ui.missing_letter|Which letter is missing?
 praise.1|Yes!
 praise.2|That's it!
 praise.3|Lovely!

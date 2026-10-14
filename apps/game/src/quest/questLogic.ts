@@ -288,6 +288,13 @@ export function isPlayablePlan(plan: readonly TaskInstance[]): boolean {
         return task.choices.includes(task.correctChoice);
       }
       task.choices.forEach((c) => getGrapheme(c));
+      if (task.taskTypeId === 'missing-letter') {
+        // One gap: the letter for it must be on offer. The rest of the word is
+        // shown, not chosen, so its letters need not be among the choices.
+        const gap = task.blankIndex;
+        if (typeof gap !== 'number' || !Number.isInteger(gap) || gap < 0 || gap >= word.graphemes.length) return false;
+        return task.choices.includes(word.graphemes[gap]);
+      }
       return word.graphemes.every((g) => task.choices.includes(g));
     } catch {
       return false;
@@ -304,6 +311,7 @@ const PROMPT_KEYS = [
   'ui.build_word',
   'ui.tap_picture',
   'ui.find_word',
+  'ui.missing_letter',
   'ui.all_done',
 ];
 
@@ -318,6 +326,10 @@ export function preloadKeysFor(tasks: readonly TaskInstance[]): string[] {
         const word = getWord(task.correctChoice);
         keys.add(word.audio);
         for (const g of word.graphemes) keys.add(getGrapheme(g).audio.phoneme);
+        // Missing Letter plays the sound of whichever letter is tapped, and the wrong ones are not in the word.
+        if (task.taskTypeId === 'missing-letter') {
+          for (const choice of task.choices) keys.add(getGrapheme(choice).audio.phoneme);
+        }
       }
     } catch {
       // A task that cannot resolve will fail loudly when it renders; warming

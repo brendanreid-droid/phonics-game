@@ -373,6 +373,41 @@ describe('isPlayablePlan', () => {
   it('rejects garbage without throwing', () => {
     expect(isPlayablePlan([{ ...plan()[0], choices: 'nope' as unknown as string[] }])).toBe(false);
   });
+
+  describe('a Missing Letter task', () => {
+    const gap = (overrides: Partial<TaskInstance> = {}) =>
+      task({
+        taskTypeId: 'missing-letter', skill: 'SEGMENT_SPELL', primaryTarget: 'mat', correctChoice: 'mat',
+        secondaryTargets: ['m', 'a', 't'], choices: ['i', 'a'], blankIndex: 1, ...overrides,
+      });
+
+    it('is playable when the letter for the gap is offered', () => {
+      expect(isPlayablePlan([gap()])).toBe(true);
+    });
+
+    it('does not need every letter of the word among its choices, unlike Word Builder', () => {
+      // Only the gap's letter and its wrong answers are offered. m and t are on the screen already.
+      expect(isPlayablePlan([gap({ choices: ['a', 'i', 'p'] })])).toBe(true);
+    });
+
+    it('is rejected without a blank position', () => {
+      expect(isPlayablePlan([gap({ blankIndex: undefined })])).toBe(false);
+    });
+
+    it('is rejected when the blank position is outside the word', () => {
+      expect(isPlayablePlan([gap({ blankIndex: 3 })])).toBe(false);
+      expect(isPlayablePlan([gap({ blankIndex: -1 })])).toBe(false);
+      expect(isPlayablePlan([gap({ blankIndex: 1.5 })])).toBe(false);
+    });
+
+    it('is rejected when the letter for the gap is not among the choices', () => {
+      expect(isPlayablePlan([gap({ choices: ['i', 'm'] })])).toBe(false);
+    });
+
+    it('is rejected when a choice is not a letter the curriculum has', () => {
+      expect(isPlayablePlan([gap({ choices: ['a', 'zz'] })])).toBe(false);
+    });
+  });
 });
 
 describe('preloadKeysFor', () => {
@@ -380,6 +415,17 @@ describe('preloadKeysFor', () => {
     const keys = preloadKeysFor(plan().slice(0, 3));
     expect(keys).toContain('ui.which_sound');
     expect(keys.some((k) => k.startsWith('ph.'))).toBe(true);
+  });
+
+  it('warms the letter sounds a Missing Letter task can play, and its prompt', () => {
+    const gap = task({
+      taskTypeId: 'missing-letter', skill: 'SEGMENT_SPELL', primaryTarget: 'mat', correctChoice: 'mat',
+      choices: ['i', 'a'], blankIndex: 1,
+    });
+    const keys = preloadKeysFor([gap]);
+    expect(keys).toContain('ui.missing_letter');
+    expect(keys).toContain('ph.i');
+    expect(keys).toContain('wd.mat');
   });
 
   it('survives a task it cannot resolve', () => {

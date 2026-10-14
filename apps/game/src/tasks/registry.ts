@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react';
+import { MissingLetter } from './MissingLetter';
 import { PictureMatch } from './PictureMatch';
 import { SoundHunt } from './SoundHunt';
 import { SoundSinger } from './SoundSinger';
@@ -16,6 +17,7 @@ export const TASK_COMPONENTS: Record<string, ComponentType<TaskProps>> = {
   'sound-singer': SoundSinger,
   'picture-match': PictureMatch,
   'word-pick': WordPick,
+  'missing-letter': MissingLetter,
   'word-builder': WordBuilder,
 };
 

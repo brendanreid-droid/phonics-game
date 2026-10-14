@@ -4,6 +4,7 @@ export * from './config';
 export * from './rng';
 export * from './taskTypes';
 export * from './distractors';
+export * from './missingLetter';
 export * from './frustration';
 export * from './completion';
 export * from './taskOutcome';

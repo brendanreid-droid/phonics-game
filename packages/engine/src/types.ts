@@ -102,4 +102,11 @@ export interface TaskInstance {
   anchor: boolean;
   difficulty: number;
   seed: number;
+  /**
+   * Missing Letter only: the index, into the word's graphemes, of the letter
+   * that is blanked out. Decided when the plan is built, so a quest that is
+   * interrupted and resumed asks about the same gap. Absent for every other
+   * task type.
+   */
+  blankIndex?: number;
 }

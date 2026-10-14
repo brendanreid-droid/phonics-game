@@ -81,6 +81,8 @@ const STATES: Record<string, MasteryMap> = {
 };
 
 const isSpelling = (task: TaskInstance) => task.skill === 'SEGMENT_SPELL';
+/** Word Builder's tasks: choices are the word's own letter TILES plus extras. Missing Letter's are not. */
+const isTileSpelling = (task: TaskInstance) => task.taskTypeId === 'word-builder';
 
 function difficulties(plan: TaskInstance[]): number[] {
   return plan.map((t) => t.difficulty);
@@ -205,7 +207,10 @@ describe('buildSession invariants', () => {
   it('always includes the correct answer, or for spelling every letter the word needs', () => {
     for (const [name, mastery] of Object.entries(STATES)) {
       for (const task of build(mastery)) {
-        if (isSpelling(task)) {
+        if (task.taskTypeId === 'missing-letter') {
+          // choices are LETTERS for one gap; the right one must be among them.
+          expect(task.choices, name).toContain(getWord(task.correctChoice).graphemes[task.blankIndex as number]);
+        } else if (isSpelling(task)) {
           // choices are letter TILES; correctChoice is the word id. `pip` needs two p tiles.
           const tiles = [...task.choices];
           for (const grapheme of getWord(task.correctChoice).graphemes) {
@@ -223,7 +228,7 @@ describe('buildSession invariants', () => {
   it('offers no duplicate choices, except the repeated tiles a spelling word really needs', () => {
     for (const [name, mastery] of Object.entries(STATES)) {
       for (const task of build(mastery)) {
-        if (isSpelling(task)) {
+        if (isTileSpelling(task)) {
           const needed = getWord(task.correctChoice).graphemes;
           const extras = [...task.choices];
           for (const grapheme of needed) extras.splice(extras.indexOf(grapheme), 1);
@@ -627,7 +632,7 @@ describe('buildSession composition', () => {
 
   it('shuffles the spelling tiles, so they never arrive in the word\'s own order', () => {
     const mastery = masteredGraphemes(['s', 'a', 't', 'p']);
-    const spelled = SEEDS.flatMap((seed) => build(mastery, seed)).filter(isSpelling);
+    const spelled = SEEDS.flatMap((seed) => build(mastery, seed)).filter(isTileSpelling);
     expect(spelled.length).toBeGreaterThan(0);
     const inOrder = spelled.filter((t) => t.choices.slice(0, 3).join('') === getWord(t.correctChoice).graphemes.join(''));
     expect(inOrder.length).toBeLessThan(spelled.length / 2);
@@ -663,7 +668,7 @@ describe('buildSession composition', () => {
     const mastery = { ...masteredGraphemes(['s', 'a', 't', 'p']), ...heard({ i: 2, m: 2 }) };
     const confusions = { 's>p': 5 };
     const spelled = SEEDS.flatMap((seed) => build(mastery, seed, { confusions })).filter((t) => {
-      const letters = isSpelling(t) ? getWord(t.correctChoice).graphemes : [];
+      const letters = isTileSpelling(t) ? getWord(t.correctChoice).graphemes : [];
       return letters.includes('s') && !letters.includes('p');
     });
     expect(spelled.length).toBeGreaterThan(0);
@@ -1167,6 +1172,107 @@ describe('buildSession: Word Pick', () => {
       .filter((t) => t.taskTypeId === 'word-pick' && t.correctChoice === 'mat');
     expect(mats.length).toBeGreaterThan(0);
     for (const task of mats) expect(task.choices, task.id).toContain('sip');
+  });
+
+  it('keeps the invariants with it in the mix', () => {
+    for (const seed of SEEDS) {
+      const plan = build(ready, seed);
+      expect(plan).toHaveLength(DEFAULT_CONFIG.sessionLength);
+      for (let i = 1; i < plan.length; i += 1) expect(plan[i].taskTypeId, seed).not.toBe(plan[i - 1].taskTypeId);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Plan 3 Task 4: Missing Letter. One position of a spelled word is blanked and
+// the child picks the letter for it; the medial vowel is asked for most.
+// ---------------------------------------------------------------------------
+
+describe('buildSession: Missing Letter', () => {
+  // s, a, t are mastered and p, i, m have been answered twice, so spelling is open.
+  const ready = { ...masteredGraphemes(['s', 'a', 't']), ...heard({ p: 2, i: 2, m: 2 }) };
+  const gaps = (mastery: MasteryMap = ready, extra: Partial<BuildSessionArgs> = {}) =>
+    SEEDS.flatMap((seed) => build(mastery, seed, extra)).filter((t) => t.taskTypeId === 'missing-letter');
+
+  it('is scheduled once spelling is possible', () => {
+    expect(gaps().length).toBeGreaterThan(0);
+  });
+
+  it('is a spelling task whose answer is the word, like Word Builder', () => {
+    for (const task of gaps()) {
+      expect(task.skill, task.id).toBe('SEGMENT_SPELL');
+      expect(task.correctChoice, task.id).toBe(task.primaryTarget);
+      expect(getWord(task.primaryTarget), task.id).toBeDefined();
+    }
+  });
+
+  it('records which position is blank, inside the word', () => {
+    for (const task of gaps()) {
+      const length = getWord(task.primaryTarget).graphemes.length;
+      expect(Number.isInteger(task.blankIndex), task.id).toBe(true);
+      expect(task.blankIndex as number, task.id).toBeGreaterThanOrEqual(0);
+      expect(task.blankIndex as number, task.id).toBeLessThan(length);
+    }
+  });
+
+  it('offers the letter that belongs in the gap, once, among the choices', () => {
+    for (const task of gaps()) {
+      const letter = getWord(task.primaryTarget).graphemes[task.blankIndex as number];
+      expect(task.choices.filter((c) => c === letter), task.id).toHaveLength(1);
+      expect(new Set(task.choices).size, task.id).toBe(task.choices.length);
+    }
+  });
+
+  it('offers between two and four letters', () => {
+    for (const task of gaps()) {
+      expect(task.choices.length, task.id).toBeGreaterThanOrEqual(2);
+      expect(task.choices.length, task.id).toBeLessThanOrEqual(4);
+    }
+  });
+
+  it('offers only letters the child has met', () => {
+    // s, a and t are mastered, so every level-1 letter has been met (see the introduction groups).
+    const met = ['s', 'a', 't', 'p', 'i', 'm', 'f'];
+    for (const task of gaps()) for (const choice of task.choices) expect(met, `${task.id}: ${choice}`).toContain(choice);
+  });
+
+  it('asks for the medial vowel more often than either consonant', () => {
+    const tasks = gaps().filter((t) => getWord(t.primaryTarget).graphemes.length === 3);
+    expect(tasks.length).toBeGreaterThan(20);
+    const middle = tasks.filter((t) => t.blankIndex === 1).length;
+    expect(middle / tasks.length).toBeGreaterThan(0.5);
+    // And it is a vowel: every Level 1 CVC word has its vowel in the middle.
+    for (const t of tasks.filter((x) => x.blankIndex === 1)) {
+      expect(['a', 'i'], t.id).toContain(getWord(t.primaryTarget).graphemes[1]);
+    }
+  });
+
+  it('does not always blank the middle', () => {
+    const positions = new Set(gaps().filter((t) => getWord(t.primaryTarget).graphemes.length === 3).map((t) => t.blankIndex));
+    expect(positions.has(0) && positions.has(1) && positions.has(2)).toBe(true);
+  });
+
+  it('is deterministic: the same session asks about the same gap', () => {
+    const a = build(ready, 'seed-3').filter((t) => t.taskTypeId === 'missing-letter');
+    const b = build(ready, 'seed-3').filter((t) => t.taskTypeId === 'missing-letter');
+    expect(a.map((t) => [t.id, t.blankIndex])).toEqual(b.map((t) => [t.id, t.blankIndex]));
+  });
+
+  it('offers a letter the child keeps confusing with the one in the gap', () => {
+    // m and a are in 'mat'. The child has mixed up a with p, which is not on a's generic list.
+    const confusions = { 'a>p': 5 };
+    const asked = SEEDS.flatMap((seed) => build(ready, seed, { confusions }))
+      .filter((t) => t.taskTypeId === 'missing-letter' && getWord(t.primaryTarget).graphemes[t.blankIndex as number] === 'a');
+    expect(asked.length).toBeGreaterThan(0);
+    for (const task of asked) expect(task.choices, task.id).toContain('p');
+  });
+
+  it('never sets a blank position on any other task type', () => {
+    for (const seed of SEEDS) {
+      for (const task of build(ready, seed)) {
+        if (task.taskTypeId !== 'missing-letter') expect(task.blankIndex, task.id).toBeUndefined();
+      }
+    }
   });
 
   it('keeps the invariants with it in the mix', () => {

@@ -64,6 +64,16 @@ export const TASK_TYPES: readonly TaskTypeMeta[] = [
     secondaryTargets: 'graphemes',
   },
   {
+    id: 'missing-letter',
+    skill: 'SEGMENT_SPELL',
+    // One below Word Builder: filling a single gap is easier than assembling a
+    // whole word, and the frustration guard should be able to fall back to it.
+    difficulty: 3,
+    minChoices: 2,
+    maxChoices: 4,
+    secondaryTargets: 'graphemes',
+  },
+  {
     id: 'word-builder',
     skill: 'SEGMENT_SPELL',
     difficulty: 4,

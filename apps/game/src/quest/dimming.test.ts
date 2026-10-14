@@ -58,4 +58,46 @@ describe('dimmedFor', () => {
     const spelling = task({ skill: 'SEGMENT_SPELL', taskTypeId: 'word-builder', choices: ['s', 'a', 't', 'p'] });
     expect(dimmedFor(spelling, 2)).toEqual([]);
   });
+
+  describe('Missing Letter, whose choices are letters for one gap', () => {
+    // 'mat' with the middle blank: the right letter is `a`, though the task's
+    // correctChoice is the word id.
+    const gap = (choices: string[], overrides: Partial<TaskInstance> = {}) =>
+      task({
+        skill: 'SEGMENT_SPELL', taskTypeId: 'missing-letter', primaryTarget: 'mat', correctChoice: 'mat',
+        blankIndex: 1, choices, ...overrides,
+      });
+
+    it('leaves the right letter and one wrong one at tier 2', () => {
+      const wide = gap(['i', 'a', 'm', 'p']);
+      const dimmed = dimmedFor(wide, 2);
+      expect(wide.choices.length - dimmed.length).toBe(2);
+      expect(dimmed).not.toContain('a');
+    });
+
+    it('never dims the letter that belongs in the gap, whichever position is blank, at any tier', () => {
+      for (const [blankIndex, letter] of [[0, 'm'], [1, 'a'], [2, 't']] as const) {
+        const t = gap(['s', letter, 'i', 'p'], { blankIndex });
+        for (const tier of [0, 1, 2, 3]) expect(dimmedFor(t, tier), `${blankIndex}/${tier}`).not.toContain(letter);
+      }
+    });
+
+    it('dims nothing below tier 2, and leaves a two-way gap alone', () => {
+      expect(dimmedFor(gap(['i', 'a', 'p']), 1)).toEqual([]);
+      expect(dimmedFor(gap(['i', 'a']), 2)).toEqual([]);
+    });
+
+    it('does not dim by the word id: a letter is never mistaken for the answer', () => {
+      // If the word id were compared against the letters, nothing would match and
+      // everything but one wrong letter would be dimmed, including the right one.
+      const dimmed = dimmedFor(gap(['i', 'a', 'p', 's']), 2);
+      expect(dimmed.length).toBe(2);
+      expect(dimmed).not.toContain('a');
+    });
+
+    it('still dims nothing on Word Builder, whose tiles the word needs', () => {
+      const builder = task({ skill: 'SEGMENT_SPELL', taskTypeId: 'word-builder', primaryTarget: 'mat', correctChoice: 'mat', choices: ['m', 'a', 't', 'p'] });
+      expect(dimmedFor(builder, 2)).toEqual([]);
+    });
+  });
 });

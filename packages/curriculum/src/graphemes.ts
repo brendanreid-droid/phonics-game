@@ -99,7 +99,7 @@ export const GRAPHEME_LIST: readonly Grapheme[] = [
     letterName: 'ef',
     mnemonic: 'fish',
     mnemonicEmoji: '🐟',
-    startPictures: [{ emoji: '🔥', label: 'fire' }, { emoji: '🪶', label: 'feather' }, { emoji: '🦶', label: 'foot' }],
+    startPictures: [{ emoji: '🔥', label: 'fire' }, { emoji: '🪶', label: 'feather' }, { emoji: '🌸', label: 'flower' }],
     audio: { phoneme: 'ph.f', letterName: 'ln.f' },
     introducedInLevel: 1,
     sequenceIndex: 6,

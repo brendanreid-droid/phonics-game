@@ -139,6 +139,6 @@ describe('start pictures', () => {
 
   it('has the same pictures for the same grapheme every time: a plain data table, no randomness', () => {
     expect(GRAPHEMES['m'].startPictures.map((p) => p.label)).toEqual(['milk', 'monkey', 'map']);
-    expect(GRAPHEMES['f'].startPictures.map((p) => p.label)).toEqual(['fire', 'feather', 'foot']);
+    expect(GRAPHEMES['f'].startPictures.map((p) => p.label)).toEqual(['fire', 'feather', 'flower']);
   });
 });

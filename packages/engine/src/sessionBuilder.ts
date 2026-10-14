@@ -119,14 +119,14 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
   if (pairings.length === 0) throw new Error(`No teachable pairings at level ${level}`);
 
   // Whether a task type can actually be built for a pairing. A skill match is
-  // not enough for a game that only works for some targets: Picture Start needs
-  // a picture to answer with, which no vowel has, and pictures of OTHER met
-  // letters to be wrong answers.
+  // not enough for a game that only works for some targets (`canServeTarget`),
+  // or that needs something of the child's state: Picture Start needs pictures
+  // of OTHER met letters to be wrong answers.
   const canBuild = (type: TaskTypeMeta, p: Pairing): boolean => {
     if (type.skill !== p.skill) return false;
     if (type.canServeTarget !== undefined && !type.canServeTarget(p.targetId)) return false;
     if (type.id === 'picture-start') {
-      const wrong = metGraphemeIds.filter((g) => g !== p.targetId && hasInitialPicture(g, level));
+      const wrong = metGraphemeIds.filter((g) => g !== p.targetId && hasInitialPicture(g));
       return wrong.length >= type.minChoices - 1;
     }
     return true;
@@ -680,13 +680,13 @@ function makeTask(args: MakeTaskArgs): TaskInstance {
   let blankIndex: number | undefined;
 
   if (type.skill === 'SOUND_ID' || type.skill === 'LETTER_SOUND') {
-    // Picture Start shows a PICTURE for each letter, so a wrong letter must have
-    // one: a vowel does not (no picturable word starts with one), and would be a
-    // blank card. The pool is narrowed here, so the ranking by what the child has
-    // confused still applies within it.
+    // Picture Start shows one of the letter's own start pictures for each choice,
+    // so a wrong letter must have one. Every Level 1 letter does; the pool is
+    // narrowed anyway so a letter without any can never become a blank card. The
+    // ranking by what the child has confused still applies within it.
     const allowed =
       type.id === 'picture-start'
-        ? allowedGraphemes.filter((g) => g === pairing.targetId || hasInitialPicture(g, level))
+        ? allowedGraphemes.filter((g) => g === pairing.targetId || hasInitialPicture(g))
         : allowedGraphemes;
     const distractors = pickGraphemeDistractors({
       target: pairing.targetId,

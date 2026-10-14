@@ -424,17 +424,18 @@ describe('isPlayablePlan', () => {
         choices: ['s', 'm'], ...overrides,
       });
 
-    it('is playable when every letter can be drawn and the right one is among them', () => {
+    it('is playable when every letter has pictures and the right one is among them', () => {
       expect(isPlayablePlan([start()])).toBe(true);
       expect(isPlayablePlan([start({ choices: ['t', 'm', 'f'] })])).toBe(true);
     });
 
-    it('is rejected for a vowel, which has no picture to answer with', () => {
-      expect(isPlayablePlan([start({ primaryTarget: 'a', correctChoice: 'a', choices: ['s', 'a'] })])).toBe(false);
+    it('is playable for a vowel, which has start pictures of its own', () => {
+      expect(isPlayablePlan([start({ primaryTarget: 'a', correctChoice: 'a', choices: ['s', 'a'] })])).toBe(true);
+      expect(isPlayablePlan([start({ primaryTarget: 'i', correctChoice: 'i', choices: ['i', 'a', 's'] })])).toBe(true);
     });
 
-    it('is rejected when a wrong answer is a letter with no picture, which would be a blank card', () => {
-      expect(isPlayablePlan([start({ choices: ['m', 'a'] })])).toBe(false);
+    it('is rejected when a choice is not a letter the curriculum has, which could not be drawn', () => {
+      expect(isPlayablePlan([start({ choices: ['m', 'zz'] })])).toBe(false);
     });
 
     it('is rejected when the right letter is not among the choices', () => {

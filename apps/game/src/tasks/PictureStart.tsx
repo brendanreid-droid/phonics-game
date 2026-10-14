@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { getWord } from '@soundlings/curriculum';
 import { makeRng } from '@soundlings/engine';
 import { tokens } from '@soundlings/ui';
 import { dimmedFor } from '../quest/dimming';
 import { TaskFrame } from './TaskFrame';
 import { useHintLadder } from './useHintLadder';
 import { appearanceFor } from './tileAppearance';
-import { pictureStartOptions, taskLevel, wordFor } from './pictureStartLogic';
+import { pictureStartOptions, taskLevel } from './pictureStartLogic';
 import type { TaskProps } from './TaskProps';
 
 /**
@@ -16,12 +15,15 @@ import type { TaskProps } from './TaskProps';
  *
  * Sound Singer asks the same question of the same letter, and a child can learn
  * to pass it from the picture they were taught alongside the sound (m is the
- * moon). So the right answer here is never that picture: it is a mat or a map.
- * See pictureStartLogic.ts and the engine's `answerWords`. No hint tier shows the
- * mnemonic either, for the same reason: this game exists to test the sound, not
- * the association.
+ * moon). So the right answer here is never that picture: it is a milk or a
+ * monkey. No hint tier shows the mnemonic either, for the same reason: this game
+ * exists to test the sound, not the association.
  *
- * A picture reports the LETTER its word starts with, and the runner judges that
+ * The pictures are each letter's own `startPictures`, chosen to be named
+ * unambiguously by a five-year-old. They are not word pictures: here the child
+ * NAMES the picture, so a picture that is really "a muscle" cannot stand for fit.
+ *
+ * A card reports the LETTER its picture starts with, and the runner judges that
  * against the task as it does for any letter-to-sound game. So a wrong picture is
  * recorded as the letter the child mistook the sound for.
  *
@@ -77,19 +79,18 @@ export function PictureStart({ task, audio, externalTier, onAnswer, position }: 
 
       <View style={styles.row}>
         {options.choices.map((choice) => {
-          const letter = wordFor(choice);
+          const letter = choice.grapheme;
           const state = dimmed.includes(letter)
             ? 'dimmed'
             : tier >= 3 && letter === task.correctChoice
               ? 'revealed'
               : 'idle';
           const look = appearanceFor(state);
-          const word = getWord(choice);
           return (
             <Pressable
-              key={choice}
+              key={choice.emoji}
               accessibilityRole="button"
-              accessibilityLabel={`Picture of ${word.text}`}
+              accessibilityLabel={`Picture of a ${choice.label}`}
               disabled={!look.interactive}
               style={[
                 styles.picture,
@@ -101,7 +102,7 @@ export function PictureStart({ task, audio, externalTier, onAnswer, position }: 
               ]}
               onPress={() => onAnswer(letter, tier)}
             >
-              <Text style={styles.pictureEmoji}>{word.picture ?? '?'}</Text>
+              <Text style={styles.pictureEmoji}>{choice.emoji}</Text>
             </Pressable>
           );
         })}

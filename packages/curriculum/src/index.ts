@@ -6,6 +6,7 @@ export type {
   Level,
   PhonemeId,
   Skill,
+  StartPicture,
   TargetId,
   TrickyWord,
   Word,

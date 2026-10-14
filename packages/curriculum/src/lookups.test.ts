@@ -50,6 +50,7 @@ vi.mock('./graphemes', async (importOriginal) => {
     letterName: 'en',
     mnemonic: 'nest',
     mnemonicEmoji: '🪹',
+    startPictures: [{ emoji: '🥜', label: 'nut' }, { emoji: '👃', label: 'nose' }],
     audio: { phoneme: 'ph.n', letterName: 'ln.n' },
     introducedInLevel: 2,
     sequenceIndex: 7,

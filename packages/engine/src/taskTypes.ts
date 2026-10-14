@@ -17,9 +17,9 @@ export interface TaskTypeMeta {
   /**
    * Whether this type can be scheduled for the given PRIMARY target of its own
    * skill. Absent means "any target of its skill", which is true of every
-   * shipped type today. A mini-game that only works for some targets (Plan 3's
-   * Picture Start needs a picturable word beginning with the sound) declares
-   * that here, so `provingTaskTypeCount` and the session builder agree on what
+   * shipped type but Picture Start, which needs pictures of its own for the
+   * sound (true of every Level 1 grapheme today). A mini-game that only works for
+   * some targets declares that here, so `provingTaskTypeCount` and the session builder agree on what
    * is schedulable. It says nothing about secondary credit.
    */
   canServeTarget?: (targetId: TargetId) => boolean;
@@ -55,9 +55,9 @@ export const TASK_TYPES: readonly TaskTypeMeta[] = [
     minChoices: 2,
     maxChoices: 3,
     secondaryTargets: 'none',
-    // Needs a picturable word that starts with the sound and is not the letter's
-    // own mnemonic. No Level 1 word starting with a vowel can be drawn, so this is
-    // false for `a` and `i`, which keep one proving game until SAY_IT ships.
+    // Needs pictures of its own for the sound (`Grapheme.startPictures`), which
+    // every Level 1 grapheme has, vowels included. The hook stays so a grapheme
+    // added without pictures is honestly counted as having one proving game.
     canServeTarget: picturesCanAnswerFor,
   },
   {

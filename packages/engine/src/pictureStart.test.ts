@@ -1,84 +1,63 @@
 import { describe, expect, it } from 'vitest';
-import { GRAPHEMES, getGrapheme } from '@soundlings/curriculum';
-import type { Word } from '@soundlings/curriculum';
-import { answerWords, hasInitialPicture, pictureStartAnswers } from './pictureStart';
+import { GRAPHEME_LIST, getGrapheme } from '@soundlings/curriculum';
+import type { Grapheme } from '@soundlings/curriculum';
+import { answerPictures, hasInitialPicture, pictureStartAnswers, picturesCanAnswerFor } from './pictureStart';
 import { provingTaskTypeCount, taskTypeById } from './taskTypes';
 
-const word = (over: Partial<Word> & { id: string }): Word => ({
-  text: over.id, graphemes: [...over.id], pattern: 'cvc', audio: `wd.${over.id}`, decodableFromLevel: 1, ...over,
+const withPictures = (id: string, pictures: { emoji: string; label: string }[]): Grapheme => ({
+  ...getGrapheme(id), startPictures: pictures,
 });
 
-describe('answerWords', () => {
+describe('answerPictures', () => {
   it('never offers the grapheme own mnemonic as an answer', () => {
-    // m's mnemonic is the moon. If a picturable word began with m and showed the moon,
-    // a child could answer from the letter-picture pairing they were taught alongside
-    // the sound: the memorisation Picture Start exists to rule out.
-    const moon = word({ id: 'mon', picture: getGrapheme('m').mnemonicEmoji });
-    const map = word({ id: 'map', picture: '🗺️' });
-    const answers = answerWords(getGrapheme('m'), [moon, map]);
-    expect(answers.map((w) => w.id)).toEqual(['map']);
+    // m's mnemonic is the moon. If the data ever held a moon under m, a child could answer from the
+    // letter-picture pairing they were taught alongside the sound: the memorisation Picture Start
+    // exists to rule out.
+    const moon = getGrapheme('m').mnemonicEmoji;
+    const m = withPictures('m', [{ emoji: moon, label: 'moon' }, { emoji: '🥛', label: 'milk' }]);
+    expect(answerPictures(m).map((p) => p.label)).toEqual(['milk']);
   });
 
-  it('is empty when the only word starting with the sound shows the mnemonic', () => {
-    const moon = word({ id: 'mon', picture: getGrapheme('m').mnemonicEmoji });
-    expect(answerWords(getGrapheme('m'), [moon])).toEqual([]);
+  it('is empty when the only picture is the mnemonic', () => {
+    const m = withPictures('m', [{ emoji: getGrapheme('m').mnemonicEmoji, label: 'moon' }]);
+    expect(answerPictures(m)).toEqual([]);
   });
 
-  it('keeps only words that start with the sound', () => {
-    const answers = answerWords(getGrapheme('m'), [word({ id: 'map', picture: '🗺️' }), word({ id: 'sit', picture: '🪑' })]);
-    expect(answers.map((w) => w.id)).toEqual(['map']);
+  it('bars the mnemonic by picture, whatever it is labelled', () => {
+    const m = withPictures('m', [{ emoji: getGrapheme('m').mnemonicEmoji, label: 'month' }]);
+    expect(answerPictures(m)).toEqual([]);
   });
 
-  it('keeps only words that have a picture', () => {
-    expect(answerWords(getGrapheme('a'), [word({ id: 'at', graphemes: ['a', 't'] })])).toEqual([]);
-  });
-
-  it('judges the mnemonic by picture, not by word: another word with the same picture is out too', () => {
-    // Different word, same moon.
-    const alsoMoon = word({ id: 'mum', picture: getGrapheme('m').mnemonicEmoji });
-    expect(answerWords(getGrapheme('m'), [alsoMoon])).toEqual([]);
-  });
-
-  it('does not treat another grapheme mnemonic as excluded', () => {
+  it('does not treat another grapheme mnemonic as barred', () => {
     // The snake is s's, so it is only barred from s.
-    const snakeWord = word({ id: 'sap', picture: getGrapheme('s').mnemonicEmoji });
-    expect(answerWords(getGrapheme('s'), [snakeWord])).toEqual([]);
-    expect(answerWords(getGrapheme('m'), [word({ id: 'map', picture: getGrapheme('s').mnemonicEmoji })]).map((w) => w.id)).toEqual(['map']);
+    const m = withPictures('m', [{ emoji: getGrapheme('s').mnemonicEmoji, label: 'mamba' }]);
+    expect(answerPictures(m)).toHaveLength(1);
+  });
+
+  it('keeps the rest of the pictures in order', () => {
+    expect(answerPictures(getGrapheme('m')).map((p) => p.label)).toEqual(['milk', 'monkey', 'map']);
   });
 });
 
 describe('pictureStartAnswers, from the Level 1 curriculum', () => {
-  const ids = (g: string) => pictureStartAnswers(g, 1).map((w) => w.id).sort();
-
-  it('finds the words for the five consonants', () => {
-    expect(ids('s')).toEqual(['sip', 'sit']);
-    expect(ids('p')).toEqual(['pat', 'pip', 'pit']);
-    expect(ids('m')).toEqual(['map', 'mat']);
-    expect(ids('t')).toEqual(['tap']);
-    expect(ids('f')).toEqual(['fit']);
+  it('has pictures for every Level 1 grapheme, the vowels included', () => {
+    for (const g of GRAPHEME_LIST) expect(pictureStartAnswers(g.id).length, g.id).toBeGreaterThanOrEqual(2);
   });
 
-  it('finds none for the vowels: at, am, if and it cannot be drawn', () => {
-    expect(ids('a')).toEqual([]);
-    expect(ids('i')).toEqual([]);
-  });
-
-  it('never returns a word showing its grapheme own mnemonic, for any grapheme', () => {
-    for (const g of Object.keys(GRAPHEMES)) {
-      for (const w of pictureStartAnswers(g, 1)) expect(w.picture, `${g}: ${w.id}`).not.toBe(GRAPHEMES[g].mnemonicEmoji);
+  it('never returns a picture showing its grapheme own mnemonic', () => {
+    for (const g of GRAPHEME_LIST) {
+      for (const p of pictureStartAnswers(g.id)) expect(p.emoji, `${g.id}: ${p.label}`).not.toBe(g.mnemonicEmoji);
     }
   });
 
   it('throws on a grapheme that does not exist, naming it', () => {
-    expect(() => pictureStartAnswers('zz', 1)).toThrow(/zz/);
+    expect(() => pictureStartAnswers('zz')).toThrow(/zz/);
   });
 });
 
 describe('hasInitialPicture', () => {
-  it('is true where some picturable word starts with the grapheme, and false for the vowels', () => {
-    for (const g of ['s', 'p', 'm', 't', 'f']) expect(hasInitialPicture(g, 1), g).toBe(true);
-    expect(hasInitialPicture('a', 1)).toBe(false);
-    expect(hasInitialPicture('i', 1)).toBe(false);
+  it('is true for all seven letters', () => {
+    for (const g of ['s', 'a', 't', 'p', 'i', 'm', 'f']) expect(hasInitialPicture(g), g).toBe(true);
   });
 });
 
@@ -92,20 +71,17 @@ describe('picture-start as a task type', () => {
     expect(type.secondaryTargets).toBe('none');
   });
 
-  it('can serve the five consonants and neither vowel', () => {
-    for (const g of ['s', 'p', 'm', 't', 'f']) expect(type.canServeTarget?.(g), g).toBe(true);
-    expect(type.canServeTarget?.('a')).toBe(false);
-    expect(type.canServeTarget?.('i')).toBe(false);
+  it('can serve every Level 1 letter, vowels included', () => {
+    for (const g of ['s', 'a', 't', 'p', 'i', 'm', 'f']) expect(type.canServeTarget?.(g), g).toBe(true);
   });
 
-  it('does not throw for a target it has never heard of', () => {
+  it('does not throw for a target it has never heard of, and says no', () => {
     expect(type.canServeTarget?.('zz')).toBe(false);
     expect(type.canServeTarget?.('mat')).toBe(false);
+    expect(picturesCanAnswerFor('mat')).toBe(false);
   });
 
-  it('makes the proving count two where Picture Start can serve it and one where it cannot', () => {
-    for (const g of ['s', 'p', 'm', 't', 'f']) expect(provingTaskTypeCount('LETTER_SOUND', g), g).toBe(2);
-    expect(provingTaskTypeCount('LETTER_SOUND', 'a')).toBe(1);
-    expect(provingTaskTypeCount('LETTER_SOUND', 'i')).toBe(1);
+  it('makes the proving count two for every letter: both vowels now have a second game', () => {
+    for (const g of ['s', 'a', 't', 'p', 'i', 'm', 'f']) expect(provingTaskTypeCount('LETTER_SOUND', g), g).toBe(2);
   });
 });

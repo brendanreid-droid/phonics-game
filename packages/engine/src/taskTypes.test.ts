@@ -135,8 +135,7 @@ describe('provingTaskTypeCount', () => {
     // SOUND_ID: sound-hunt directly, plus picture-match, word-pick, missing-letter and
     // word-builder through secondary credit. The other three skills get no composite credit.
     expect(provingTaskTypeCount('SOUND_ID', 's')).toBe(5);
-    // LETTER_SOUND: sound-singer for every sound, and picture-start for the sounds with a picturable
-    // word to answer with. The vowels have none, so they stay at one: see the per-target tests below.
+    // LETTER_SOUND: sound-singer and picture-start, which has pictures of its own for every letter.
     expect(provingTaskTypeCount('LETTER_SOUND', 's')).toBe(2);
     expect(provingTaskTypeCount('BLEND_READ', 'mat')).toBe(2);
     expect(provingTaskTypeCount('SEGMENT_SPELL', 'mat')).toBe(2);
@@ -216,9 +215,8 @@ describe('provingTaskTypeCount, per target', () => {
       for (const target of ['s', 'a', 't', 'p', 'i', 'm', 'f', 'mat', 'at']) {
         expect(provingTaskTypeCount(skill, target), `${skill}/${target}`).toBeGreaterThanOrEqual(1);
         // Every shipped type serves any target of its skill except Picture Start,
-        // which needs a picturable word beginning with the sound: not `a`, not `i`,
-        // and not a word id, which is no sound at all.
-        const noPicture = skill === 'LETTER_SOUND' && !['s', 't', 'p', 'm', 'f'].includes(target);
+        // which has pictures for the seven letters and none for a word id, which is no sound at all.
+        const noPicture = skill === 'LETTER_SOUND' && !['s', 'a', 't', 'p', 'i', 'm', 'f'].includes(target);
         const expected = noPicture ? provingTaskTypeCount(skill, 's') - 1 : provingTaskTypeCount(skill, 's');
         expect(provingTaskTypeCount(skill, target), `${skill}/${target}`).toBe(expected);
       }
@@ -230,10 +228,14 @@ describe('provingTaskTypeCount, per target', () => {
   });
 
   it('gives a different answer for different targets of the same skill', () => {
-    const pool = [...TASK_TYPES, onlyForM];
-    // m: sound-singer, picture-start and the stand-in. a: sound-singer only.
-    expect(provingTaskTypeCount('LETTER_SOUND', 'm', pool)).toBe(3);
+    // Picture Start is narrowed to `m` here, as it once was by the vowels having no picturable word.
+    const pool = TASK_TYPES.map((t) => (t.id === 'picture-start' ? { ...t, canServeTarget: (id: string) => id === 'm' } : t));
+    expect(provingTaskTypeCount('LETTER_SOUND', 'm', pool)).toBe(2);
     expect(provingTaskTypeCount('LETTER_SOUND', 'a', pool)).toBe(1);
+    // And a stand-in for a further game that serves only m raises m alone.
+    const more = [...pool, onlyForM];
+    expect(provingTaskTypeCount('LETTER_SOUND', 'm', more)).toBe(3);
+    expect(provingTaskTypeCount('LETTER_SOUND', 'a', more)).toBe(1);
   });
 
   it('asks the type about the target it was given, not some other', () => {

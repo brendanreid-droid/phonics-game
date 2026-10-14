@@ -1,64 +1,58 @@
-import { getGrapheme, picturableWordsStartingWith } from '@soundlings/curriculum';
-import type { Grapheme, GraphemeId, Word } from '@soundlings/curriculum';
+import { getGrapheme } from '@soundlings/curriculum';
+import type { Grapheme, GraphemeId, StartPicture } from '@soundlings/curriculum';
 
 /**
- * Which pictures can answer a Picture Start question. Lives in the engine,
- * not the app, because two things must agree on it: the mini-game, which draws
- * the pictures, and `TaskTypeMeta.canServeTarget`, which tells the mastery
- * model how many games can prove a sound. Two copies could drift, and a drift
- * is a sound that demands a second game nobody can schedule.
- */
-
-/**
- * From `candidates`, the words that can be the right answer to "which picture
- * starts with this letter's sound?".
+ * Which pictures can stand for a grapheme in Picture Start. Lives in the
+ * engine, not the app, because two things must agree on it: the mini-game, which
+ * draws the pictures, and `TaskTypeMeta.canServeTarget`, which tells the mastery
+ * model how many games can prove a sound. Two copies could drift, and a drift is
+ * a sound that demands a second game nobody can schedule.
  *
- * A word must start with the grapheme and have a picture. And its picture must
- * NOT be the grapheme's own mnemonic. `m`'s mnemonic is the moon, so the answer
- * is a mat or a map, never the moon: if the moon could be the answer, a child
- * could respond from the letter-picture pairing they were taught alongside the
- * sound, which is exactly the memorisation a second game is there to rule out.
- * A game passable by the same association is not a second proof.
+ * The pictures are the grapheme's own `startPictures`, chosen for this one game:
+ * named unambiguously by a five-year-old, with a name that begins with the
+ * sound. They are not word pictures. A word picture is survivable when
+ * ambiguous because the child reads the word; here the child NAMES the picture,
+ * so 💪 for "fit" (it is a muscle) would mark a child wrong for knowing /m/.
+ */
+
+/**
+ * The pictures that can stand for `grapheme`, as answer or as wrong answer.
  *
- * Judged by picture, not by word, so a different word drawn with the same
- * picture is barred as well.
+ * Never its own mnemonic. `m`'s mnemonic is the moon, so the answer is a milk or
+ * a monkey: if the moon could be the answer, a child could respond from the
+ * letter-picture pairing they were taught alongside the sound, which is the
+ * memorisation a second game exists to rule out. A game passable by the same
+ * association is not a second proof. The curriculum data is tested never to hold
+ * one, and this filter is the second line: it is the rule, in the one place both
+ * the mastery model and the UI go through.
  */
-export function answerWords(grapheme: Grapheme, candidates: readonly Word[]): Word[] {
-  return candidates.filter(
-    (word) =>
-      word.graphemes[0] === grapheme.id && word.picture !== undefined && word.picture !== grapheme.mnemonicEmoji,
-  );
+export function answerPictures(grapheme: Grapheme): StartPicture[] {
+  return grapheme.startPictures.filter((picture) => picture.emoji !== grapheme.mnemonicEmoji);
 }
 
-/** The words that can answer for this grapheme at this level. Throws on an unknown grapheme. */
-export function pictureStartAnswers(graphemeId: GraphemeId, levelNumber: number): Word[] {
-  const grapheme = getGrapheme(graphemeId);
-  return answerWords(grapheme, picturableWordsStartingWith(graphemeId, levelNumber));
+/** The pictures that can stand for this grapheme. Throws on an unknown grapheme. */
+export function pictureStartAnswers(graphemeId: GraphemeId): StartPicture[] {
+  return answerPictures(getGrapheme(graphemeId));
 }
 
 /**
- * Whether a picture can stand for this grapheme at all: some picturable word
- * starts with it and does not show its own mnemonic. That is what an answer
- * needs, and it is held to for a WRONG answer as well, so a card never shows a
- * letter's own mnemonic whichever letter is being asked about. False for the
- * vowels: no picturable Level 1 word starts with one.
+ * Whether a picture can stand for this grapheme at all, so Picture Start can be
+ * asked about it and a picture of it can be a wrong answer for another letter.
+ * True for every Level 1 grapheme, vowels included, because the pictures are
+ * chosen for this game rather than borrowed from words.
  */
-export function hasInitialPicture(graphemeId: GraphemeId, levelNumber: number): boolean {
-  return pictureStartAnswers(graphemeId, levelNumber).length > 0;
+export function hasInitialPicture(graphemeId: GraphemeId): boolean {
+  return pictureStartAnswers(graphemeId).length > 0;
 }
 
 /**
- * Whether Picture Start can be asked about this grapheme at all. Used as the
- * task type's `canServeTarget`, which has no level to hand, so it asks at the
- * level the grapheme is introduced in: a child cannot have met it earlier, and
- * a later level only adds words. An unknown id, or a word id, is simply "no".
+ * Whether Picture Start can be asked about this target. Used as the task type's
+ * `canServeTarget`. An unknown id, or a word id, is simply "no".
  */
 export function picturesCanAnswerFor(targetId: string): boolean {
-  let grapheme: Grapheme;
   try {
-    grapheme = getGrapheme(targetId);
+    return hasInitialPicture(targetId);
   } catch {
     return false;
   }
-  return hasInitialPicture(grapheme.id, grapheme.introducedInLevel);
 }

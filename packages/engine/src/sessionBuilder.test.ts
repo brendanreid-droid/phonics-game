@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getWord, graphemesForLevel } from '@soundlings/curriculum';
+import { getGrapheme, getWord, graphemesForLevel } from '@soundlings/curriculum';
 import type { Skill } from '@soundlings/curriculum';
 import { DEFAULT_CONFIG } from './config';
 import { applyAttempt, emptyRecord, getRecord, isMastered, strengthAt } from './mastery';
@@ -350,8 +350,7 @@ describe('buildSession for a brand-new child', () => {
 
   it('has three task types on day one, all of them sound games, because words wait until the sounds are known', () => {
     // Before invariant 5a this asserted three, with spelling credited for s, a and t; then two, the
-    // hunt and Sound Singer. Picture Start (Plan 3) makes it three again: s against t is the one
-    // pictured pair a brand-new child has met. See 'sounds before words' below, which also holds
+    // hunt and Sound Singer. Picture Start (Plan 3) makes it three again. See 'sounds before words' below, which also holds
     // the anti-deadlock property.
     for (const seed of SEEDS) {
       const plan = build({}, seed);
@@ -1305,13 +1304,13 @@ describe('buildSession: Missing Letter', () => {
 
 // ---------------------------------------------------------------------------
 // Plan 3 Task 5: Picture Start. A letter is shown and the child picks the
-// picture that starts with its sound. It exists only for the sounds that have a
-// picturable word beginning with them, so the builder must never ask it of a
-// vowel, and the proving count agrees.
+// picture that starts with its sound. Each letter has start pictures of its own,
+// so it is asked of every sound, the vowels included, and the proving count
+// agrees: every Level 1 sound can be proved two ways.
 // ---------------------------------------------------------------------------
 
 describe('buildSession: Picture Start', () => {
-  const PICTURED = ['s', 'p', 'm', 't', 'f'];
+  const ALL_LETTERS = ['s', 'a', 't', 'p', 'i', 'm', 'f'];
   const VOWELS = ['a', 'i'];
   const picks = (mastery: MasteryMap, extra: Partial<BuildSessionArgs> = {}, seeds: readonly string[] = SEEDS) =>
     seeds.flatMap((seed) => build(mastery, seed, extra)).filter((t) => t.taskTypeId === 'picture-start');
@@ -1330,30 +1329,32 @@ describe('buildSession: Picture Start', () => {
     expect(picks(masteredGraphemes(['s', 'a', 't', 'p'])).length).toBeGreaterThan(0);
   });
 
-  it('is never scheduled for a vowel, in any state, with any seed', () => {
-    // `at`, `am`, `if` and `it` are function words with no picture, so no picturable Level 1
-    // word starts with a vowel. A Picture Start asked about `a` would have no honest answer.
+  it('is scheduled for the vowels as well as the consonants, so a and i can be proved a second way', () => {
+    // This used to be refused: no picturable word starts with a vowel. Start pictures of their own
+    // (ant, ambulance; igloo, ink) close that gap, and the vowels are the hardest sounds in phonics.
+    const asked = new Set<string>();
+    for (const mastery of Object.values(ALL_STATES)) {
+      for (const task of picks(mastery)) asked.add(task.primaryTarget);
+    }
+    expect([...asked].sort()).toEqual([...ALL_LETTERS].sort());
+    const vowelTasks = picks(heard({ a: 2, i: 2, s: 2, t: 2, p: 2 })).filter((t) => VOWELS.includes(t.primaryTarget));
+    expect(vowelTasks.length).toBeGreaterThan(0);
+  });
+
+  it('only ever targets a letter that has pictures, in any state, with any seed', () => {
     let seen = 0;
     for (const [name, mastery] of Object.entries(ALL_STATES)) {
-      for (const seed of SEEDS) {
-        for (const task of build(mastery, seed)) {
-          if (task.taskTypeId !== 'picture-start') continue;
-          seen += 1;
-          expect(VOWELS, `${name}, ${seed}: ${task.id}`).not.toContain(task.primaryTarget);
-          expect(PICTURED, `${name}, ${seed}: ${task.id}`).toContain(task.primaryTarget);
-        }
+      for (const task of picks(mastery)) {
+        seen += 1;
+        expect(ALL_LETTERS, `${name}: ${task.id}`).toContain(task.primaryTarget);
+        expect(getGrapheme(task.primaryTarget).startPictures.length, `${name}: ${task.id}`).toBeGreaterThanOrEqual(2);
       }
     }
     expect(seen, 'the check is vacuous if Picture Start never comes up').toBeGreaterThan(30);
   });
 
-  it('is never scheduled for a vowel even when the vowels are the only sounds the child has mastered', () => {
-    for (const task of picks(masteredGraphemes(['a', 'i']))) expect(VOWELS).not.toContain(task.primaryTarget);
-    for (const task of picks(ALL_STATES['only a and i known'])) expect(VOWELS).not.toContain(task.primaryTarget);
-  });
-
-  it('still schedules Sound Singer for the vowels, so they keep a letter-to-sound game', () => {
-    // Day one: the vowels are in play and unmastered, so Sound Singer is the only way to ask them.
+  it('still schedules Sound Singer for the vowels too', () => {
+    // Day one: the vowels are in play and unmastered.
     const singers = SEEDS.flatMap((seed) => build({}, seed)).filter((t) => t.taskTypeId === 'sound-singer');
     expect(singers.some((t) => VOWELS.includes(t.primaryTarget))).toBe(true);
   });
@@ -1376,11 +1377,12 @@ describe('buildSession: Picture Start', () => {
     }
   });
 
-  it('only offers letters that have a picture to show, so every card can be drawn', () => {
-    // A wrong answer is the picture of a word beginning with another letter. A vowel has none.
+  it('only offers letters that have start pictures, so every card can be drawn', () => {
     for (const [name, mastery] of Object.entries(ALL_STATES)) {
       for (const task of picks(mastery)) {
-        for (const choice of task.choices) expect(PICTURED, `${name}: ${task.id} offers ${choice}`).toContain(choice);
+        for (const choice of task.choices) {
+          expect(getGrapheme(choice).startPictures.length, `${name}: ${task.id} offers ${choice}`).toBeGreaterThanOrEqual(2);
+        }
       }
     }
   });
@@ -1396,10 +1398,14 @@ describe('buildSession: Picture Start', () => {
     }
   });
 
-  it('can be asked of a brand-new child, with s against t, the only two pictured letters they know', () => {
+  it('can be asked of a brand-new child, with the three letters they have met', () => {
     const day1 = picks({}, {});
     expect(day1.length).toBeGreaterThan(0);
-    for (const task of day1) expect([...task.choices].sort(), task.id).toEqual(['s', 't']);
+    expect(new Set(day1.map((t) => t.primaryTarget)).size).toBeGreaterThan(1);
+    for (const task of day1) {
+      expect(task.choices, task.id).toHaveLength(2);
+      for (const c of task.choices) expect(['s', 'a', 't'], task.id).toContain(c);
+    }
   });
 
   it('shows a letter the child keeps mixing up with the target, ahead of the rest', () => {

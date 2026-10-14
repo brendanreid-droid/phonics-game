@@ -5,30 +5,24 @@ import { applyAttempt, emptyRecord, isMastered } from './mastery';
 import type { MasteryRecord } from './types';
 
 /**
- * Today every task type serves every target of its skill, so the per-target
- * count equals the per-skill count and `isMastered` cannot be told apart from
- * its old self by any real record. To pin that `isMastered` passes the TARGET
- * through, this file swaps in a pool containing a stand-in for Plan 3's Picture
- * Start: a second LETTER_SOUND game that exists for `m` and not for `a`.
+ * Every Level 1 sound now has two LETTER_SOUND games, so the per-target count
+ * equals the per-skill count for every real record and `isMastered` cannot be
+ * told apart from a per-skill one. To pin that `isMastered` passes the TARGET
+ * through, this file swaps in a pool in which Picture Start can serve `m` and
+ * nothing else, as it once could not serve the vowels: two games for `m`, one for
+ * `a`.
  *
  * Mocking the module is local to this file; the other mastery tests still see
  * the real pool.
  */
 vi.mock('./taskTypes', async (importOriginal) => {
   const original = await importOriginal<typeof import('./taskTypes')>();
-  const standIn = {
-    id: 'stand-in-second-singer',
-    skill: 'LETTER_SOUND' as const,
-    difficulty: 2,
-    minChoices: 2,
-    maxChoices: 3,
-    secondaryTargets: 'none' as const,
-    canServeTarget: (target: string) => target === 'm',
-  };
+  const pool = original.TASK_TYPES.map((type) =>
+    type.id === 'picture-start' ? { ...type, canServeTarget: (target: string) => target === 'm' } : type,
+  );
   return {
     ...original,
-    provingTaskTypeCount: (skill: Skill, target: TargetId) =>
-      original.provingTaskTypeCount(skill, target, [...original.TASK_TYPES, standIn]),
+    provingTaskTypeCount: (skill: Skill, target: TargetId) => original.provingTaskTypeCount(skill, target, pool),
   };
 });
 
@@ -59,7 +53,7 @@ describe('isMastered: the task-type bar is per target', () => {
   });
 
   it('accepts that sound once it has been proved two ways', () => {
-    const record = proven('m', 'LETTER_SOUND', ['sound-singer', 'stand-in-second-singer']);
+    const record = proven('m', 'LETTER_SOUND', ['sound-singer', 'picture-start']);
     expect(isMastered(record, NOW, DEFAULT_CONFIG)).toBe(true);
   });
 

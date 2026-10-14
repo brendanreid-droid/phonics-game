@@ -282,10 +282,8 @@ export function isPlayablePlan(plan: readonly TaskInstance[]): boolean {
         getGrapheme(task.correctChoice);
         task.choices.forEach((c) => getGrapheme(c));
         if (task.taskTypeId === 'picture-start') {
-          // Every letter is drawn as a picture of a word that starts with it. One with no
-          // picture (a vowel) would be a blank card, or have no honest answer at all.
-          const level = Math.max(1, ...task.choices.map((c) => getGrapheme(c).introducedInLevel));
-          if (!task.choices.every((c) => hasInitialPicture(c, level))) return false;
+          // Every letter is drawn as one of its start pictures. A letter with none would be a blank card.
+          if (!task.choices.every((c) => hasInitialPicture(c))) return false;
         }
         return task.choices.includes(task.correctChoice);
       }

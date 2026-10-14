@@ -28,6 +28,13 @@ export const SKILLS = [
 
 export type Skill = (typeof SKILLS)[number];
 
+/** A picture a child can name unprompted, whose name starts with a grapheme's sound. */
+export interface StartPicture {
+  emoji: string;
+  /** What a five-year-old calls it. Begins with the grapheme. */
+  label: string;
+}
+
 export interface Grapheme {
   id: GraphemeId;
   /** The sound this grapheme makes in Level 1 words. */
@@ -38,6 +45,15 @@ export interface Grapheme {
   mnemonic: string;
   /** Stand-in art for the mnemonic until illustrated. */
   mnemonicEmoji: string;
+  /**
+   * Pictures for Picture Start, chosen for one purpose: being named
+   * unambiguously, with a name that starts with this grapheme's sound. They are
+   * NOT the pictures of words (a word picture is survivable when ambiguous
+   * because the child reads the word; here they name the picture). Never the
+   * mnemonic: a mnemonic answer can be given from the taught pairing alone.
+   * Short vowels only: no ice or iguana for `i`.
+   */
+  startPictures: readonly StartPicture[];
   /** Audio KEYS, never file paths. See packages/audio. */
   audio: { phoneme: string; letterName: string };
   introducedInLevel: number;

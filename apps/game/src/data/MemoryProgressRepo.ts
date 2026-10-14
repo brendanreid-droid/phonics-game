@@ -84,6 +84,12 @@ export class MemoryProgressRepo implements ProgressRepo {
     if (completions[level] === undefined) completions[level] = at;
   }
 
+  async mergeCompletion(profileId: string, level: number, at: number): Promise<void> {
+    const completions = this.state(profileId).completions;
+    const existing = completions[level];
+    if (existing === undefined || at < existing) completions[level] = at;
+  }
+
   async loadPlayedDates(profileId: string): Promise<string[]> {
     return copy(this.state(profileId).playedDates);
   }

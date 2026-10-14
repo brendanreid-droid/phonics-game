@@ -69,6 +69,16 @@ export interface ProgressRepo {
    * child must never lose a level they have finished.
    */
   markLevelComplete(profileId: string, level: number, at: number): Promise<void>;
+  /**
+   * Latches a level as complete at the EARLIER of the time already stored and
+   * the one given. For sync only.
+   *
+   * `markLevelComplete` keeps the first time latched, so that a clock that moves
+   * backwards cannot rewrite when a child did something. Sync is different: it
+   * brings in a time from another device, and when that device finished the level
+   * first, the earlier time is the true one. Never moves a time later.
+   */
+  mergeCompletion(profileId: string, level: number, at: number): Promise<void>;
 
   /** Local YYYY-MM-DD dates on which a quest was finished, ascending, each once. */
   loadPlayedDates(profileId: string): Promise<string[]>;

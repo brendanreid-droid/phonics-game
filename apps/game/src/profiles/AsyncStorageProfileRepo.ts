@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { avatarById } from './avatars';
+import { newUuid } from '@soundlings/api';
+import { avatarById, knownAvatar } from './avatars';
 import { nameError, normaliseName } from './Profile';
 import type { Profile } from './Profile';
 import type { CreateProfileArgs, ProfileRepo } from './ProfileRepo';
@@ -53,7 +54,7 @@ export class AsyncStorageProfileRepo implements ProfileRepo {
       avatarById(args.avatarId); // throws on an unknown avatar
 
       const profile: Profile = {
-        id: this.newId(args.now, read.profiles),
+        id: this.newId(read.profiles),
         name: normaliseName(args.name),
         avatarId: args.avatarId,
         createdAt: args.now,
@@ -62,6 +63,14 @@ export class AsyncStorageProfileRepo implements ProfileRepo {
       // Not caught: see the class comment.
       await this.writeProfiles([...read.profiles, profile]);
       return { ...profile };
+    });
+  }
+
+  adopt(profile: Profile): Promise<void> {
+    return this.serial(async () => {
+      const read = await this.readForUpdate();
+      if (read.profiles.some((p) => p.id === profile.id)) return;
+      await this.writeProfiles([...read.profiles, { ...profile, avatarId: knownAvatar(profile.avatarId) }]);
     });
   }
 
@@ -182,10 +191,12 @@ export class AsyncStorageProfileRepo implements ProfileRepo {
    * The random part makes a clash vanishingly rare; the suffix loop makes it
    * impossible, and unlike re-rolling it terminates whatever the random source.
    */
-  private newId(now: number, existing: readonly Profile[]): string {
-    const base = `${now.toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`;
-    let id = base;
-    for (let n = 2; existing.some((p) => p.id === id); n += 1) id = `${base}-${n}`;
+  private newId(existing: readonly Profile[]): string {
+    // A UUID, because the id is also the row's key on the server if the parent
+    // signs in. Profiles made before sync have short ids; the sync layer maps
+    // those to a UUID itself (see remoteProfileId in @soundlings/api).
+    let id = newUuid();
+    while (existing.some((p) => p.id === id)) id = newUuid();
     return id;
   }
 }

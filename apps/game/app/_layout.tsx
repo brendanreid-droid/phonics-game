@@ -3,10 +3,11 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { tokens } from '@soundlings/ui';
-import { AsyncStorageProgressRepo } from '../src/data/AsyncStorageProgressRepo';
 import { FONT_ASSETS } from '../src/fonts';
 import { AsyncStoragePinRepo } from '../src/parent/AsyncStoragePinRepo';
 import { ProfileProvider } from '../src/profiles/ProfileContext';
+import { createSyncRuntime } from '../src/sync/createSyncRuntime';
+import { SyncProvider } from '../src/sync/SyncContext';
 
 /**
  * Plan 1 hard-coded a single profile with this id in quest.tsx. That data
@@ -19,8 +20,11 @@ const LEGACY_PROFILE_ID = 'dev-profile';
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts(FONT_ASSETS);
 
-  // One progress store for the whole app: its write queue is per instance.
-  const progress = useMemo(() => new AsyncStorageProgressRepo(), []);
+  // One progress store for the whole app: its write queue is per instance. It is
+  // the device's own storage with sync wrapped around it, and sync is best effort
+  // and never in the way of play. See SyncingProgressRepo.
+  const sync = useMemo(() => createSyncRuntime(), []);
+  const progress = sync.progress;
   const pin = useMemo(() => new AsyncStoragePinRepo(), []);
 
   useEffect(() => {
@@ -40,15 +44,17 @@ export default function RootLayout() {
   if (!fontsLoaded && !fontError) return null;
 
   return (
-    <ProfileProvider progress={progress} pin={pin}>
-      <StatusBar hidden />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: tokens.color.paper },
-          animation: 'fade',
-        }}
-      />
+    <ProfileProvider repo={sync.profiles} progress={progress} pin={pin}>
+      <SyncProvider runtime={sync}>
+        <StatusBar hidden />
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: tokens.color.paper },
+            animation: 'fade',
+          }}
+        />
+      </SyncProvider>
     </ProfileProvider>
   );
 }

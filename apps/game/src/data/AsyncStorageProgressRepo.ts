@@ -175,6 +175,18 @@ export class AsyncStorageProgressRepo implements ProgressRepo {
     });
   }
 
+  mergeCompletion(profileId: string, level: number, at: number): Promise<void> {
+    return this.serial(async () => {
+      const key = this.key(profileId, 'completions');
+      const result = await this.read<Record<number, number>>(key, isCompletions);
+      if (result.kind === 'io') return;
+      if (result.kind === 'corrupt') await this.quarantine(key, result.raw);
+      const existing = result.kind === 'ok' ? result.value : {};
+      if (existing[level] !== undefined && existing[level] <= at) return;
+      await this.write(key, { ...existing, [level]: at });
+    });
+  }
+
   loadPlayedDates(profileId: string): Promise<string[]> {
     return this.serial(async () => {
       const result = await this.read<string[]>(this.key(profileId, 'playedDates'), isDateList);

@@ -1,9 +1,12 @@
 import { useCallback, useState } from 'react';
 import { Redirect, useFocusEffect, useRouter } from 'expo-router';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LEVELS } from '@soundlings/curriculum';
 import { tokens } from '@soundlings/ui';
 import { PinGate } from '../src/parent/PinGate';
+import { markUnlocked } from '../src/parent/unlockSession';
+import { useSync } from '../src/sync/SyncContext';
+import type { SyncStatus } from '../src/sync/SyncService';
 import { parentSummary } from '../src/parent/parentSummary';
 import type { ParentSummary } from '../src/parent/parentSummary';
 import type { SoundState } from '../src/parent/soundReport';
@@ -26,6 +29,7 @@ export default function Parent() {
   const { ready, selected, progress, pin } = useProfile();
   const [unlocked, setUnlocked] = useState(false);
   const [summary, setSummary] = useState<ParentSummary | null>(null);
+  const { status: sync, syncNow } = useSync();
 
   const profileId = selected?.id ?? null;
 
@@ -69,7 +73,10 @@ export default function Parent() {
           <PinGate
             pin={pin}
             reason="To open the grown-ups' pages"
-            onUnlocked={() => setUnlocked(true)}
+            onUnlocked={() => {
+              markUnlocked();
+              setUnlocked(true);
+            }}
             onCancel={() => router.replace('/island')}
           />
         </View>
@@ -96,6 +103,8 @@ export default function Parent() {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.column}>
           <Text accessibilityRole="header" style={styles.headline}>{summary.headline}</Text>
+
+          <SyncCard status={sync} onSignIn={() => router.push('/signin')} onSyncNow={() => void syncNow()} />
 
           {summary.needsAHand.raised ? (
             <View accessible accessibilityRole="summary" style={styles.helpCard}>
@@ -178,6 +187,55 @@ export default function Parent() {
   );
 }
 
+/**
+ * Where sync is shown, and the only place a sync problem is ever shown. A child
+ * never sees any of this. Quiet by design: the game is fully playable whatever
+ * it says.
+ */
+function SyncCard(props: { status: SyncStatus; onSignIn: () => void; onSyncNow: () => void }) {
+  const { status } = props;
+  if (status.kind === 'unavailable') return null;
+
+  if (status.kind === 'signed-out') {
+    return (
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Keep their progress safe</Text>
+        <Text style={styles.body}>
+          Signing in keeps progress safe if this device is lost, and lets you see it from your phone. It is optional.
+        </Text>
+        <Pressable accessibilityRole="button" onPress={props.onSignIn} style={styles.syncButton}>
+          <Text style={styles.syncButtonText}>Sign in</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  const line = status.syncing
+    ? 'Saving…'
+    : status.lastPassIncomplete
+      ? 'Could not finish saving just now. Nothing is lost, and it will try again.'
+      : status.lastSyncedAt !== null
+        ? 'Progress is saved online.'
+        : 'Signed in.';
+  return (
+    <View style={styles.card}>
+      <Text style={styles.sectionTitle}>Keep their progress safe</Text>
+      <Text style={styles.body}>
+        {status.email ? `${status.email}. ` : ''}
+        {line}
+      </Text>
+      <View style={styles.syncRow}>
+        <Pressable accessibilityRole="button" onPress={props.onSyncNow} disabled={status.syncing} style={styles.syncButton}>
+          <Text style={styles.syncButtonText}>Save now</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" onPress={props.onSignIn} style={[styles.syncButton, styles.syncButtonQuiet]}>
+          <Text style={styles.syncButtonText}>Account</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 function Section(props: { title: string; note?: string; children: React.ReactNode }) {
   return (
     <View style={styles.section}>
@@ -235,6 +293,19 @@ const styles = StyleSheet.create({
   helpBody: { fontFamily: tokens.font.ui, fontSize: tokens.type.body + 2, lineHeight: 28, color: tokens.color.ink },
 
   card: { backgroundColor: tokens.color.tile, borderRadius: tokens.radius.lg, padding: tokens.space.lg },
+  syncRow: { flexDirection: 'row', gap: tokens.space.sm, marginTop: tokens.space.sm },
+  syncButton: {
+    minHeight: tokens.tap.min,
+    borderRadius: tokens.radius.pill,
+    backgroundColor: tokens.color.accent,
+    paddingHorizontal: tokens.space.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'flex-start',
+    marginTop: tokens.space.sm,
+  },
+  syncButtonQuiet: { backgroundColor: 'transparent', borderWidth: 2, borderColor: tokens.color.tileEdge },
+  syncButtonText: { fontFamily: tokens.font.ui, fontSize: tokens.type.body, color: tokens.color.onAccent },
   section: { gap: tokens.space.sm },
   sectionTitle: { fontFamily: tokens.font.ui, fontSize: tokens.type.title - 6, color: tokens.color.ink },
   note: { fontFamily: tokens.font.ui, fontSize: tokens.type.caption, color: tokens.color.inkSoft },

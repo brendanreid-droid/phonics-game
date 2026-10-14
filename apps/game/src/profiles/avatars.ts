@@ -35,6 +35,15 @@ export function avatarById(id: string): Avatar {
   return found;
 }
 
+/**
+ * The id if it is a face this build knows, else the first face. A profile can
+ * arrive from a newer build with an avatar this one has never heard of, and the
+ * picker must not crash on it.
+ */
+export function knownAvatar(id: string): string {
+  return AVATARS.some((a) => a.id === id) ? id : AVATARS[0].id;
+}
+
 /** The first face nobody has taken, or the first of all if they are all used. */
 export function nextAvatarFor(takenIds: readonly string[]): Avatar {
   return AVATARS.find((a) => !takenIds.includes(a.id)) ?? AVATARS[0];

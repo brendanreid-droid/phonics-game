@@ -408,6 +408,38 @@ export function describeProgressRepo(name: string, fresh: () => ProgressRepo): v
         expect(await store.loadCompletions('kid')).toEqual({ 1: 1000, 2: 7000 });
       });
 
+      describe('mergeCompletion (sync)', () => {
+        it('latches a level that was not latched', async () => {
+          const store = fresh();
+          await store.mergeCompletion('kid', 1, 3000);
+          expect(await store.loadCompletions('kid')).toEqual({ 1: 3000 });
+        });
+
+        it('takes an EARLIER time than the one stored: another device finished first', async () => {
+          const store = fresh();
+          await store.markLevelComplete('kid', 1, 5000);
+          await store.mergeCompletion('kid', 1, 2000);
+          expect(await store.loadCompletions('kid')).toEqual({ 1: 2000 });
+        });
+
+        it('never moves a time LATER', async () => {
+          const store = fresh();
+          await store.markLevelComplete('kid', 1, 2000);
+          await store.mergeCompletion('kid', 1, 9000);
+          expect(await store.loadCompletions('kid')).toEqual({ 1: 2000 });
+        });
+
+        it('leaves other levels and other children alone', async () => {
+          const store = fresh();
+          await store.markLevelComplete('kid', 1, 5000);
+          await store.markLevelComplete('kid', 2, 6000);
+          await store.markLevelComplete('other', 1, 7000);
+          await store.mergeCompletion('kid', 1, 1000);
+          expect(await store.loadCompletions('kid')).toEqual({ 1: 1000, 2: 6000 });
+          expect(await store.loadCompletions('other')).toEqual({ 1: 7000 });
+        });
+      });
+
       it('latches levels independently, and a later level does not disturb an earlier', async () => {
         const store = fresh();
         await store.markLevelComplete('kid', 1, 1000);

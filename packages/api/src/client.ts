@@ -59,6 +59,9 @@ export function createSupabase(env: SupabaseEnv, options: ClientOptions = {}): S
   return createClient(env.url, env.anonKey, {
     auth: {
       storage: options.storage,
+      // PKCE: the link carries a one-time code that only this client can redeem,
+      // which is what a deep link on a phone should carry rather than a token.
+      flowType: 'pkce',
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: options.detectSessionInUrl ?? false,

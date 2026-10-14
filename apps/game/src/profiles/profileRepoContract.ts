@@ -128,6 +128,49 @@ export function describeProfileRepo(name: string, fresh: () => ProfileRepo): voi
       expect(await repo.selectedId()).toBeNull();
     });
 
+    describe('adopt (sync)', () => {
+      const elsewhere = {
+        id: '3f2b8a40-0000-4000-8000-000000000001',
+        name: 'Zed',
+        avatarId: AVATARS[1].id,
+        createdAt: 50,
+        lastPlayedOn: '2026-10-01',
+      };
+
+      it('adds a profile under the id it already has, keeping every field', async () => {
+        const repo = fresh();
+        await repo.adopt(elsewhere);
+        expect(await repo.list()).toEqual([elsewhere]);
+      });
+
+      it('is idempotent: adopting again changes nothing, and does not overwrite', async () => {
+        const repo = fresh();
+        await repo.adopt(elsewhere);
+        await repo.adopt({ ...elsewhere, name: 'Changed', lastPlayedOn: null });
+        expect(await repo.list()).toEqual([elsewhere]);
+      });
+
+      it('keeps a child whose name matches one already here: refusing would lose their history', async () => {
+        const repo = fresh();
+        await repo.create({ name: 'Zed', avatarId: AVATARS[0].id, now: 10 });
+        await repo.adopt(elsewhere);
+        expect((await repo.list()).map((p) => p.id)).toHaveLength(2);
+      });
+
+      it('shows an avatar this build does not know as a face it does, rather than crash the picker', async () => {
+        const repo = fresh();
+        await repo.adopt({ ...elsewhere, avatarId: 'a-face-from-the-future' });
+        expect((await repo.list())[0].avatarId).toBe(AVATARS[0].id);
+      });
+
+      it('can then be removed like any other profile', async () => {
+        const repo = fresh();
+        await repo.adopt(elsewhere);
+        await repo.remove(elsewhere.id);
+        expect(await repo.list()).toEqual([]);
+      });
+    });
+
     it('removes a profile', async () => {
       const repo = fresh();
       const created = await repo.create({ name: 'Ada', avatarId: AVATARS[0].id, now: 1 });

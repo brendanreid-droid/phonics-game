@@ -25,6 +25,16 @@ export interface ProfileRepo {
    * profile that silently fails to persist leaves a child playing into a void.
    */
   create(args: CreateProfileArgs): Promise<Profile>;
+  /**
+   * Adds a profile made on another device, under the id it already has. For sync
+   * only. Idempotent: a profile with that id is left exactly as it is.
+   *
+   * Skips the name rule that `create` enforces. Two devices that both made an
+   * "Ada" while offline each hold a real child's history, and refusing one would
+   * mean losing it; two Adas in the picker is the lesser harm and a grown-up can
+   * fix it. Rejects, rather than failing quietly, if it could not be saved.
+   */
+  adopt(profile: Profile): Promise<void>;
   remove(id: string): Promise<void>;
   selectedId(): Promise<string | null>;
   select(id: string | null): Promise<void>;

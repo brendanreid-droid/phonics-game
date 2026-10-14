@@ -1,4 +1,4 @@
-import { avatarById } from './avatars';
+import { avatarById, knownAvatar } from './avatars';
 import { nameError, normaliseName } from './Profile';
 import type { Profile } from './Profile';
 import type { CreateProfileArgs, ProfileRepo } from './ProfileRepo';
@@ -39,6 +39,11 @@ export class MemoryProfileRepo implements ProfileRepo {
     };
     this.profiles.push(profile);
     return { ...profile };
+  }
+
+  async adopt(profile: Profile): Promise<void> {
+    if (this.profiles.some((p) => p.id === profile.id)) return;
+    this.profiles.push({ ...profile, avatarId: knownAvatar(profile.avatarId) });
   }
 
   async remove(id: string): Promise<void> {

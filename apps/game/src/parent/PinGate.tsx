@@ -22,10 +22,16 @@ export function PinGate(props: {
   pin: PinRepo;
   /** What the PIN is being asked for, in a few words. "To open the grown-ups' pages" */
   reason: string;
+  /**
+   * What is behind the PIN, shown only when a PIN is being chosen. A first-time
+   * grown-up should learn what the area is before being asked to invent a code
+   * for it. Left out where the PIN guards a single action (deleting a profile).
+   */
+  about?: string;
   onUnlocked: () => void;
   onCancel: () => void;
 }) {
-  const { pin, reason, onUnlocked, onCancel } = props;
+  const { pin, reason, about, onUnlocked, onCancel } = props;
   const [step, setStep] = useState<Step>('loading');
   const [entry, setEntry] = useState('');
   const [first, setFirst] = useState('');
@@ -143,18 +149,29 @@ export function PinGate(props: {
     );
   }
 
-  const heading =
-    step === 'enter' ? 'Grown-ups, enter your PIN' : step === 'choose' ? 'Choose a PIN' : 'Type it once more';
+  // With an explanation to give, the first screen is about the area, and the
+  // PIN is introduced as the thing that keeps a child out of it.
+  const explaining = step === 'choose' && about !== undefined;
+  const heading = explaining
+    ? "The grown-ups' area"
+    : step === 'enter'
+      ? 'Grown-ups, enter your PIN'
+      : step === 'choose'
+        ? 'Choose a PIN'
+        : 'Type it once more';
   const hint =
     step === 'enter'
       ? reason
-      : step === 'choose'
-        ? `Four digits, ${reason.charAt(0).toLowerCase()}${reason.slice(1)}. It keeps young children out; it is not a lock against adults.`
-        : 'To check it was typed as you meant.';
+      : explaining
+        ? 'First, choose a four-digit PIN. It keeps a curious five-year-old out; it is not a lock against adults.'
+        : step === 'choose'
+          ? `Four digits, ${reason.charAt(0).toLowerCase()}${reason.slice(1)}. It keeps young children out; it is not a lock against adults.`
+          : 'To check it was typed as you meant.';
 
   return (
     <View style={styles.box}>
       <Text accessibilityRole="header" style={styles.heading}>{heading}</Text>
+      {explaining ? <Text style={styles.about}>{about}</Text> : null}
       <Text style={styles.body}>{hint}</Text>
       <TextInput
         key={step}
@@ -193,6 +210,7 @@ const styles = StyleSheet.create({
   box: { alignSelf: 'stretch', alignItems: 'center', gap: tokens.space.sm },
   heading: { fontFamily: tokens.font.ui, fontSize: tokens.type.title - 6, color: tokens.color.ink, textAlign: 'center' },
   body: { fontFamily: tokens.font.ui, fontSize: tokens.type.body - 2, color: tokens.color.inkSoft, textAlign: 'center', maxWidth: 440 },
+  about: { fontFamily: tokens.font.ui, fontSize: tokens.type.body, lineHeight: 26, color: tokens.color.ink, textAlign: 'center', maxWidth: 440 },
   input: {
     width: 200,
     height: tokens.tap.primary - 80,

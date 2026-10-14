@@ -73,6 +73,7 @@ export default function Parent() {
           <PinGate
             pin={pin}
             reason="To open the grown-ups' pages"
+            about={`Here you can see which sounds ${selected.name} knows, what they are mixing up, and what to practise together. It is also where you sign in to keep their progress safe.`}
             onUnlocked={() => {
               markUnlocked();
               setUnlocked(true);
@@ -203,8 +204,8 @@ function SyncCard(props: { status: SyncStatus; onSignIn: () => void; onSyncNow: 
         <Text style={styles.body}>
           Signing in keeps progress safe if this device is lost, and lets you see it from your phone. It is optional.
         </Text>
-        <Pressable accessibilityRole="button" onPress={props.onSignIn} style={styles.syncButton}>
-          <Text style={styles.syncButtonText}>Sign in</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel="Sign in" onPress={props.onSignIn} style={styles.syncButton}>
+          <Text style={styles.syncButtonText}>Sign in with your email</Text>
         </Pressable>
       </View>
     );

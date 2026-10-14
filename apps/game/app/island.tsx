@@ -125,9 +125,23 @@ export default function Island() {
         <Pressable accessibilityRole="button" accessibilityLabel="Trophies" onPress={() => router.push('/trophies')} style={styles.link}>
           <Text style={styles.linkText}>Trophies</Text>
         </Pressable>
-        {/* Small and plain, like the others: a child can find it and lose interest. It asks for the PIN. */}
-        <Pressable accessibilityRole="button" accessibilityLabel="Grown-ups" onPress={() => router.push('/parent')} style={styles.link}>
-          <Text style={styles.linkText}>Grown-ups</Text>
+      </View>
+
+      {/*
+        The adult's door, on its own line and drawn as a plain bordered label
+        rather than a link: it must be findable by a parent who has never seen
+        the game, yet look like admin to a child. No fill, no colour, small type.
+        It asks for the PIN; the PIN screen says what lies behind it.
+      */}
+      <View style={styles.grownUpsBar}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Grown-ups: progress and sign in"
+          onPress={() => router.push('/parent')}
+          style={styles.grownUps}
+        >
+          <Text style={styles.grownUpsLock}>🔒</Text>
+          <Text style={styles.grownUpsText}>For grown-ups: progress and sign in</Text>
         </Pressable>
       </View>
     </View>
@@ -187,5 +201,18 @@ const styles = StyleSheet.create({
   playText: { fontFamily: tokens.font.ui, fontSize: tokens.type.word - 8, color: tokens.color.onAccent },
   bottomBar: { flexDirection: 'row', justifyContent: 'center', gap: tokens.space.xl },
   link: { minHeight: tokens.tap.min, paddingHorizontal: tokens.space.md, justifyContent: 'center' },
+  grownUpsBar: { alignItems: 'center', marginTop: tokens.space.sm },
+  grownUps: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: tokens.space.sm,
+    minHeight: tokens.tap.min,
+    paddingHorizontal: tokens.space.md,
+    borderRadius: tokens.radius.sm,
+    borderWidth: 1.5,
+    borderColor: tokens.color.tileEdge,
+  },
+  grownUpsLock: { fontSize: tokens.type.caption, opacity: 0.7 },
+  grownUpsText: { fontFamily: tokens.font.ui, fontSize: tokens.type.caption, color: tokens.color.inkSoft },
   linkText: { fontFamily: tokens.font.ui, fontSize: tokens.type.caption + 2, color: tokens.color.inkSoft },
 });

@@ -125,6 +125,10 @@ export default function Island() {
         <Pressable accessibilityRole="button" accessibilityLabel="Trophies" onPress={() => router.push('/trophies')} style={styles.link}>
           <Text style={styles.linkText}>Trophies</Text>
         </Pressable>
+        {/* Small and plain, like the others: a child can find it and lose interest. It asks for the PIN. */}
+        <Pressable accessibilityRole="button" accessibilityLabel="Grown-ups" onPress={() => router.push('/parent')} style={styles.link}>
+          <Text style={styles.linkText}>Grown-ups</Text>
+        </Pressable>
       </View>
     </View>
   );

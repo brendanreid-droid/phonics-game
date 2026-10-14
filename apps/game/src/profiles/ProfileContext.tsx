@@ -2,6 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from 'react';
 import { AsyncStorageProgressRepo } from '../data/AsyncStorageProgressRepo';
 import type { ProgressRepo } from '../data/ProgressRepo';
+import { AsyncStoragePinRepo } from '../parent/AsyncStoragePinRepo';
+import type { PinRepo } from '../parent/PinRepo';
 import { AsyncStorageProfileRepo } from './AsyncStorageProfileRepo';
 import { deleteProfile } from './deleteProfile';
 import type { Profile } from './Profile';
@@ -18,6 +20,8 @@ interface ProfileState {
    * would a quest against a profile being deleted.
    */
   progress: ProgressRepo;
+  /** The grown-up PIN. One instance for the whole app, for the same reason as `progress`. */
+  pin: PinRepo;
   refresh: () => Promise<void>;
   create: (args: Omit<CreateProfileArgs, 'now'>) => Promise<Profile>;
   /** Deletes the profile AND that child's progress. Rejects, leaving both in place, if the progress could not be cleared. */
@@ -33,13 +37,16 @@ export function ProfileProvider({
   children,
   repo,
   progress,
+  pin,
 }: {
   children: ReactNode;
   repo?: ProfileRepo;
   progress?: ProgressRepo;
+  pin?: PinRepo;
 }) {
   const store = useMemo(() => repo ?? new AsyncStorageProfileRepo(), [repo]);
   const progressStore = useMemo(() => progress ?? new AsyncStorageProgressRepo(), [progress]);
+  const pinStore = useMemo(() => pin ?? new AsyncStoragePinRepo(), [pin]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
@@ -63,6 +70,7 @@ export function ProfileProvider({
       profiles,
       selected: profiles.find((p) => p.id === selectedId) ?? null,
       progress: progressStore,
+      pin: pinStore,
       refresh,
       create: async (args) => {
         const created = await store.create({ ...args, now: Date.now() });
@@ -86,7 +94,7 @@ export function ProfileProvider({
         await refresh();
       },
     }),
-    [ready, profiles, selectedId, refresh, store, progressStore],
+    [ready, profiles, selectedId, refresh, store, progressStore, pinStore],
   );
 
   return <ProfileCtx.Provider value={value}>{children}</ProfileCtx.Provider>;

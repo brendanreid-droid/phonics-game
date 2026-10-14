@@ -13,8 +13,8 @@ import type { Profile } from '../src/profiles/Profile';
  * Who is playing? The first screen a child sees, so it works with no reading:
  * a row of large faces, tap yours. Names are for the grown-up.
  *
- * Choosing a face is never gated. Adding and deleting are, with a two-second
- * hold (see holdGate.ts).
+ * Choosing a face is never gated, and neither is adding one. Deleting a profile
+ * asks for the grown-up PIN (see DeleteProfileSheet).
  */
 export default function ProfilePicker() {
   const router = useRouter();

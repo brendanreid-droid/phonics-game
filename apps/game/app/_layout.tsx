@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { tokens } from '@soundlings/ui';
 import { AsyncStorageProgressRepo } from '../src/data/AsyncStorageProgressRepo';
 import { FONT_ASSETS } from '../src/fonts';
+import { AsyncStoragePinRepo } from '../src/parent/AsyncStoragePinRepo';
 import { ProfileProvider } from '../src/profiles/ProfileContext';
 
 /**
@@ -20,6 +21,7 @@ export default function RootLayout() {
 
   // One progress store for the whole app: its write queue is per instance.
   const progress = useMemo(() => new AsyncStorageProgressRepo(), []);
+  const pin = useMemo(() => new AsyncStoragePinRepo(), []);
 
   useEffect(() => {
     // A font that fails to load otherwise degrades silently to the system
@@ -38,7 +40,7 @@ export default function RootLayout() {
   if (!fontsLoaded && !fontError) return null;
 
   return (
-    <ProfileProvider progress={progress}>
+    <ProfileProvider progress={progress} pin={pin}>
       <StatusBar hidden />
       <Stack
         screenOptions={{

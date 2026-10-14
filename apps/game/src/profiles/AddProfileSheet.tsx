@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { tokens } from '@soundlings/ui';
 import { AVATARS, nextAvatarFor } from './avatars';
-import { HoldButton } from './HoldButton';
 import { MAX_NAME_LENGTH, nameError } from './Profile';
 import type { Profile } from './Profile';
 
@@ -10,7 +9,9 @@ import type { Profile } from './Profile';
  * Where a grown-up adds a child. The child never types: a grown-up types the
  * name once and the child is known thereafter by the face they pick.
  *
- * Creating is gated by a hold, not a tap, for the reason in holdGate.ts.
+ * Creating is not gated: adding a player destroys nothing, and a grown-up
+ * setting the device up for the first time should not meet a PIN before
+ * anything exists. Deleting is the gated act (see DeleteProfileSheet).
  */
 export function AddProfileSheet(props: {
   visible: boolean;
@@ -62,7 +63,7 @@ export function AddProfileSheet(props: {
         <View style={styles.sheet}>
           <Text style={styles.heading}>Add a player</Text>
           <Text style={styles.instruction}>
-            Grown-ups: type a name, pick a face, then press and hold Add for two seconds.
+            Grown-ups: type a name and pick a face.
           </Text>
 
           <TextInput
@@ -104,7 +105,16 @@ export function AddProfileSheet(props: {
             <Pressable accessibilityRole="button" accessibilityLabel="Cancel" onPress={onCancel} style={styles.cancel}>
               <Text style={styles.cancelText}>Cancel</Text>
             </Pressable>
-            <HoldButton label="Hold to add" disabled={!canAdd} onConfirm={() => void add()} />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Add"
+              accessibilityState={{ disabled: !canAdd }}
+              disabled={!canAdd}
+              onPress={() => void add()}
+              style={[styles.addButton, !canAdd && styles.addButtonDisabled]}
+            >
+              <Text style={styles.addButtonText}>Add</Text>
+            </Pressable>
           </View>
         </View>
       </View>
@@ -164,5 +174,16 @@ const styles = StyleSheet.create({
     marginTop: tokens.space.md,
   },
   cancel: { height: tokens.tap.control, paddingHorizontal: tokens.space.lg, justifyContent: 'center' },
+  addButton: {
+    minWidth: 160,
+    height: tokens.tap.control,
+    paddingHorizontal: tokens.space.lg,
+    borderRadius: tokens.radius.pill,
+    backgroundColor: tokens.color.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addButtonDisabled: { opacity: 0.4 },
+  addButtonText: { fontFamily: tokens.font.ui, fontSize: tokens.type.body, color: tokens.color.onAccent },
   cancelText: { fontFamily: tokens.font.ui, fontSize: tokens.type.body, color: tokens.color.inkSoft },
 });

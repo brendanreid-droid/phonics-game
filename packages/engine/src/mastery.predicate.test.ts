@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { GRAPHEME_LIST, WORD_LIST, picturableWordsForLevel } from '@soundlings/curriculum';
+import type { Skill } from '@soundlings/curriculum';
 import { DEFAULT_CONFIG, withDefaults } from './config';
 import { applyAttempt, emptyRecord, getRecord, isMastered, recordAttempt } from './mastery';
 import { masteryKey } from './types';
@@ -177,5 +179,101 @@ describe('getRecord and recordAttempt', () => {
     const after = recordAttempt(before, attempt(), DEFAULT_CONFIG);
     expect(before).toEqual({});
     expect(after[masteryKey('s', 'SOUND_ID')].attemptCount).toBe(1);
+  });
+});
+
+describe('the anti-memorisation guarantee, after a second game per skill', () => {
+  /** Plenty of correct answers across several sessions, but every one of them on the SAME game. */
+  const onOneGame = (target: string, skill: Skill, taskTypeId: string) => {
+    let record = emptyRecord(target, skill, DEFAULT_CONFIG);
+    for (let session = 1; session <= 5; session += 1) {
+      record = applyAttempt(record, {
+        sessionId: `s${session}`, targetId: target, skill, taskTypeId,
+        correct: true, scaffolded: false, latencyMs: 800, weight: 1, at: session * HOUR,
+      }, DEFAULT_CONFIG);
+    }
+    return record;
+  };
+  const NOW5 = 5 * HOUR;
+
+  it('refuses mastery from one task type for every skill that now has two', () => {
+    // Before Plan 3, LETTER_SOUND, BLEND_READ and SEGMENT_SPELL were capped at one proving task type, so
+    // this condition was vacuous for them and the spec said so. It should now bite.
+    const cases = [
+      { skill: 'SOUND_ID' as const, target: 's', only: 'sound-hunt' },
+      { skill: 'LETTER_SOUND' as const, target: 'm', only: 'sound-singer' },
+      { skill: 'LETTER_SOUND' as const, target: 'a', only: 'sound-singer' },
+      { skill: 'BLEND_READ' as const, target: 'mat', only: 'picture-match' },
+      { skill: 'SEGMENT_SPELL' as const, target: 'mat', only: 'word-builder' },
+    ];
+    for (const { skill, target, only } of cases) {
+      const record = onOneGame(target, skill, only);
+      expect(record.taskTypesSeen, `${target}/${skill}`).toEqual([only]);
+      expect(isMastered(record, NOW5, DEFAULT_CONFIG), `${target}/${skill}`).toBe(false);
+    }
+  });
+
+  it('refuses it for EVERY sound and word that has a second game, not just one chosen to look good', () => {
+    let checked = 0;
+    for (const g of GRAPHEME_LIST.filter((x) => x.id !== 'i')) {
+      expect(isMastered(onOneGame(g.id, 'LETTER_SOUND', 'sound-singer'), NOW5, DEFAULT_CONFIG), `${g.id}/LETTER_SOUND`).toBe(false);
+      checked += 1;
+    }
+    for (const g of GRAPHEME_LIST) {
+      expect(isMastered(onOneGame(g.id, 'SOUND_ID', 'sound-hunt'), NOW5, DEFAULT_CONFIG), `${g.id}/SOUND_ID`).toBe(false);
+      checked += 1;
+    }
+    for (const w of picturableWordsForLevel(1)) {
+      expect(isMastered(onOneGame(w.id, 'BLEND_READ', 'picture-match'), NOW5, DEFAULT_CONFIG), `${w.id}/BLEND_READ`).toBe(false);
+      expect(isMastered(onOneGame(w.id, 'BLEND_READ', 'word-pick'), NOW5, DEFAULT_CONFIG), `${w.id}/BLEND_READ on the other game`).toBe(false);
+      checked += 2;
+    }
+    for (const w of WORD_LIST) {
+      expect(isMastered(onOneGame(w.id, 'SEGMENT_SPELL', 'word-builder'), NOW5, DEFAULT_CONFIG), `${w.id}/SEGMENT_SPELL`).toBe(false);
+      expect(isMastered(onOneGame(w.id, 'SEGMENT_SPELL', 'missing-letter'), NOW5, DEFAULT_CONFIG), `${w.id}/SEGMENT_SPELL on the other game`).toBe(false);
+      checked += 2;
+    }
+    expect(checked, 'vacuous if the loops ran over nothing').toBeGreaterThan(60);
+  });
+
+  it('refuses for the task-type condition and no other: a second game, nothing else changed, is mastered', () => {
+    // Without this a refusal above could be some other condition failing, and the test would prove nothing.
+    const pairs: [string, Skill, string, string][] = [
+      ['s', 'SOUND_ID', 'sound-hunt', 'picture-match'],
+      ['m', 'LETTER_SOUND', 'sound-singer', 'picture-start'],
+      ['a', 'LETTER_SOUND', 'sound-singer', 'picture-start'],
+      ['mat', 'BLEND_READ', 'picture-match', 'word-pick'],
+      ['mat', 'SEGMENT_SPELL', 'word-builder', 'missing-letter'],
+    ];
+    for (const [target, skill, first, other] of pairs) {
+      let record = emptyRecord(target, skill, DEFAULT_CONFIG);
+      for (let session = 1; session <= 5; session += 1) {
+        record = applyAttempt(record, {
+          sessionId: `s${session}`, targetId: target, skill, taskTypeId: session % 2 === 0 ? other : first,
+          correct: true, scaffolded: false, latencyMs: 800, weight: 1, at: session * HOUR,
+        }, DEFAULT_CONFIG);
+      }
+      expect(record.taskTypesSeen.sort(), `${target}/${skill}`).toEqual([first, other].sort());
+      expect(isMastered(record, NOW5, DEFAULT_CONFIG), `${target}/${skill}`).toBe(true);
+    }
+  });
+
+  it('still allows mastery on one task type where only one exists', () => {
+    // `i`/LETTER_SOUND has no Picture Start (no short-/i/ initial emoji is unambiguous), so demanding
+    // two games would make it permanently unmasterable: the deadlock this engine already had once.
+    let record = emptyRecord('i', 'LETTER_SOUND', DEFAULT_CONFIG);
+    for (let session = 1; session <= 3; session += 1) {
+      record = applyAttempt(record, {
+        sessionId: `s${session}`, targetId: 'i', skill: 'LETTER_SOUND', taskTypeId: 'sound-singer',
+        correct: true, scaffolded: false, latencyMs: 800, weight: 1, at: session * HOUR,
+      }, DEFAULT_CONFIG);
+    }
+    expect(record.taskTypesSeen).toEqual(['sound-singer']);
+    expect(isMastered(record, 3 * HOUR, DEFAULT_CONFIG)).toBe(true);
+  });
+
+  it('is not a loophole: the exception is one sound, and `a` (the other vowel) is held to two games', () => {
+    expect(isMastered(onOneGame('a', 'LETTER_SOUND', 'sound-singer'), NOW5, DEFAULT_CONFIG)).toBe(false);
+    expect(isMastered(onOneGame('i', 'LETTER_SOUND', 'sound-singer'), NOW5, DEFAULT_CONFIG)).toBe(true);
   });
 });

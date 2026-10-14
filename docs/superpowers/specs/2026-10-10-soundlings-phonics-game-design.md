@@ -277,7 +277,7 @@ A target is **mastered** for a skill when **all** hold:
 
 1. `strength >= 0.8`
 2. `correctCount + ε >= 3` (unscaffolded; secondary credit counts as 0.5 — see §4.4)
-3. `taskTypesSeen.length >= min(2, provingTaskTypeCount(skill))`
+3. `taskTypesSeen.length >= min(2, provingTaskTypeCount(skill, targetId))`
 4. `sessionsProven >= 2`
 5. `primaryCorrectCount >= 1`
 6. `consecutiveCorrect >= 1`
@@ -290,13 +290,17 @@ Conditions 3 and 4 are the important ones. (3) stops a child memorising the answ
 
 #### Condition 3 must be capped by what actually exists
 
-A flat `>= 2` **deadlocks the game**, and an earlier draft of this spec had exactly that. Secondary credit flows only to `SOUND_ID`, and each of the four v1 mini-games serves one distinct skill. So `LETTER_SOUND`, `BLEND_READ` and `SEGMENT_SPELL` can only ever accumulate one entry in `taskTypesSeen`, can never satisfy `>= 2`, and can never be mastered. Since level completion requires every grapheme mastered for `LETTER_SOUND`, **Level 1 was impossible to finish.** Verified by simulation: a flawless child played ten consecutive quests, reached 33–37 correct answers per sound at strength 0.99, and every record still read `isMastered: false`.
+A flat `>= 2` **deadlocks the game**, and an earlier draft of this spec had exactly that. Secondary credit flows only to `SOUND_ID`, and each of the four mini-games first shipped served one distinct skill. So `LETTER_SOUND`, `BLEND_READ` and `SEGMENT_SPELL` could only ever accumulate one entry in `taskTypesSeen`, could never satisfy `>= 2`, and could never be mastered. Since level completion requires every grapheme mastered for `LETTER_SOUND`, **Level 1 was impossible to finish.** Verified by simulation: a flawless child played ten consecutive quests, reached 33-37 correct answers per sound at strength 0.99, and every record still read `isMastered: false`.
 
-Hence `min(2, provingTaskTypeCount(skill))`, where `provingTaskTypeCount` counts the task types that can contribute evidence for that skill — its own direct type, plus any type that grants it secondary credit. Today that is 3 for `SOUND_ID` and 1 for each of the others.
+Hence `min(2, provingTaskTypeCount(skill, targetId))`, where `provingTaskTypeCount` counts the task types that could actually be **scheduled for that particular sound or word**: its own direct types that can serve it (`TaskTypeMeta.canServeTarget`), plus, for `SOUND_ID`, every type that grants it secondary credit. It is floored at 1, so a target nothing can prove is still masterable.
 
-The anti-memorisation guarantee therefore holds **wherever more than one mini-game can prove a skill**, and is honestly vacuous where only one can. The other five conditions still apply in full: a child cannot pass by memorising, because mastery still needs three unscaffolded correct answers across two separate sessions with decay in between, against distractor sets that differ on every instance.
+**The guarantee now holds, and it bites.** Three of the four skills gained a second game (Plan 3): `BLEND_READ` has Picture Match and Word Pick, `SEGMENT_SPELL` has Word Builder and Missing Letter, `LETTER_SOUND` has Sound Singer and Picture Start. A child can no longer be mastered on any of those from one game's answer pattern, and `SOUND_ID` has five proving types. The test `the anti-memorisation guarantee, after a second game per skill` records five correct answers over five sessions on one game and asserts the record is still not mastered, for every skill that now has two.
 
-When Plan 2 adds a second mini-game per skill, this cap lifts by itself and the full guarantee returns. That is the real fix; this is the honest interim.
+**The one exception is `LETTER_SOUND` for `i`.** Picture Start needs pictures a five-year-old names unambiguously, whose name starts with the sound, and no Level 1 short-/i/ initial emoji qualifies: insect is the mnemonic (excluded by rule), ice and iguana begin with the long vowel and would teach the wrong sound, igloo renders as a hut and ink as a fountain pen, which a child calls "pen" and which belongs to `p`. So `i` keeps one proving game (Sound Singer) and `provingTaskTypeCount('LETTER_SOUND', 'i')` is 1, which is why it can still be mastered. It is stated rather than hidden. Six of the seven sounds are covered. (`a` was expected to be a second exception, since no picturable *word* starts with a vowel; it is not, because Picture Start draws on pictures chosen for the game rather than on word pictures.) Real artwork, or a `SAY_IT` task (a child saying the sound aloud), is what lifts the last exception, and it will lift by itself with no engine change.
+
+**Picture Start's second rule** is what makes it a second *proof*: its answer is never the grapheme's own mnemonic, and no picture on the screen is any grapheme's mnemonic, so it cannot be answered from the letter-picture pairing a child was taught beside the sound. A game passable by the same association is not a second proof.
+
+The other five conditions still apply in full: mastery needs three unscaffolded correct answers across two separate sessions with decay in between, against distractor sets that differ on every instance.
 
 Condition 5 exists because without it a sound could be mastered entirely through secondary credit — that is, a child could be credited with knowing `/m/` having never once been asked `/m/` directly, purely from spelling words containing it. Secondary credit is meant to accelerate mastery, not to replace being asked.
 

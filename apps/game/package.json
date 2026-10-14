@@ -13,6 +13,7 @@
     "@expo-google-fonts/andika": "^0.4.1",
     "@expo-google-fonts/quicksand": "^0.4.1",
     "@react-native-async-storage/async-storage": "^2.1.0",
+    "@soundlings/api": "0.1.0",
     "@soundlings/audio": "0.1.0",
     "@soundlings/curriculum": "0.1.0",
     "@soundlings/engine": "0.1.0",

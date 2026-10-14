@@ -22,3 +22,5 @@ export {
 } from './mastery';
 export { closingTask, simulateChild } from './simulate';
 export type { ChildProfile, SimulateArgs, SimulateResult, TargetOutcome } from './simulate';
+export * from './quest';
+export * from './dates';

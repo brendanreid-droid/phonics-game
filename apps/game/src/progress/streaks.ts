@@ -1,18 +1,7 @@
-/**
- * Local calendar date as YYYY-MM-DD.
- *
- * Local, not UTC, and a date string rather than a timestamp. A streak is about
- * days as a child experiences them: playing at 11pm and again the next morning
- * is two days running, and in several timezones a UTC-based calculation would
- * disagree. Storing only the local date also means a timezone change cannot
- * retroactively rewrite history.
- */
-export function localDateString(at: number): string {
-  const d = new Date(at);
-  const month = `${d.getMonth() + 1}`.padStart(2, '0');
-  const day = `${d.getDate()}`.padStart(2, '0');
-  return `${d.getFullYear()}-${month}-${day}`;
-}
+import { localDateString } from '@soundlings/engine';
+
+// Defined in the engine so the sync layer and the quest runner cannot disagree about it.
+export { localDateString };
 
 /**
  * Whether a run of consecutive days is still alive, as 1 or 0.

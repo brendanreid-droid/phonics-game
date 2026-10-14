@@ -4,13 +4,16 @@ import {
   buildSession,
   closingTask,
   hasInitialPicture,
+  isPrimaryAttempt,
   masteryKey,
+  starsFor,
 } from '@soundlings/engine';
 import type {
   Attempt,
   ConfusionMap,
   EngineConfig,
   MasteryMap,
+  QuestTally,
   TargetId,
   TargetOutcome,
   TaskInstance,
@@ -54,28 +57,9 @@ export function confusionFor(task: TaskInstance, judgement: Judgement): TargetId
   return judgement.chosen;
 }
 
-export interface QuestTally {
-  /** Tasks on which the child gave a wrong answer that counted as an error. */
-  errors: number;
-  /** Tasks the child finished only with the answer shown. */
-  scaffolds: number;
-}
-
-/**
- * Stars for a finished quest. The floor is one.
- *
- * Three stars allow one slip, two allow a few mistakes and a couple of helped
- * finishes. Three errors in fourteen tasks is a good session for a five-year-old.
- *
- * A child who sat through fourteen tasks has earned something, whatever the
- * accuracy. Zero stars is a punishment for effort, and effort is exactly the
- * behaviour that brings them back tomorrow.
- */
-export function starsFor(tally: QuestTally): 1 | 2 | 3 {
-  if (tally.errors <= 1 && tally.scaffolds === 0) return 3;
-  if (tally.errors <= 4 && tally.scaffolds <= 2) return 2;
-  return 1;
-}
+// Defined in the engine: the sync layer rebuilds high scores with the very same rule.
+export { starsFor };
+export type { QuestTally };
 
 export { dimmedFor } from './dimming';
 
@@ -104,17 +88,6 @@ export function noteOutcome(outcomes: QuestOutcomes, task: TaskInstance, success
 /** Whether a recorded outcome was a clean success: correct, and not shown the answer. */
 export const isCleanSuccess = (outcome: { correct: boolean; scaffolded: boolean }): boolean =>
   outcome.correct && !outcome.scaffolded;
-
-/**
- * Whether an attempt is the task's own, as against secondary credit for a
- * grapheme inside a word. Not told by weight: an answer given after the choices
- * were narrowed is a primary attempt at half weight, the same as a secondary.
- * Told by skill instead: a primary attempt is in the skill of the mini-game that
- * produced it, and secondary credit is always recorded under another skill.
- */
-function isPrimaryAttempt(attempt: Attempt): boolean {
-  return TASK_TYPES.find((type) => type.id === attempt.taskTypeId)?.skill === attempt.skill;
-}
 
 /**
  * Rebuilds what the child has done this quest from the attempt log, for a quest

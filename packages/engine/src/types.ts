@@ -58,6 +58,15 @@ export type MasteryMap = Record<MasteryKey, MasteryRecord>;
  * mastery number is derivable from the full attempt log.
  */
 export interface Attempt {
+  /**
+   * A globally unique id, stamped when the attempt is first written. It is what
+   * lets two devices that both hold an attempt recognise it as the same one, so
+   * merging their logs is a set union and a replayed push cannot double-count.
+   * Optional because logs written before sync existed do not have it: the sync
+   * layer derives a stable id for those from their contents rather than
+   * rewriting a child's history.
+   */
+  id?: string;
   sessionId: string;
   targetId: TargetId;
   skill: Skill;

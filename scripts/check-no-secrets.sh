@@ -26,7 +26,7 @@ patterns='sb_secret_[A-Za-z0-9_-]{8,}'
 patterns+='|(SERVICE_ROLE|SERVICEROLE)[A-Z_]*[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9._-]{20,}'
 patterns+='|c2VydmljZV9yb2xl|NlcnZpY2Vfcm9sZ|zZXJ2aWNlX3JvbGU'
 
-hits=$(git ls-files -z \
+hits=$(git ls-files -z --cached --others --exclude-standard \
   | xargs -0 grep -nIE "$patterns" 2>/dev/null \
   | grep -v '^scripts/check-no-secrets\.sh:')
 

@@ -562,28 +562,31 @@ Cost traps to handle at contract time:
 
 ### 10.1 Tables
 
+Three tables, all in `public`, with row-level security on each. **This replaces an earlier list of eight**, which named tables Plan 5 decided not to create because everything in them is derivable from the attempt log.
+
 | Table | Notes |
 |---|---|
-| `parents` | maps to `auth.users` |
-| `child_profiles` | name, avatar, current level, created_at |
-| `levels` | seeded from `curriculum`; kept in DB only for reporting joins |
-| `mastery_records` | one row per (profile, target, skill) |
-| `sessions` | one per quest: plan, started_at, completed_at, stars, degraded flag |
-| `task_attempts` | **append-only** — correct, latency, scaffolded, chosen distractor, number of choices shown |
-| `creatures_unlocked` | profile, grapheme, unlocked_at |
-| `high_scores` | profile, level, best stars, best streak, fastest clean quest |
+| `child_profiles` | id, owning parent (`auth.users`), first name, avatar id, created_at, last_played_on. Nothing else: no birthday, no school, no photograph. |
+| `task_attempts` | **append-only.** Client-supplied uuid primary key, so a replayed push cannot duplicate a row. Correct, scaffolded, latency, weight, number of choices shown, chosen distractor, timestamp. |
+| `level_completions` | (profile, level) with the first time it was completed. A latch, not a derivation. |
 
-Row Level Security: a parent can read and write only rows belonging to their own `child_profiles`. Policies are part of the migration, not an afterthought.
+**Not stored, because derived from the log:** `mastery_records`, `sessions`, `creatures_unlocked` and `high_scores`, along with streaks and played dates. A stored mastery row written by an old app version against a newer algorithm would be silently wrong and nothing would detect it, and the algorithm has changed twice. Each device rebuilds them from the merged log (`packages/api/src/rebuild.ts`). `levels` stays in the curriculum package; it has no reporting join to serve yet. The `parents` table is `auth.users`.
+
+**Why `level_completions` is stored while the rest is derived:** a child must never lose a level they finished (§5.7). Recomputing completion from the log would need completion evaluated at every point in history and would resurrect the decay problem the latch exists to defeat.
+
+**The active mid-quest session is not synced, deliberately.** Two devices resuming the same half-finished quest is a conflict with no good resolution. An interrupted quest resumes on the device it started on.
+
+Row Level Security: a parent can read and write only rows belonging to their own `child_profiles`. There is no update or delete policy on `task_attempts` or `level_completions`, and Postgres denies what no policy permits. The policies are part of the migrations and were tested adversarially from a second account (`supabase/tests/rls.md`).
 
 ### 10.2 Append-only attempts
 
-`task_attempts` is never updated or deleted. Every dashboard metric, every confusion-pair analysis, and every future pacing experiment is derivable from it without a schema migration. It also means `mastery_records` is a cache: it can be rebuilt from the attempt log if the mastery algorithm changes — which it will, once real children use it.
+`task_attempts` is never updated or deleted. Every dashboard metric, every confusion-pair analysis, and every future pacing experiment is derivable from it without a schema migration. Mastery is therefore a cache of the log, and is not stored on the server at all: it is rebuilt from the attempt log whenever the algorithm changes, which it will, once real children use it. That claim is tested: quests played through the real quest runner rebuild to a mastery map equal to the live one.
 
 ### 10.3 Offline-first
 
-The local store is the source of truth during play. Attempts are queued and synced opportunistically. Mastery is computed locally and reconciled server-side. A child on a plane, in a car, or in a school with bad wifi plays normally.
+The local store is the source of truth during play, and the network is never between a child's tap and the game responding. Sync runs afterwards, in the background, on sign-in, on coming to the foreground and shortly after a quest finishes, never during one. A child on a plane, in a car, or in a school with bad wifi plays normally. Signing in is optional and lives behind the parent PIN.
 
-Conflict policy: `task_attempts` is append-only so it merges without conflict; `mastery_records` is derived, so on conflict the server recomputes from the merged attempt log rather than picking a winner.
+Conflict policy: there is nothing to resolve. The attempt log is a set of uuids, so reconciling two devices is a set union: what the server lacks is pushed, what the device lacks is pulled, neither side is overwritten. Mastery, streaks, scores and creatures are derived, so after a pull each device recomputes them from the merged log rather than picking a winner. A level completion keeps the earliest time anywhere. A profile deleted on one device is deleted on the other, unless the other holds play the server never saw, in which case the child is kept. A failed sync leaves everything pending and discards nothing (`packages/api/src/syncQueue.ts`).
 
 ---
 

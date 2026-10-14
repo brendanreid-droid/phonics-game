@@ -1,7 +1,46 @@
 # Review gate: playable Level 1, with the shell around it
 
-**Built:** Plan 1 (tasks 1–29), Plan 2 (tasks 1–10), Plan 3 (tasks 1–8) and Plan 4 (the parent area).
-**Tests:** 1,611 passing across 67 files.
+**Built:** Plan 1 (tasks 1–29), Plan 2 (tasks 1–10), Plan 3 (tasks 1–8), Plan 4 (the parent area) and Plan 5 (Supabase and sync).
+**Tests:** 1,787 passing across 81 files.
+
+## New in Plan 5: progress that survives a lost device
+
+**Signing in is optional, and the game is fully playable without it.** Nothing waits on it, nothing nags, and an app built without a Supabase project configured runs exactly as before. To turn it on: from the island open **Grown-ups**, enter the PIN, and tap **Sign in** on the card at the top. A grown-up enters an email address and follows the emailed link (or types the code, if the email carries one). There is no password. The screen says what it is for: keeping progress safe if the device is lost, and seeing it from a phone.
+
+**What syncs, and what deliberately does not.**
+
+| Syncs | Derived on each device from the log |
+|---|---|
+| child profiles (a first name and an avatar id, nothing else) | mastery |
+| the attempt log, append-only | streaks and played dates |
+| the level-completion latch | high scores and stars |
+| | creatures |
+
+Why: an append-only log merges as a set union, so two devices that both played offline both contribute and nothing has to win. Derived data cannot drift from its source: a synced mastery row written by an old app version against a newer algorithm would be silently wrong, and the algorithm has already changed twice. The completion latch is stored rather than derived because a child must never lose a level they finished, and recomputing it would bring back the decay problem the latch exists to defeat (spec §5.7).
+
+**The active mid-quest session is deliberately not synced.** Two devices resuming the same half-finished quest is a conflict with no good resolution, and nobody asked for it. An interrupted quest resumes on the device it started on.
+
+**The two rules it holds.** The network is never between a child's tap and the game responding: every read and write goes to local storage as before, a quest makes no network call at all, and sync runs afterwards (on sign-in, on coming to the foreground, a moment after a quest finishes). A failed sync never loses local work: what it could not push stays pending, a deletion it could not complete is retried, and it never shows an error to a child. A sync problem appears only on the Grown-ups page.
+
+**What was checked, and what was not.**
+
+- The test the design rests on passes. Whole quests played through `buildSession` and `recordTaskResult`, and through the real `QuestRunner`, rebuild from their attempt log to a mastery map equal to the live one. 16 simulated children, including slips, shown answers and abandoned tasks, and when the log arrives jumbled or with repeats.
+- Eighteen integration tests run real quests over the sync against an in-memory server that can be switched off: a second device arriving with the child, two devices that both played offline, deletion on one device, a refused attempt, a connection that dies mid-sync, a quest on screen when a pull lands.
+- The server's policies were exercised again with the exact statements the client sends, as a real `authenticated` role in a transaction that was rolled back: replays change nothing, the log refuses a merge-style upsert, a completion keeps its first time, a bad row is refused.
+- **Not done: a real sign-in against the live project.** Signing in means authenticating to a hosted account, which was not done on the user's behalf. So **nobody has watched attempts travel from a signed-in device to the server, seen a second real device pick them up, or run the offline test on a real network.** The pieces on each side were tested; the join between them, over real HTTP with a real session, was not. Do this first (see below).
+
+**To try it for real.** Copy `apps/game/.env.example` to `apps/game/.env` (publishable key only). In the Supabase dashboard add the redirect URLs the link will return to (`soundlings://auth`, and the web origin you test on) under Authentication, URL configuration. Sign in, play a quest, then in the SQL editor `select count(*) from task_attempts` and confirm the rows are there. Sign in with the same email in a second browser profile and look for the child. Then switch the network off (browser dev tools, Offline), play a whole quest, switch it back on and watch the count rise.
+
+**Known limits of the sync, stated plainly.**
+
+- **Clock skew can reorder mastery.** A rebuild orders attempts by the time written on them, because two devices deliver their halves in any order. A device whose clock is behind will have its play folded in earlier than the live game folded it. Both converge once a pull rebuilds, but between them the two numbers can differ slightly.
+- **Rebuilt high scores are inferred.** The log records answers, not the quest they belonged to, so a quest counts as finished if it has at least the shortest quest's worth of completed tasks (8). A quest abandoned after 9 tasks can therefore earn stars on a second device. Cosmetic, and only ever adds.
+- **Rebuilt confusions are a floor.** The live count includes second and third wrong taps that leave no attempt behind, so the larger of the two is kept.
+- **The server cannot lower a completion time.** The table has no update policy (a latch that can be lowered is not a latch), so it keeps whichever time arrived first. A device that finished earlier keeps its own earlier time; the server and that device can disagree about the exact moment, never about whether.
+- **A profile deleted on one device is deleted on the other**, unless the other holds play the server never saw, in which case the child is put back rather than that play destroyed.
+- **Two children with the same name** (made on two devices while offline) both survive and appear twice in the picker. Refusing one would lose a real history.
+- **Pull is by id, read in full.** Every sync lists the ids of the whole log. Fine for hundreds of attempts per child; a watermark would be the next step if logs grow large.
+- **Legacy ids.** A profile or attempt made before sync existed has no UUID; one is derived from its contents (and, for a profile, the parent), the same on every device.
 
 ## New in Plan 4: the grown-up's view
 
@@ -105,8 +144,8 @@ If any of those are wrong in the placeholder, the fix is in `scripts/generate-pl
 
 - **The voice is a machine-generated placeholder** (macOS `say`). It has been heard and is usable for testing, but **a human voice is still needed before wider use** — see spec §9.3 for costs and the recommended hybrid approach — and each phoneme should be checked individually when it lands.
 - **Pictures are emoji** standing in for illustration. Picture Start's pictures were chosen to be named unambiguously, but they are still emoji and still need the real-artwork test (can a five-year-old name each one unprompted?). The *word* pictures used by Picture Match and Word Pick are survivable when ambiguous, because the child reads the word; the mat (a person doing yoga) and fit (a muscle) are the weakest.
-- **The parent area is on-device only.** It reads this device's record for this profile; there is no account, no sync and no way to see it from another device.
-- **No backend.** Progress is on-device, per profile. Supabase and cross-device sync are Plan 5.
+- **The parent area reads this device's record.** With sync on, that record includes what other devices pushed, but there is no separate dashboard for a parent's phone yet; the phone runs the same app.
+- **Sync is built and tested but has not been run signed in against the live project.** See Plan 5 above. Without an account the game is local only, as before.
 - **Only Level 1.** Levels 2–6 come later. The second mini-game per skill is done (Plan 3), except for `i`'s letter-to-sound, which has only one.
 - **No voice recognition.** The `SAY_IT` skill exists in the type system; nothing implements it.
 

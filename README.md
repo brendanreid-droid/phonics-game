@@ -16,7 +16,7 @@ Then open <http://localhost:8081>.
 On a real iPad — which is the version that counts for a children's app — install **Expo Go** from the App Store, run `npx expo start` from `apps/game`, and scan the QR code. No Xcode needed.
 
 ```bash
-npm test          # 1611 tests
+npm test          # 1787 tests
 npm run typecheck
 ```
 
@@ -26,6 +26,7 @@ npm run typecheck
 |---|---|
 | `packages/curriculum` | Teaching content as pure data: graphemes, words, levels, creatures. Zero dependencies. |
 | `packages/engine` | The adaptive engine — mastery model, session builder, frustration guard, distractor picker, simulation harness. Pure TypeScript, no React, no clock, no RNG. |
+| `packages/api` | The sync layer over Supabase. `rebuild.ts` and `syncQueue.ts` are pure and decide whether a child's history survives; the rest moves data. |
 | `packages/ui` | Soft Paper design tokens. |
 | `packages/audio` | Audio-key manifest and a queue that never overlaps speech. |
 | `apps/game` | Expo app: profiles, island home, four mini-games, quest runner. |
@@ -58,9 +59,11 @@ Measured pacing, from the simulation harness over 30 synthetic children per prof
 
 Counts rose when the second mini-game per skill landed, which is the intended trade: proving a sound two independent ways costs more than proving it one way, and that cost is what makes the claim worth making.
 
-**Not done:** real voice, illustrated artwork, Supabase and cross-device sync, Levels 2–6, `SAY_IT` voice tasks.
+**Sync:** optional parent sign-in keeps progress safe online and across devices. Only profiles, the attempt log and the level-completion latch sync; everything else is rebuilt from the log. The game never waits on the network. See the review gate for what was and was not verified.
 
-**Not verified by anyone:** **no child has played it.** The pacing figures are simulated children, the pictures are emoji standing in for artwork, and the voice is machine-generated — usable for testing, but a human voice is needed before wider use. When it lands, check each phoneme individually: two were wrong before and were caught by acoustic analysis rather than by ear.
+**Not done:** real voice, illustrated artwork, Levels 2–6, `SAY_IT` voice tasks, and a signed-in run of the sync against the live Supabase project.
+
+**Not verified by anyone:** **no child has played it**, and the sync has not been run signed in against the real project. The pacing figures are simulated children, the pictures are emoji standing in for artwork, and the voice is machine-generated — usable for testing, but a human voice is needed before wider use. When it lands, check each phoneme individually: two were wrong before and were caught by acoustic analysis rather than by ear.
 
 ## Config worth knowing about
 

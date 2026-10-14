@@ -1,4 +1,4 @@
-import type { Attempt, ConfusionMap, MasteryMap } from '@soundlings/engine';
+import type { Attempt, MasteryMap } from '@soundlings/engine';
 import { confusionReport } from './confusionReport';
 import type { ConfusionRow } from './confusionReport';
 import { needsAHand } from './needsAHand';
@@ -11,8 +11,10 @@ import type { SoundRow } from './soundReport';
 export interface ParentSummaryArgs {
   level: number;
   mastery: MasteryMap;
-  confusions: ConfusionMap;
-  /** The child's whole log, oldest first. */
+  /**
+   * The child's whole log, oldest first. Mix-ups are read from here, over the
+   * recent sittings, and not from the running `ConfusionMap` (see confusionReport.ts).
+   */
   attempts: readonly Attempt[];
   /** Local YYYY-MM-DD dates a quest was finished, each once. */
   playedDates: readonly string[];
@@ -62,11 +64,10 @@ export interface ParentSummary {
  * intended (see soundReport.ts).
  */
 export function parentSummary(args: ParentSummaryArgs): ParentSummary {
-  const { level, mastery, confusions, attempts, playedDates, now } = args;
+  const { level, mastery, attempts, playedDates, now } = args;
 
   const sounds = soundReport(level, mastery, now);
-  // Given the sounds so a mix-up the child has since outgrown is not shown as current.
-  const mixedUp = confusionReport(confusions, level, sounds);
+  const mixedUp = confusionReport(attempts, level);
 
   const soundsSecure = sounds.filter((row) => row.state === 'secure').length;
   const started = attempts.length > 0;

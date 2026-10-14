@@ -84,7 +84,7 @@ function metCount(level: number, furthest: number): number {
 const typeOf = (id: string) => TASK_TYPES.find((t) => t.id === id);
 
 /** An answer is for the task's own target. The credit a word task gives its letters is a different skill. */
-function isPrimary(attempt: Attempt): boolean {
+export function isPrimary(attempt: Attempt): boolean {
   const type = typeOf(attempt.taskTypeId);
   return type !== undefined && type.skill === attempt.skill;
 }
@@ -226,6 +226,29 @@ function score(trials: readonly Trial[]): Score {
 
 const NOT_RAISED: NeedsAHand = { raised: false, message: '' };
 
+/** Sittings in the order they began, keeping only those with enough real taps. */
+function realSittings(trials: readonly Trial[]): Trial[][] {
+  const bySitting = new Map<string, Trial[]>();
+  for (const trial of trials) {
+    bySitting.set(trial.sessionId, [...(bySitting.get(trial.sessionId) ?? []), trial]);
+  }
+  return [...bySitting.values()].filter(
+    (sitting) => sitting.filter((t) => t.chance > 0).length >= MIN_TRIALS_PER_SITTING,
+  );
+}
+
+/**
+ * The quests that count as "recently", oldest first: the last few sittings with
+ * enough real answers to be a sitting. This is the window `needsAHand` judges,
+ * exported so that what the parent is told about mix-ups is drawn from the same
+ * stretch of play as the near-chance signal, and the two tell one story.
+ */
+export function recentSittings(attempts: readonly Attempt[], level = 1): string[] {
+  return realSittings(trialsFrom(attempts, level))
+    .slice(-SITTINGS)
+    .map((sitting) => sitting[0].sessionId);
+}
+
 /**
  * Is this child's recent pattern consistent with guessing?
  *
@@ -234,16 +257,7 @@ const NOT_RAISED: NeedsAHand = { raised: false, message: '' };
  * can come back if they slip again.
  */
 export function needsAHand(attempts: readonly Attempt[], level = 1): NeedsAHand {
-  const trials = trialsFrom(attempts, level);
-
-  // Sittings in the order they began, keeping only those with enough real taps.
-  const bySitting = new Map<string, Trial[]>();
-  for (const trial of trials) {
-    bySitting.set(trial.sessionId, [...(bySitting.get(trial.sessionId) ?? []), trial]);
-  }
-  const sittings = [...bySitting.values()].filter(
-    (sitting) => sitting.filter((t) => t.chance > 0).length >= MIN_TRIALS_PER_SITTING,
-  );
+  const sittings = realSittings(trialsFrom(attempts, level));
   if (sittings.length < SITTINGS) return NOT_RAISED;
 
   const recent = sittings.slice(-SITTINGS);

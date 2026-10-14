@@ -85,7 +85,17 @@ export interface Attempt {
   at: number;
 }
 
-/** `${target}>${chosen}` → how many times the child made that specific mix-up. */
+/**
+ * `${target}>${chosen}` → how many times the child made that specific mix-up,
+ * over their whole life.
+ *
+ * That lifetime count is exactly right for the distractor picker: a sound a
+ * child has ever confused is worth contrasting again. It is NOT what a parent
+ * should be told, because it has no dates and never goes down, so a mix-up from
+ * the first month would read as current for ever. The parent area derives its
+ * view from the recent attempt log instead (apps/game/src/parent/confusionReport.ts).
+ * They answer different questions; do not unify them.
+ */
 export type ConfusionMap = Record<string, number>;
 
 export function confusionKey(targetId: TargetId, chosen: TargetId): string {

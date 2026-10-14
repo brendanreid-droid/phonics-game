@@ -1,13 +1,13 @@
 import { graphemesForLevel } from '@soundlings/curriculum';
-import type { ConfusionMap } from '@soundlings/engine';
-import type { SoundRow } from './soundReport';
+import type { Attempt } from '@soundlings/engine';
+import { isPrimary, recentSittings } from './needsAHand';
 
 export interface ConfusionRow {
   /** The sound the child was asked about. */
   target: string;
   /** What they picked instead. */
   mistakenFor: string;
-  /** How many times, both directions combined if they mix the pair up both ways. */
+  /** How many times in the recent sittings, both directions combined if they mix the pair up both ways. */
   times: number;
   /** One line a parent can read aloud to themselves. */
   description: string;
@@ -26,13 +26,40 @@ interface Directed {
   times: number;
 }
 
-/** A count we can trust: storage outlives the build that wrote it. */
-function usableCount(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value > 0;
+/**
+ * The wrong taps in the recent sittings, counted per `${target}>${chosen}`.
+ *
+ * Read from the attempt log (`chosen` on a wrong primary answer), limited to the
+ * same last few sittings `needsAHand` judges.
+ */
+function recentSlips(attempts: readonly Attempt[], level: number): Record<string, number> {
+  const recent = new Set(recentSittings(attempts, level));
+  const counts: Record<string, number> = {};
+  for (const attempt of attempts) {
+    if (!recent.has(attempt.sessionId) || !isPrimary(attempt)) continue;
+    if (attempt.correct || attempt.scaffolded || typeof attempt.chosen !== 'string' || attempt.chosen === '') continue;
+    const key = `${attempt.targetId}>${attempt.chosen}`;
+    counts[key] = (counts[key] ?? 0) + 1;
+  }
+  return counts;
 }
 
 /**
  * The parent's second question: what are they mixing up?
+ *
+ * Drawn from the attempt log, over the last few sittings, and NOT from the
+ * running `ConfusionMap`. The two answer different questions and must not be
+ * "unified". The map counts for the child's whole life and has no dates, which is
+ * right for the distractor picker: a sound a child has ever confused is worth
+ * contrasting again. But it is wrong for a parent, who is asking what is going on
+ * this week: a mix-up from the first month would be reported for ever, even for
+ * a sound the child has never quite secured, which is the very sound the parent
+ * is reading about. So the map stays as it is for the picker, and this reads
+ * `chosen` and the sitting from the log.
+ *
+ * (The log holds a little less than the map: a second wrong tap on the same
+ * question shows the answer and is not logged as an attempt. That errs towards
+ * reporting less, which is the safe side for a list a parent will act on.)
  *
  * Only pairs of SOUNDS are reported. The confusion map also logs word-for-word
  * mix-ups from Picture Match and Word Pick (`sit>sat`); those are the vowel in
@@ -40,28 +67,19 @@ function usableCount(value: unknown): value is number {
  * sounds would be wrong. They are dropped because their target is not one of
  * the level's sounds.
  *
- * The map only ever counts up, so a mix-up from the first week would otherwise
- * be reported for ever. When `sounds` (the rows from `soundReport`) is given, a
- * pair whose target is now secure in both directions is left out: the child has
- * moved on, and a parent should not drill what is no longer a problem.
- *
  * A pair mixed up both ways is one row, led by whichever way happens more often.
  * Most frequent first; ties fall back to teaching order so the list is stable.
  */
-export function confusionReport(
-  confusions: ConfusionMap,
-  level: number,
-  sounds?: readonly SoundRow[],
-): ConfusionRow[] {
+export function confusionReport(attempts: readonly Attempt[], level: number): ConfusionRow[] {
+  const confusions = recentSlips(attempts, level);
   const order = new Map(graphemesForLevel(level).map((g, index) => [g.id, index]));
-  const secure = new Set((sounds ?? []).filter((row) => row.state === 'secure').map((row) => row.grapheme.id));
 
   const directed: Directed[] = [];
   for (const [key, times] of Object.entries(confusions)) {
     const parts = key.split('>');
-    if (parts.length !== 2 || parts[0] === '' || parts[1] === '' || !usableCount(times)) continue;
+    if (parts.length !== 2 || parts[0] === '' || parts[1] === '') continue;
     const [target, mistakenFor] = parts;
-    if (target === mistakenFor || !order.has(target) || secure.has(target)) continue;
+    if (target === mistakenFor || !order.has(target)) continue;
     directed.push({ target, mistakenFor, times });
   }
 

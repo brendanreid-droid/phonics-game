@@ -13,7 +13,6 @@ const NOW = 1000 * HOUR;
 const base = (partial: Partial<ParentSummaryArgs> = {}): ParentSummaryArgs => ({
   level: 1,
   mastery: {},
-  confusions: {},
   attempts: [],
   playedDates: [],
   now: NOW,
@@ -27,10 +26,28 @@ function attempt(sessionId: string, i: number, correct: boolean, target = 's'): 
   };
 }
 
+/** Three real sittings of right answers, the last with the given wrong taps (`target>chosen`) in it. */
+function withSlips(slips: Record<string, number>, filler = 10): Attempt[] {
+  const sitting = (id: string, extra: Record<string, number> = {}): Attempt[] => [
+    ...Array.from({ length: filler }, (_, i) => attempt(id, i, true)),
+    ...Object.entries(extra).flatMap(([pair, times]) =>
+      Array.from({ length: times }, (_, i): Attempt => {
+        const [target, chosen] = pair.split('>');
+        return { ...attempt(id, filler + i, false, target), chosen };
+      }),
+    ),
+  ];
+  return [...sitting('m0'), ...sitting('m1'), ...sitting('m2', slips)];
+}
+
 /** `sessions` sittings of 14 answers each, right on every other one. */
 function guessingLog(sessions: number): Attempt[] {
   return Array.from({ length: sessions }, (_, n) =>
-    Array.from({ length: 14 }, (_, i) => attempt(`q${n}`, n * 14 + i, i % 2 === 0)),
+    Array.from({ length: 14 }, (_, i): Attempt => ({
+      ...attempt(`q${n}`, n * 14 + i, i % 2 === 0),
+      // The wrong ones were all f picked for s.
+      ...(i % 2 === 0 ? {} : { chosen: 'f' }),
+    })),
   ).flat();
 }
 
@@ -125,20 +142,19 @@ describe('parentSummary', () => {
     });
 
     it('reports a pair the child mixes up, once', () => {
-      const summary = parentSummary(base({ confusions: { 's>f': 4 }, attempts: [attempt('a', 1, true)] }));
+      const summary = parentSummary(base({ attempts: withSlips({ 's>f': 4 }) }));
       expect(summary.confusions.map((c) => `${c.target}>${c.mistakenFor}`)).toEqual(['s>f']);
     });
 
-    it('does not report a mix-up the child has since outgrown', () => {
-      const summary = parentSummary(
-        base({ confusions: { 's>f': 9 }, mastery: masteredSounds(['s'], NOW), attempts: [attempt('a', 1, true)] }),
-      );
+    it('does not report a mix-up from long ago', () => {
+      const old = withSlips({ 's>f': 9 }).map((a) => ({ ...a, sessionId: `old-${a.sessionId}` }));
+      const summary = parentSummary(base({ attempts: [...old, ...withSlips({}).map((a) => ({ ...a, sessionId: `new-${a.sessionId}` }))] }));
       expect(summary.confusions).toEqual([]);
       expect(summary.practice.map((p) => p.about)).not.toContain('s');
     });
 
     it('suggests practice for the pair it reports, with real words', () => {
-      const summary = parentSummary(base({ confusions: { 's>f': 4 }, attempts: [attempt('a', 1, true)] }));
+      const summary = parentSummary(base({ attempts: withSlips({ 's>f': 4 }) }));
       expect(summary.practice[0].about).toBe('s');
       expect(summary.practice[0].words.length).toBeGreaterThan(0);
     });
@@ -155,7 +171,7 @@ describe('parentSummary', () => {
     });
 
     it('keeps what the sound rows say and what the practice says in step', () => {
-      const summary = parentSummary(base({ confusions: { 's>f': 4, 'a>i': 3 }, attempts: [attempt('a', 1, true)] }));
+      const summary = parentSummary(base({ attempts: withSlips({ 's>f': 4, 'a>i': 3 }) }));
       const known = new Set(summary.sounds.map((s) => s.grapheme.id));
       for (const p of summary.practice) expect(known.has(p.about)).toBe(true);
     });
@@ -186,7 +202,6 @@ describe('parentSummary', () => {
     const busy = parentSummary(
       base({
         mastery: masteredSounds(['s', 'a'], NOW),
-        confusions: { 'f>s': 6, 't>p': 3 },
         attempts: guessingLog(5),
         playedDates: ['2026-10-01', '2026-10-03'],
       }),
@@ -219,7 +234,7 @@ describe('parentSummary', () => {
 
   describe('purity', () => {
     it('is a pure function of its inputs: the same arguments, the same summary', () => {
-      const args = base({ mastery: masteredSounds(['s'], NOW), confusions: { 's>f': 3 }, attempts: guessingLog(4), playedDates: ['2026-10-01'] });
+      const args = base({ mastery: masteredSounds(['s'], NOW), attempts: guessingLog(4), playedDates: ['2026-10-01'] });
       expect(parentSummary(args)).toEqual(parentSummary(args));
     });
 
@@ -246,8 +261,7 @@ describe('parentSummary', () => {
     it('does not change anything it is given', () => {
       const args = base({
         mastery: masteredSounds(['s', 'a'], NOW),
-        confusions: { 's>f': 3, 'f>s': 2 },
-        attempts: guessingLog(4),
+        attempts: withSlips({ 's>f': 3, 'f>s': 2 }),
         playedDates: ['2026-10-01', '2026-10-02'],
       });
       const before = JSON.stringify(args);

@@ -731,8 +731,9 @@ describe('creatures', () => {
     const attempts: Attempt[] = [
       // /s/ by ear: three clean answers in session A, two mini-games.
       ...sessionA('s', 'SOUND_ID', ['sound-hunt', 'sound-hunt', 'picture-match']),
-      // /s/ by sight: mastered across two earlier sessions.
-      ...sessionA('s', 'LETTER_SOUND', ['sound-singer', 'sound-singer', 'sound-singer']),
+      // /s/ by sight: mastered across two earlier sessions. Two mini-games, because Sound Singer
+      // and Picture Start can both prove it, so one is no longer enough.
+      ...sessionA('s', 'LETTER_SOUND', ['sound-singer', 'sound-singer', 'picture-start']),
       ...sessionA('s', 'LETTER_SOUND', ['sound-singer']).map((a) => ({ ...a, sessionId: 'earlier-B' })),
     ];
     return recordAttempts({}, attempts, DEFAULT_CONFIG);

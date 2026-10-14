@@ -1,4 +1,5 @@
 import type { Skill, TargetId } from '@soundlings/curriculum';
+import { picturesCanAnswerFor } from './pictureStart';
 
 export interface TaskTypeMeta {
   id: string;
@@ -45,6 +46,19 @@ export const TASK_TYPES: readonly TaskTypeMeta[] = [
     minChoices: 2,
     maxChoices: 3,
     secondaryTargets: 'none',
+  },
+  {
+    id: 'picture-start',
+    skill: 'LETTER_SOUND',
+    // The same rung as Sound Singer: the same skill, asked another way.
+    difficulty: 2,
+    minChoices: 2,
+    maxChoices: 3,
+    secondaryTargets: 'none',
+    // Needs a picturable word that starts with the sound and is not the letter's
+    // own mnemonic. No Level 1 word starting with a vowel can be drawn, so this is
+    // false for `a` and `i`, which keep one proving game until SAY_IT ships.
+    canServeTarget: picturesCanAnswerFor,
   },
   {
     id: 'picture-match',

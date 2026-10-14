@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getWord, wordsForLevel } from '@soundlings/curriculum';
-import { DEFAULT_CONFIG, TASK_TYPES, buildSession, masteryKey } from '@soundlings/engine';
-import type { Attempt, TaskInstance } from '@soundlings/engine';
+import { DEFAULT_CONFIG, TASK_TYPES, applyAttempt, buildSession, emptyRecord, masteryKey } from '@soundlings/engine';
+import type { Attempt, MasteryMap, TaskInstance } from '@soundlings/engine';
 import {
   MIN_TAIL,
   canResume,
@@ -22,6 +22,33 @@ import { dimmedFor } from './dimming';
 import type { QuestOutcomes } from './questLogic';
 
 const NOW = 1_000_000;
+
+/**
+ * Both sound skills for each letter, answered cleanly `count` times across that many sessions on
+ * the given task types in turn. Three answers on two or more games is mastered; two on one is
+ * merely heard, which is all it takes to unlock words (invariant 5a).
+ */
+function masteredFor(
+  ids: readonly string[],
+  type: string | readonly string[] = ['sound-hunt', 'sound-singer', 'word-builder', 'picture-start', 'picture-match'],
+  count = 3,
+): MasteryMap {
+  const types = typeof type === 'string' ? [type] : type;
+  const map: MasteryMap = {};
+  for (const id of ids) {
+    for (const skill of ['SOUND_ID', 'LETTER_SOUND'] as const) {
+      let record = emptyRecord(id, skill, DEFAULT_CONFIG);
+      for (let i = 0; i < count; i += 1) {
+        record = applyAttempt(record, {
+          sessionId: `earlier-${i}`, targetId: id, skill, taskTypeId: types[i % types.length],
+          correct: true, scaffolded: false, latencyMs: 900, weight: 1, at: NOW - 1000,
+        }, DEFAULT_CONFIG);
+      }
+      map[masteryKey(id, skill)] = record;
+    }
+  }
+  return map;
+}
 
 function plan(sessionId = 'q') {
   return buildSession({ sessionId, level: 1, mastery: {}, confusions: {}, now: NOW });
@@ -340,6 +367,22 @@ describe('isPlayablePlan', () => {
     for (const seed of ['a', 'b', 'c']) expect(isPlayablePlan(plan(seed))).toBe(true);
   });
 
+  it('accepts every real task the engine builds, of every task type, so no plan is thrown away as unplayable', () => {
+    const mastery = {
+      ...masteredFor(['s', 'a', 't']),
+      ...masteredFor(['p', 'i', 'm'], 'sound-hunt', 2),
+    };
+    const seen = new Set<string>();
+    for (let i = 0; i < 40; i += 1) {
+      const built = buildSession({ sessionId: `pp-${i}`, level: 1, mastery, confusions: {}, now: NOW });
+      for (const t of built) {
+        seen.add(t.taskTypeId);
+        expect(isPlayablePlan([t]), `${t.taskTypeId} ${t.id}`).toBe(true);
+      }
+    }
+    expect([...seen].sort()).toEqual(TASK_TYPES.map((t) => t.id).sort());
+  });
+
   it('rejects an empty plan', () => {
     expect(isPlayablePlan([])).toBe(false);
   });
@@ -372,6 +415,31 @@ describe('isPlayablePlan', () => {
 
   it('rejects garbage without throwing', () => {
     expect(isPlayablePlan([{ ...plan()[0], choices: 'nope' as unknown as string[] }])).toBe(false);
+  });
+
+  describe('a Picture Start task', () => {
+    const start = (overrides: Partial<TaskInstance> = {}) =>
+      task({
+        taskTypeId: 'picture-start', skill: 'LETTER_SOUND', primaryTarget: 'm', correctChoice: 'm',
+        choices: ['s', 'm'], ...overrides,
+      });
+
+    it('is playable when every letter can be drawn and the right one is among them', () => {
+      expect(isPlayablePlan([start()])).toBe(true);
+      expect(isPlayablePlan([start({ choices: ['t', 'm', 'f'] })])).toBe(true);
+    });
+
+    it('is rejected for a vowel, which has no picture to answer with', () => {
+      expect(isPlayablePlan([start({ primaryTarget: 'a', correctChoice: 'a', choices: ['s', 'a'] })])).toBe(false);
+    });
+
+    it('is rejected when a wrong answer is a letter with no picture, which would be a blank card', () => {
+      expect(isPlayablePlan([start({ choices: ['m', 'a'] })])).toBe(false);
+    });
+
+    it('is rejected when the right letter is not among the choices', () => {
+      expect(isPlayablePlan([start({ choices: ['s', 't'] })])).toBe(false);
+    });
   });
 
   describe('a Missing Letter task', () => {
@@ -415,6 +483,10 @@ describe('preloadKeysFor', () => {
     const keys = preloadKeysFor(plan().slice(0, 3));
     expect(keys).toContain('ui.which_sound');
     expect(keys.some((k) => k.startsWith('ph.'))).toBe(true);
+  });
+
+  it('warms the prompt Picture Start speaks after the sound', () => {
+    expect(preloadKeysFor([task({ taskTypeId: 'picture-start', skill: 'LETTER_SOUND', choices: ['s', 'm'] })])).toContain('ui.which_starts');
   });
 
   it('warms the letter sounds a Missing Letter task can play, and its prompt', () => {

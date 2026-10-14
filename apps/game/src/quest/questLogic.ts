@@ -3,6 +3,7 @@ import {
   TASK_TYPES,
   buildSession,
   closingTask,
+  hasInitialPicture,
   masteryKey,
 } from '@soundlings/engine';
 import type {
@@ -280,6 +281,12 @@ export function isPlayablePlan(plan: readonly TaskInstance[]): boolean {
       if (task.skill === 'SOUND_ID' || task.skill === 'LETTER_SOUND') {
         getGrapheme(task.correctChoice);
         task.choices.forEach((c) => getGrapheme(c));
+        if (task.taskTypeId === 'picture-start') {
+          // Every letter is drawn as a picture of a word that starts with it. One with no
+          // picture (a vowel) would be a blank card, or have no honest answer at all.
+          const level = Math.max(1, ...task.choices.map((c) => getGrapheme(c).introducedInLevel));
+          if (!task.choices.every((c) => hasInitialPicture(c, level))) return false;
+        }
         return task.choices.includes(task.correctChoice);
       }
       const word = getWord(task.correctChoice);
@@ -312,6 +319,7 @@ const PROMPT_KEYS = [
   'ui.tap_picture',
   'ui.find_word',
   'ui.missing_letter',
+  'ui.which_starts',
   'ui.all_done',
 ];
 

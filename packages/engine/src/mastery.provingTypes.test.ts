@@ -8,11 +8,11 @@ import type { Attempt, MasteryRecord } from './types';
 const HOUR = 3_600_000;
 
 /** At least four fast unscaffolded correct answers across three sessions, on the given task types in turn (one per type if there are more than four). */
-function proven(skill: Skill, taskTypeIds: string[], config: EngineConfig = DEFAULT_CONFIG): MasteryRecord {
-  let record = emptyRecord('x', skill, config);
+function proven(skill: Skill, taskTypeIds: string[], config: EngineConfig = DEFAULT_CONFIG, target = 'x'): MasteryRecord {
+  let record = emptyRecord(target, skill, config);
   for (let i = 0; i < Math.max(4, taskTypeIds.length); i += 1) {
     const base: Attempt = {
-      sessionId: `session-${i % 3}`, targetId: 'x', skill,
+      sessionId: `session-${i % 3}`, targetId: target, skill,
       taskTypeId: taskTypeIds[i % taskTypeIds.length],
       correct: true, scaffolded: false, latencyMs: 900, weight: 1, at: (i + 1) * HOUR,
     };
@@ -24,10 +24,19 @@ function proven(skill: Skill, taskTypeIds: string[], config: EngineConfig = DEFA
 const NOW = 5 * HOUR;
 
 describe('isMastered: the task-type condition is capped by what can prove the skill', () => {
-  it('lets LETTER_SOUND be mastered on its only task type', () => {
-    const record = proven('LETTER_SOUND', ['sound-singer']);
+  it('lets LETTER_SOUND be mastered on its only task type, for a vowel: nothing else can prove it', () => {
+    // Picture Start needs a picturable word starting with the sound, and no Level 1 word starting
+    // with a vowel can be drawn. So `a` keeps one proving game, and demanding two would make it
+    // permanently unmasterable.
+    const record = proven('LETTER_SOUND', ['sound-singer'], DEFAULT_CONFIG, 'a');
     expect(record.taskTypesSeen).toEqual(['sound-singer']);
     expect(isMastered(record, NOW, DEFAULT_CONFIG)).toBe(true);
+  });
+
+  it('refuses LETTER_SOUND proven on one task type for a sound Picture Start can also prove', () => {
+    const record = proven('LETTER_SOUND', ['sound-singer'], DEFAULT_CONFIG, 'm');
+    expect(isMastered(record, NOW, DEFAULT_CONFIG)).toBe(false);
+    expect(isMastered(proven('LETTER_SOUND', ['sound-singer', 'picture-start'], DEFAULT_CONFIG, 'm'), NOW, DEFAULT_CONFIG)).toBe(true);
   });
 
   it('no longer lets BLEND_READ be mastered on one task type, now that Word Pick is a second', () => {
@@ -78,11 +87,11 @@ describe('isMastered: the task-type condition is capped by what can prove the sk
     const all = ['sound-hunt', 'picture-match', 'word-pick', 'word-builder', 'missing-letter'];
     expect(isMastered(proven('SOUND_ID', all.slice(0, 4), six), NOW, six)).toBe(false);
     expect(isMastered(proven('SOUND_ID', all, six), NOW, six)).toBe(true);
-    expect(isMastered(proven('LETTER_SOUND', ['sound-singer'], six), NOW, six)).toBe(true);
+    expect(isMastered(proven('LETTER_SOUND', ['sound-singer'], six, 'a'), NOW, six)).toBe(true);
   });
 
   it('keeps every other condition in force for a single-type skill', () => {
-    const ok = proven('LETTER_SOUND', ['sound-singer']);
+    const ok = proven('LETTER_SOUND', ['sound-singer'], DEFAULT_CONFIG, 'a');
     expect(isMastered({ ...ok, correctCount: 2 }, NOW, DEFAULT_CONFIG)).toBe(false);
     expect(isMastered({ ...ok, sessionsProven: 1 }, NOW, DEFAULT_CONFIG)).toBe(false);
     expect(isMastered({ ...ok, consecutiveCorrect: 0 }, NOW, DEFAULT_CONFIG)).toBe(false);

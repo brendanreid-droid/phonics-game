@@ -348,12 +348,14 @@ describe('buildSession for a brand-new child', () => {
     }
   });
 
-  it('has two task types on day one, because words wait until the sounds are known', () => {
-    // Before invariant 5a this asserted three, with spelling credited for s, a and t. See
-    // 'sounds before words' below, which also holds the anti-deadlock property.
+  it('has three task types on day one, all of them sound games, because words wait until the sounds are known', () => {
+    // Before invariant 5a this asserted three, with spelling credited for s, a and t; then two, the
+    // hunt and Sound Singer. Picture Start (Plan 3) makes it three again: s against t is the one
+    // pictured pair a brand-new child has met. See 'sounds before words' below, which also holds
+    // the anti-deadlock property.
     for (const seed of SEEDS) {
       const plan = build({}, seed);
-      expect(new Set(plan.map((t) => t.taskTypeId)), seed).toEqual(new Set(['sound-hunt', 'sound-singer']));
+      expect(new Set(plan.map((t) => t.taskTypeId)), seed).toEqual(new Set(['sound-hunt', 'sound-singer', 'picture-start']));
       expect(plan[0].taskTypeId, seed).toBe('sound-hunt');
     }
   });
@@ -369,15 +371,16 @@ describe('buildSession for a brand-new child', () => {
     expect(credited).toEqual(new Set(['s', 'a', 't']));
   });
 
-  it('alternates strictly between two task types when the frustration cap leaves only two', () => {
-    // maxDifficulty 2 rules out spelling. Only sound-hunt and sound-singer remain, so
-    // the no-adjacent-repeat rule forces strict alternation, which is why the closing
-    // anchor may be the second-easiest type.
+  it('keeps alternating, and still opens on the easiest, when the frustration cap leaves only the sound games', () => {
+    // maxDifficulty 2 rules out the word games. The hunt, Sound Singer and Picture Start remain.
+    // (Before Plan 3 only two remained and the no-adjacent-repeat rule forced strict alternation,
+    // which is why the closing anchor may be the second-easiest type. Picture Start shares Sound
+    // Singer's rung, so the close may be either.)
     for (const seed of SEEDS) {
       const plan = build({}, seed, { maxDifficulty: 2 });
-      expect(new Set(plan.map((t) => t.taskTypeId)), seed).toEqual(new Set(['sound-hunt', 'sound-singer']));
+      expect(new Set(plan.map((t) => t.taskTypeId)), seed).toEqual(new Set(['sound-hunt', 'sound-singer', 'picture-start']));
       expect(plan[0].taskTypeId, seed).toBe('sound-hunt');
-      expect(plan[plan.length - 1].taskTypeId, seed).toBe('sound-singer');
+      expect(taskTypeById(plan[plan.length - 1].taskTypeId).difficulty, seed).toBeLessThanOrEqual(2);
       for (let i = 1; i < plan.length; i += 1) {
         expect(plan[i].taskTypeId, `${seed} slot ${i}`).not.toBe(plan[i - 1].taskTypeId);
       }
@@ -465,10 +468,10 @@ describe('buildSession when only two task types are available but win-backs exis
   const mastery = STATES['day two: s and a heard but not yet sung'];
   const capped = { maxDifficulty: DEFAULT_CONFIG.cappedDifficulty };
 
-  it('really has win-backs and really has only two task types', () => {
+  it('really has win-backs and really has only the three sound task types', () => {
     const plan = build(mastery, 'test-session', capped);
     expect(plan.some((t) => t.band === 'winback')).toBe(true);
-    expect(new Set(plan.map((t) => t.taskTypeId)).size).toBe(2);
+    expect(new Set(plan.map((t) => t.taskTypeId)).size).toBe(3);
   });
 
   it('opens and breathes on win-backs, and closes on a sound it already asked about', () => {
@@ -956,15 +959,17 @@ describe('buildSession: sounds before words (invariant 5a)', () => {
     expect(asked).toEqual(new Set(['s', 'a', 't']));
   });
 
-  it('still arranges a brand-new quest: two types alternating, open on the easiest, close on the second-easiest', () => {
-    // With words excluded only sound-hunt and sound-singer remain, so the no-adjacent-repeat
-    // rule forces strict alternation. This is the situation amended invariant 7 exists for.
+  it('still arranges a brand-new quest: three sound types, open on the easiest, close on the second-easiest', () => {
+    // With words excluded only the sound games remain: the hunt, Sound Singer and Picture Start.
+    // This is the situation amended invariant 7 exists for. The close may be no harder than the
+    // second-easiest rung, which Sound Singer and Picture Start share; with three types it can also
+    // be the hunt again, which the old two-type parity ruled out.
     for (const seed of SEEDS) {
       const plan = build({}, seed);
       expect(plan.length, seed).toBe(DEFAULT_CONFIG.sessionLength);
-      expect(new Set(plan.map((t) => t.taskTypeId)), seed).toEqual(new Set(['sound-hunt', 'sound-singer']));
+      expect(new Set(plan.map((t) => t.taskTypeId)), seed).toEqual(new Set(['sound-hunt', 'sound-singer', 'picture-start']));
       expect(plan[0].taskTypeId, seed).toBe('sound-hunt');
-      expect(plan[plan.length - 1].taskTypeId, seed).toBe('sound-singer');
+      expect(taskTypeById(plan[plan.length - 1].taskTypeId).difficulty, seed).toBeLessThanOrEqual(2);
       expect(plan.filter((t) => t.anchor).length, seed).toBe(DEFAULT_CONFIG.winbackCount);
       for (let i = 1; i < plan.length; i += 1) {
         expect(plan[i].taskTypeId, `${seed} slot ${i}`).not.toBe(plan[i - 1].taskTypeId);
@@ -1280,6 +1285,144 @@ describe('buildSession: Missing Letter', () => {
       const plan = build(ready, seed);
       expect(plan).toHaveLength(DEFAULT_CONFIG.sessionLength);
       for (let i = 1; i < plan.length; i += 1) expect(plan[i].taskTypeId, seed).not.toBe(plan[i - 1].taskTypeId);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Plan 3 Task 5: Picture Start. A letter is shown and the child picks the
+// picture that starts with its sound. It exists only for the sounds that have a
+// picturable word beginning with them, so the builder must never ask it of a
+// vowel, and the proving count agrees.
+// ---------------------------------------------------------------------------
+
+describe('buildSession: Picture Start', () => {
+  const PICTURED = ['s', 'p', 'm', 't', 'f'];
+  const VOWELS = ['a', 'i'];
+  const picks = (mastery: MasteryMap, extra: Partial<BuildSessionArgs> = {}, seeds: readonly string[] = SEEDS) =>
+    seeds.flatMap((seed) => build(mastery, seed, extra)).filter((t) => t.taskTypeId === 'picture-start');
+
+  /** Every state the other tests use, plus ones with the vowels mastered and a mix, so vowels are in every pool. */
+  const ALL_STATES: Record<string, MasteryMap> = {
+    ...STATES,
+    'vowels mastered, consonants not': masteredGraphemes(['a', 'i']),
+    'only a and i known': { ...heard({ a: 3, i: 3 }), ...masteredGraphemes(['a']) },
+    'a mastered, s heard': { ...masteredGraphemes(['a']), ...heard({ s: 2, t: 2 }) },
+    'everything mastered': masteredGraphemes(['s', 'a', 't', 'p', 'i', 'm', 'f']),
+    'everything mastered long ago': masteredGraphemes(['s', 'a', 't', 'p', 'i', 'm', 'f']),
+  };
+
+  it('is scheduled for a child who has met enough sounds', () => {
+    expect(picks(masteredGraphemes(['s', 'a', 't', 'p'])).length).toBeGreaterThan(0);
+  });
+
+  it('is never scheduled for a vowel, in any state, with any seed', () => {
+    // `at`, `am`, `if` and `it` are function words with no picture, so no picturable Level 1
+    // word starts with a vowel. A Picture Start asked about `a` would have no honest answer.
+    let seen = 0;
+    for (const [name, mastery] of Object.entries(ALL_STATES)) {
+      for (const seed of SEEDS) {
+        for (const task of build(mastery, seed)) {
+          if (task.taskTypeId !== 'picture-start') continue;
+          seen += 1;
+          expect(VOWELS, `${name}, ${seed}: ${task.id}`).not.toContain(task.primaryTarget);
+          expect(PICTURED, `${name}, ${seed}: ${task.id}`).toContain(task.primaryTarget);
+        }
+      }
+    }
+    expect(seen, 'the check is vacuous if Picture Start never comes up').toBeGreaterThan(30);
+  });
+
+  it('is never scheduled for a vowel even when the vowels are the only sounds the child has mastered', () => {
+    for (const task of picks(masteredGraphemes(['a', 'i']))) expect(VOWELS).not.toContain(task.primaryTarget);
+    for (const task of picks(ALL_STATES['only a and i known'])) expect(VOWELS).not.toContain(task.primaryTarget);
+  });
+
+  it('still schedules Sound Singer for the vowels, so they keep a letter-to-sound game', () => {
+    // Day one: the vowels are in play and unmastered, so Sound Singer is the only way to ask them.
+    const singers = SEEDS.flatMap((seed) => build({}, seed)).filter((t) => t.taskTypeId === 'sound-singer');
+    expect(singers.some((t) => VOWELS.includes(t.primaryTarget))).toBe(true);
+  });
+
+  it('is a letter-to-sound task: letters in, the letter out', () => {
+    for (const task of picks(masteredGraphemes(['s', 'a', 't', 'p']))) {
+      expect(task.skill, task.id).toBe('LETTER_SOUND');
+      expect(task.correctChoice, task.id).toBe(task.primaryTarget);
+      expect(task.secondaryTargets, task.id).toEqual([]);
+      expect(task.blankIndex, task.id).toBeUndefined();
+    }
+  });
+
+  it('offers two or three choices, the right one once, no duplicates', () => {
+    for (const task of picks(masteredGraphemes(['s', 'a', 't', 'p', 'i']))) {
+      expect(task.choices.length, task.id).toBeGreaterThanOrEqual(2);
+      expect(task.choices.length, task.id).toBeLessThanOrEqual(3);
+      expect(task.choices.filter((c) => c === task.correctChoice), task.id).toHaveLength(1);
+      expect(new Set(task.choices).size, task.id).toBe(task.choices.length);
+    }
+  });
+
+  it('only offers letters that have a picture to show, so every card can be drawn', () => {
+    // A wrong answer is the picture of a word beginning with another letter. A vowel has none.
+    for (const [name, mastery] of Object.entries(ALL_STATES)) {
+      for (const task of picks(mastery)) {
+        for (const choice of task.choices) expect(PICTURED, `${name}: ${task.id} offers ${choice}`).toContain(choice);
+      }
+    }
+  });
+
+  it('offers only letters the child has met', () => {
+    // Introduction groups are [s a t] [p i] [m f]; with only s, a, t mastered every level-1 letter is met,
+    // but a brand-new child has met s, a, t only.
+    for (const seed of SEEDS) {
+      for (const task of build({}, seed)) {
+        if (task.taskTypeId !== 'picture-start') continue;
+        for (const choice of task.choices) expect(['s', 'a', 't'], `${seed}: ${task.id}`).toContain(choice);
+      }
+    }
+  });
+
+  it('can be asked of a brand-new child, with s against t, the only two pictured letters they know', () => {
+    const day1 = picks({}, {});
+    expect(day1.length).toBeGreaterThan(0);
+    for (const task of day1) expect([...task.choices].sort(), task.id).toEqual(['s', 't']);
+  });
+
+  it('shows a letter the child keeps mixing up with the target, ahead of the rest', () => {
+    // Every level-1 letter is met and m is in the focus, so m has four pictured rivals (s, t, p, f) and
+    // only two places for them. None is on m's own confusable list (n and w are), so only the child's
+    // history can say which two.
+    const mastery = { ...masteredGraphemes(['s', 'a', 't']), ...heard({ p: 2, i: 2, m: 2 }) };
+    const confusions = { 'm>f': 5 };
+    const asked = SEEDS.flatMap((seed) => build(mastery, seed, { confusions }))
+      .filter((t) => t.taskTypeId === 'picture-start' && t.primaryTarget === 'm');
+    expect(asked.length).toBeGreaterThan(0);
+    for (const task of asked) expect(task.choices, task.id).toContain('f');
+    const without = SEEDS.flatMap((seed) => build(mastery, seed))
+      .filter((t) => t.taskTypeId === 'picture-start' && t.primaryTarget === 'm');
+    expect(without.some((t) => !t.choices.includes('f'))).toBe(true);
+  });
+
+  it('keeps the other invariants with six task types in play, in every state', () => {
+    for (const [name, mastery] of Object.entries(ALL_STATES)) {
+      for (const seed of SEEDS) {
+        const plan = build(mastery, seed);
+        expect(plan, `${name}, ${seed}`).toHaveLength(DEFAULT_CONFIG.sessionLength);
+        expect(plan[0].anchor && plan[plan.length - 1].anchor, `${name}, ${seed}`).toBe(true);
+        for (let i = 1; i < plan.length; i += 1) {
+          expect(plan[i].taskTypeId, `${name}, ${seed}, slot ${i}`).not.toBe(plan[i - 1].taskTypeId);
+        }
+      }
+    }
+  });
+
+  it('never throws, in any state, for any seed, at any difficulty cap', () => {
+    for (const mastery of Object.values(ALL_STATES)) {
+      for (const seed of SEEDS.slice(0, 10)) {
+        for (const maxDifficulty of [undefined, 1, 2, 3, 4]) {
+          expect(() => build(mastery, seed, { maxDifficulty })).not.toThrow();
+        }
+      }
     }
   });
 });

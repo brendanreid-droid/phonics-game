@@ -43,8 +43,8 @@ describe('audio manifest', () => {
     for (const key of ENCOURAGE_KEYS) expect(hasAudio(key), key).toBe(true);
   });
 
-  it('provides every instruction clip the six mini-games need', () => {
-    for (const key of ['ui.which_says', 'ui.which_sound', 'ui.find_letter', 'ui.build_word', 'ui.tap_picture', 'ui.listen_again', 'ui.find_word', 'ui.missing_letter']) {
+  it('provides every instruction clip the seven mini-games need', () => {
+    for (const key of ['ui.which_says', 'ui.which_sound', 'ui.find_letter', 'ui.build_word', 'ui.tap_picture', 'ui.listen_again', 'ui.find_word', 'ui.missing_letter', 'ui.which_starts']) {
       expect(hasAudio(key), key).toBe(true);
     }
   });

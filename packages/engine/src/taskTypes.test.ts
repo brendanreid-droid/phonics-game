@@ -82,6 +82,7 @@ describe('task types', () => {
     expect(bounds).toEqual({
       'sound-hunt': [2, 4],
       'sound-singer': [2, 3],
+      'picture-start': [2, 3],
       'picture-match': [2, 3],
       'word-pick': [2, 3],
       'missing-letter': [2, 4],
@@ -134,7 +135,9 @@ describe('provingTaskTypeCount', () => {
     // SOUND_ID: sound-hunt directly, plus picture-match, word-pick, missing-letter and
     // word-builder through secondary credit. The other three skills get no composite credit.
     expect(provingTaskTypeCount('SOUND_ID', 's')).toBe(5);
-    expect(provingTaskTypeCount('LETTER_SOUND', 's')).toBe(1);
+    // LETTER_SOUND: sound-singer for every sound, and picture-start for the sounds with a picturable
+    // word to answer with. The vowels have none, so they stay at one: see the per-target tests below.
+    expect(provingTaskTypeCount('LETTER_SOUND', 's')).toBe(2);
     expect(provingTaskTypeCount('BLEND_READ', 'mat')).toBe(2);
     expect(provingTaskTypeCount('SEGMENT_SPELL', 'mat')).toBe(2);
   });
@@ -146,10 +149,10 @@ describe('provingTaskTypeCount', () => {
     expect(provingTaskTypeCount('SENTENCE_READ', 'sat')).toBe(1);
   });
 
-  it('rises on its own when a second mini-game is added for a skill', () => {
-    const pool = [...TASK_TYPES, type({ id: 'singer-two', skill: 'LETTER_SOUND', difficulty: 6 })];
-    expect(provingTaskTypeCount('LETTER_SOUND', 's', pool)).toBe(2);
-    expect(provingTaskTypeCount('LETTER_SOUND', 's', TASK_TYPES)).toBe(1);
+  it('rises on its own when another mini-game is added for a skill', () => {
+    const pool = [...TASK_TYPES, type({ id: 'singer-three', skill: 'LETTER_SOUND', difficulty: 6 })];
+    expect(provingTaskTypeCount('LETTER_SOUND', 's', pool)).toBe(3);
+    expect(provingTaskTypeCount('LETTER_SOUND', 's', TASK_TYPES)).toBe(2);
   });
 
   it('counts secondary-credit types only for the skill that receives the credit', () => {
@@ -170,20 +173,27 @@ describe('provingTaskTypeCount', () => {
   });
 
   it('agrees with the evidence taskOutcome actually emits, so the two cannot drift apart', () => {
+    // A type that cannot serve a target is never scheduled for it, so it can emit no evidence for it.
+    // Targets are chosen so each skill is asked about something every one of its types can serve.
+    const primary = (skill: string) => (skill === 'LETTER_SOUND' ? 'm' : 'pat');
     for (const skill of ['SOUND_ID', 'LETTER_SOUND', 'BLEND_READ', 'SEGMENT_SPELL'] as const) {
       const emitted = new Set<string>();
       for (const meta of TASK_TYPES) {
+        const target = primary(meta.skill);
+        if (meta.canServeTarget !== undefined && !meta.canServeTarget(target)) continue;
         const task: TaskInstance = {
-          id: 't', taskTypeId: meta.id, skill: meta.skill, primaryTarget: 'pat',
+          id: 't', taskTypeId: meta.id, skill: meta.skill, primaryTarget: target,
           secondaryTargets: meta.secondaryTargets === 'graphemes' ? ['p', 'a', 't'] : [],
-          choices: [], correctChoice: 'pat', band: 'focus', anchor: false, difficulty: meta.difficulty, seed: 1,
+          choices: [], correctChoice: target, band: 'focus', anchor: false, difficulty: meta.difficulty, seed: 1,
         };
         const outcome = { sessionId: 's', correct: true, scaffolded: false, latencyMs: 1000, at: 1 };
         for (const a of attemptsForTask(task, outcome, DEFAULT_CONFIG)) {
           if (a.skill === skill) emitted.add(a.taskTypeId);
         }
       }
-      expect(provingTaskTypeCount(skill, 'pat'), skill).toBe(emitted.size);
+      // For SOUND_ID the count is about secondary credit, whatever the target; for the rest, about the primary.
+      const asked = skill === 'LETTER_SOUND' ? 'm' : 'pat';
+      expect(provingTaskTypeCount(skill, asked), skill).toBe(emitted.size);
     }
   });
 });
@@ -205,11 +215,12 @@ describe('provingTaskTypeCount, per target', () => {
     for (const skill of ['SOUND_ID', 'LETTER_SOUND', 'BLEND_READ', 'SEGMENT_SPELL'] as const) {
       for (const target of ['s', 'a', 't', 'p', 'i', 'm', 'f', 'mat', 'at']) {
         expect(provingTaskTypeCount(skill, target), `${skill}/${target}`).toBeGreaterThanOrEqual(1);
-        // Each shipped type serves any target of its skill, so the count is
-        // exactly what the skill-wide answer was before this change.
-        expect(provingTaskTypeCount(skill, target), `${skill}/${target}`).toBe(
-          provingTaskTypeCount(skill, 's'),
-        );
+        // Every shipped type serves any target of its skill except Picture Start,
+        // which needs a picturable word beginning with the sound: not `a`, not `i`,
+        // and not a word id, which is no sound at all.
+        const noPicture = skill === 'LETTER_SOUND' && !['s', 't', 'p', 'm', 'f'].includes(target);
+        const expected = noPicture ? provingTaskTypeCount(skill, 's') - 1 : provingTaskTypeCount(skill, 's');
+        expect(provingTaskTypeCount(skill, target), `${skill}/${target}`).toBe(expected);
       }
     }
   });
@@ -220,7 +231,8 @@ describe('provingTaskTypeCount, per target', () => {
 
   it('gives a different answer for different targets of the same skill', () => {
     const pool = [...TASK_TYPES, onlyForM];
-    expect(provingTaskTypeCount('LETTER_SOUND', 'm', pool)).toBe(2);
+    // m: sound-singer, picture-start and the stand-in. a: sound-singer only.
+    expect(provingTaskTypeCount('LETTER_SOUND', 'm', pool)).toBe(3);
     expect(provingTaskTypeCount('LETTER_SOUND', 'a', pool)).toBe(1);
   });
 

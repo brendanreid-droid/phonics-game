@@ -11,6 +11,7 @@ import { withDefaults } from './config';
 import type { EngineConfig } from './config';
 import { pickGraphemeDistractors, pickTileDistractors, pickWordDistractors } from './distractors';
 import { blankPositionFor } from './missingLetter';
+import { hasInitialPicture } from './pictureStart';
 import { getRecord, isMastered, strengthAt } from './mastery';
 import { graphemesMetAt, wordsDecodableFrom } from './metGraphemes';
 import { deriveSeed, makeRng, seedFromString, shuffle } from './rng';
@@ -117,6 +118,22 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
   const { pairings, blendWordIds } = teachable(level, metGraphemeIds, usableSkills, mastery, config);
   if (pairings.length === 0) throw new Error(`No teachable pairings at level ${level}`);
 
+  // Whether a task type can actually be built for a pairing. A skill match is
+  // not enough for a game that only works for some targets: Picture Start needs
+  // a picture to answer with, which no vowel has, and pictures of OTHER met
+  // letters to be wrong answers.
+  const canBuild = (type: TaskTypeMeta, p: Pairing): boolean => {
+    if (type.skill !== p.skill) return false;
+    if (type.canServeTarget !== undefined && !type.canServeTarget(p.targetId)) return false;
+    if (type.id === 'picture-start') {
+      const wrong = metGraphemeIds.filter((g) => g !== p.targetId && hasInitialPicture(g, level));
+      return wrong.length >= type.minChoices - 1;
+    }
+    return true;
+  };
+  const buildableIn = (pool: readonly Pairing[]): TaskTypeMeta[] =>
+    usable.filter((type) => pool.some((p) => canBuild(type, p)));
+
   const unmastered = pairings.filter((p) => !masteredPair(p));
   const mastered = pairings.filter(masteredPair);
 
@@ -176,10 +193,7 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
   const winbackMode = winbackPool.length >= MIN_WINBACK_TARGETS;
   const anchorPool = winbackMode ? winbackPool : focusBase;
 
-  const typesOf = (pool: readonly Pairing[]): TaskTypeMeta[] => {
-    const skills = new Set(pool.map((p) => p.skill));
-    return usable.filter((t) => skills.has(t.skill));
-  };
+  const typesOf = buildableIn;
   const byDifficulty = (types: TaskTypeMeta[]) => [...types].sort((a, b) => a.difficulty - b.difficulty);
   const provenFor = (p: Pairing, type: TaskTypeMeta): boolean =>
     getRecord(mastery, p.targetId, p.skill, config).taskTypesSeen.includes(type.id);
@@ -191,8 +205,8 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
   const easiest = lowestTwo(anchorTypes).slice(0, 1);
   const winbackTypes = [...anchorTypes].sort(
     (a, b) =>
-      Number(!anchorPool.some((p) => p.skill === a.skill && provenFor(p, a))) -
-        Number(!anchorPool.some((p) => p.skill === b.skill && provenFor(p, b))) ||
+      Number(!anchorPool.some((p) => canBuild(a, p) && provenFor(p, a))) -
+        Number(!anchorPool.some((p) => canBuild(b, p) && provenFor(p, b))) ||
       a.difficulty - b.difficulty,
   );
   const ladder: AnchorRules[] = winbackMode
@@ -208,16 +222,18 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
         { open: easiest, mid: easiest, close: lowestTwo(anchorTypes), closeOnPractised: true, strict: false },
       ];
 
-  const skillsOf = (tiers: readonly (readonly Pairing[])[]) => new Set(tiers.flat().map((p) => p.skill));
-  const focusSkills = skillsOf(focusTiers);
-  const reviewSkills = skillsOf(reviewTiers);
-  const fillerTypes = usable.filter((t) => focusSkills.has(t.skill) || reviewSkills.has(t.skill));
+  // Which task types each band can supply, by id rather than by skill: two types
+  // of one skill need not be able to serve the same targets.
+  const typeIdsOf = (tiers: readonly (readonly Pairing[])[]) => new Set(buildableIn(tiers.flat()).map((t) => t.id));
+  const focusTypes = typeIdsOf(focusTiers);
+  const reviewTypes = typeIdsOf(reviewTiers);
+  const fillerTypes = usable.filter((t) => focusTypes.has(t.id) || reviewTypes.has(t.id));
 
   // Can the open anchor's skill be followed by a close of skill `close` on the
   // same target? That is what guarantees the closing target was asked earlier.
   const closeCompatible = (open: TaskTypeMeta, close: TaskTypeMeta): boolean =>
     anchorPool.some(
-      (p) => p.skill === open.skill && pairings.some((q) => q.targetId === p.targetId && q.skill === close.skill),
+      (p) => canBuild(open, p) && pairings.some((q) => q.targetId === p.targetId && canBuild(close, q)),
     );
 
   let skeleton: TaskTypeMeta[] | null = null;
@@ -229,8 +245,8 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
         length,
         anchors: anchorRulesBySlot(length, anchorCount, mid, attempt),
         fillerTypes,
-        focusSkills,
-        reviewSkills,
+        focusTypes,
+        reviewTypes,
         focusSlots: focusCount,
         reviewSlots: reviewCount,
         strict: attempt.strict,
@@ -256,7 +272,7 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
   ): Pairing => {
     const candidates =
       tiers
-        .map((tier) => tier.filter((p) => p.skill === type.skill && (only?.(p) ?? true)))
+        .map((tier) => tier.filter((p) => canBuild(type, p) && (only?.(p) ?? true)))
         .find((tier) => tier.length > 0) ?? [];
     if (candidates.length === 0) throw new Error(`No ${type.skill} pairing available for ${type.id}`);
     const used = (p: Pairing) => usage.get(`${p.targetId}::${p.skill}`) ?? 0;
@@ -286,14 +302,14 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
     const type = skeleton[slot];
     // The opening target must be one the close can come back to, which is what
     // guarantees the closing target was asked earlier in the quest.
-    const closeSkill = skeleton[closeSlot].skill;
+    const closeType = skeleton[closeSlot];
     slots[slot] = {
       pairing: pick(
         [anchorPool],
         type,
         true,
         closeIsPractised && slot === 0
-          ? (p) => pairings.some((q) => q.targetId === p.targetId && q.skill === closeSkill)
+          ? (p) => pairings.some((q) => q.targetId === p.targetId && canBuild(closeType, q))
           : undefined,
       ),
       type, band: anchorBand, anchor: true,
@@ -307,8 +323,8 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
   const flexible: number[] = [];
   let reviewLeft = reviewCount;
   for (const i of fillerSlots) {
-    const inFocus = focusSkills.has(skeleton[i].skill);
-    const inReview = reviewSkills.has(skeleton[i].skill);
+    const inFocus = focusTypes.has(skeleton[i].id);
+    const inReview = reviewTypes.has(skeleton[i].id);
     if (inFocus && inReview) flexible.push(i);
     else if (inReview) { bandOf.set(i, 'review'); reviewLeft -= 1; } else bandOf.set(i, 'focus');
   }
@@ -317,7 +333,7 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
   const review = new Set<number>();
   for (const p of reviewSource) {
     if (review.size >= reviewLeft) break;
-    const slot = flexible.find((i) => !review.has(i) && skeleton[i].skill === p.skill);
+    const slot = flexible.find((i) => !review.has(i) && canBuild(skeleton[i], p));
     if (slot !== undefined) review.add(slot);
   }
   for (const i of shuffle(flexible.filter((j) => !review.has(j)), rng)) {
@@ -340,7 +356,7 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
     // Most-asked target first: "practised a dozen times" is the whole
     // justification for letting the close be the second-easiest type.
     const pairing = pairings
-      .filter((p) => p.skill === type.skill && asked.has(p.targetId))
+      .filter((p) => canBuild(type, p) && asked.has(p.targetId))
       .sort((a, b) => (asked.get(b.targetId) ?? 0) - (asked.get(a.targetId) ?? 0))[0];
     if (!pairing) throw new Error('No practised target available for the closing anchor');
     slots[closeSlot] = {
@@ -549,8 +565,10 @@ interface SkeletonSpec {
   length: number;
   anchors: Map<number, AnchorSlotRule>;
   fillerTypes: readonly TaskTypeMeta[];
-  focusSkills: ReadonlySet<Skill>;
-  reviewSkills: ReadonlySet<Skill>;
+  /** Ids of the task types the focus band can supply a pairing for. */
+  focusTypes: ReadonlySet<string>;
+  /** Ids of the task types the review band can supply a pairing for. */
+  reviewTypes: ReadonlySet<string>;
   focusSlots: number;
   reviewSlots: number;
   strict: boolean;
@@ -602,8 +620,8 @@ function searchSkeleton(spec: SkeletonSpec): TaskTypeMeta[] | null {
       let f = focusOnly;
       let r = reviewOnly;
       if (!rule) {
-        const inFocus = spec.focusSkills.has(type.skill);
-        const inReview = spec.reviewSkills.has(type.skill);
+        const inFocus = spec.focusTypes.has(type.id);
+        const inReview = spec.reviewTypes.has(type.id);
         if (inFocus && !inReview) f += 1;
         else if (!inFocus && inReview) r += 1;
         if (f > spec.focusSlots || r > spec.reviewSlots) continue;
@@ -662,12 +680,20 @@ function makeTask(args: MakeTaskArgs): TaskInstance {
   let blankIndex: number | undefined;
 
   if (type.skill === 'SOUND_ID' || type.skill === 'LETTER_SOUND') {
+    // Picture Start shows a PICTURE for each letter, so a wrong letter must have
+    // one: a vowel does not (no picturable word starts with one), and would be a
+    // blank card. The pool is narrowed here, so the ranking by what the child has
+    // confused still applies within it.
+    const allowed =
+      type.id === 'picture-start'
+        ? allowedGraphemes.filter((g) => g === pairing.targetId || hasInitialPicture(g, level))
+        : allowedGraphemes;
     const distractors = pickGraphemeDistractors({
       target: pairing.targetId,
       count: choiceCount - 1,
       level,
       confusions,
-      allowed: allowedGraphemes,
+      allowed,
       rng,
     });
     choices = shuffle([pairing.targetId, ...distractors], rng);

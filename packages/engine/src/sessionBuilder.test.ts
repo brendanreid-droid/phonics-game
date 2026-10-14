@@ -582,6 +582,8 @@ describe('buildSession composition', () => {
     const wordTasks = plan.filter((t) => t.skill === 'BLEND_READ' || t.skill === 'SEGMENT_SPELL');
     expect(wordTasks.length).toBeGreaterThan(0);
     for (const task of wordTasks) {
+      // Missing Letter is the exception: it shows the other letters, so only the gap's is credited.
+      if (task.taskTypeId === 'missing-letter') continue;
       expect(task.secondaryTargets, task.id).toEqual([...new Set(getWord(task.primaryTarget).graphemes)]);
     }
   });
@@ -698,7 +700,9 @@ describe('buildSession composition', () => {
 
   it('credits a repeated letter once: pip is p and i, not p, i and p', () => {
     const mastery = { ...masteredGraphemes(['s', 'a', 't', 'p']), ...heard({ i: 2 }) };
-    const pips = SEEDS.flatMap((seed) => build(mastery, seed)).filter((t) => t.correctChoice === 'pip');
+    // Missing Letter credits only its gap, so it is not what this is about.
+    const pips = SEEDS.flatMap((seed) => build(mastery, seed))
+      .filter((t) => t.correctChoice === 'pip' && t.taskTypeId !== 'missing-letter');
     expect(pips.length).toBeGreaterThan(0);
     for (const task of pips) expect(task.secondaryTargets).toEqual(['p', 'i']);
   });
@@ -1255,6 +1259,16 @@ describe('buildSession: Missing Letter', () => {
   it('does not always blank the middle', () => {
     const positions = new Set(gaps().filter((t) => getWord(t.primaryTarget).graphemes.length === 3).map((t) => t.blankIndex));
     expect(positions.has(0) && positions.has(1) && positions.has(2)).toBe(true);
+  });
+
+  it('credits only the letter the child chose, not the letters they were shown', () => {
+    // `m _ t` hands the child m and t. Only the vowel they pick is evidence they know a sound.
+    const tasks = gaps();
+    expect(tasks.length).toBeGreaterThan(0);
+    for (const task of tasks) {
+      const letter = getWord(task.primaryTarget).graphemes[task.blankIndex as number];
+      expect(task.secondaryTargets, task.id).toEqual([letter]);
+    }
   });
 
   it('is deterministic: the same session asks about the same gap', () => {

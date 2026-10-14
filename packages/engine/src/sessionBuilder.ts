@@ -732,7 +732,10 @@ function makeTask(args: MakeTaskArgs): TaskInstance {
       rng,
     });
     choices = shuffle([letter, ...distractors], rng);
-    secondaryTargets = [...new Set(word.graphemes)];
+    // Credit the letter the child CHOSE and no other. The rest of the word is on
+    // the screen, handed to them: crediting m and t for `m _ t` would count
+    // letters we showed as sounds they know.
+    secondaryTargets = [letter];
   } else {
     // SEGMENT_SPELL (Word Builder): choices are letter tiles, the word's own letters as a
     // MULTISET (`pip` needs two p tiles) plus one or two extras, shuffled so

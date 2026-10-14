@@ -147,3 +147,9 @@ A child who completes Level 1 can read `sat, pat, tip, mat, fit, map` — cold, 
 - **`growthFactor: 4` is measured, not principled.** It implies two months' retention from three correct answers. It produced the best pacing in a grid search; it deserves checking against real children.
 - **No child has played it.** Everything here has been judged by adults and by simulated children. The pacing numbers are a simulation, the "needs a hand" thresholds have never met a real five-year-old, and whether a child can name each picture, tell the sounds apart and sit through a quest is untested.
 - **The audio is a placeholder.** See above.
+
+## Open, unresolved
+
+**A React duplicate-key warning for `fit`**, seen once in the browser console during Plan 4 and not reproduced since. Investigated and not explained: the parent screen's cards are keyed by `kind:about` and never by a word, a suggestion's own two words are asserted distinct, and 400 seeds of built sessions produced no duplicate choices in Picture Match or Word Pick. It may have been a stale entry from a build mid-edit.
+
+It is recorded here rather than closed, because an unexplained key collision can cause React to duplicate or omit a child, and the next person to see it should know it has been looked for once already. If it reappears, note the exact screen and the steps.

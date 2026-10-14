@@ -30,15 +30,20 @@ describe('isMastered: the task-type condition is capped by what can prove the sk
     expect(isMastered(record, NOW, DEFAULT_CONFIG)).toBe(true);
   });
 
-  it('lets BLEND_READ be mastered on its only task type', () => {
-    expect(isMastered(proven('BLEND_READ', ['picture-match']), NOW, DEFAULT_CONFIG)).toBe(true);
+  it('no longer lets BLEND_READ be mastered on one task type, now that Word Pick is a second', () => {
+    // Plan 3 Task 3. This used to assert the opposite: with Picture Match the only
+    // reading game the condition was capped at one. It now bites.
+    const one = proven('BLEND_READ', ['picture-match']);
+    expect(one.taskTypesSeen).toEqual(['picture-match']);
+    expect(isMastered(one, NOW, DEFAULT_CONFIG)).toBe(false);
+    expect(isMastered(proven('BLEND_READ', ['picture-match', 'word-pick']), NOW, DEFAULT_CONFIG)).toBe(true);
   });
 
   it('lets SEGMENT_SPELL be mastered on its only task type', () => {
     expect(isMastered(proven('SEGMENT_SPELL', ['word-builder']), NOW, DEFAULT_CONFIG)).toBe(true);
   });
 
-  it('still refuses SOUND_ID proven on one task type, because three can prove it', () => {
+  it('still refuses SOUND_ID proven on one task type, because several can prove it', () => {
     // The guarantee this cap must not erode: where more than one mini-game can
     // prove a skill, memorising one is not mastery.
     const record = proven('SOUND_ID', ['sound-hunt']);
@@ -51,7 +56,7 @@ describe('isMastered: the task-type condition is capped by what can prove the sk
   });
 
   it('never asks for more than masteryTaskTypes, even where more could prove it', () => {
-    const record = proven('SOUND_ID', ['sound-hunt', 'picture-match', 'word-builder']);
+    const record = proven('SOUND_ID', ['sound-hunt', 'picture-match', 'word-pick']);
     expect(isMastered(record, NOW, DEFAULT_CONFIG)).toBe(true);
     expect(isMastered(proven('SOUND_ID', ['sound-hunt', 'picture-match']), NOW, DEFAULT_CONFIG)).toBe(true);
   });
@@ -59,12 +64,15 @@ describe('isMastered: the task-type condition is capped by what can prove the sk
   it('honours a stricter masteryTaskTypes up to the number that can prove the skill', () => {
     const three = withDefaults({ masteryTaskTypes: 3 });
     expect(isMastered(proven('SOUND_ID', ['sound-hunt', 'picture-match'], three), NOW, three)).toBe(false);
-    expect(isMastered(proven('SOUND_ID', ['sound-hunt', 'picture-match', 'word-builder'], three), NOW, three)).toBe(true);
+    expect(isMastered(proven('SOUND_ID', ['sound-hunt', 'picture-match', 'word-pick'], three), NOW, three)).toBe(true);
   });
 
   it('does not demand the impossible when masteryTaskTypes exceeds what can prove the skill', () => {
     const five = withDefaults({ masteryTaskTypes: 5 });
-    expect(isMastered(proven('SOUND_ID', ['sound-hunt', 'picture-match', 'word-builder'], five), NOW, five)).toBe(true);
+    // Four task types can prove SOUND_ID (the hunt, and three word games through secondary credit).
+    const all = ['sound-hunt', 'picture-match', 'word-pick', 'word-builder'];
+    expect(isMastered(proven('SOUND_ID', all.slice(0, 3), five), NOW, five)).toBe(false);
+    expect(isMastered(proven('SOUND_ID', all, five), NOW, five)).toBe(true);
     expect(isMastered(proven('LETTER_SOUND', ['sound-singer'], five), NOW, five)).toBe(true);
   });
 

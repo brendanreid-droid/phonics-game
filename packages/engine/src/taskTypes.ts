@@ -55,6 +55,15 @@ export const TASK_TYPES: readonly TaskTypeMeta[] = [
     secondaryTargets: 'graphemes',
   },
   {
+    id: 'word-pick',
+    skill: 'BLEND_READ',
+    // The same stage as Picture Match, so the frustration guard's cap treats them alike.
+    difficulty: 3,
+    minChoices: 2,
+    maxChoices: 3,
+    secondaryTargets: 'graphemes',
+  },
+  {
     id: 'word-builder',
     skill: 'SEGMENT_SPELL',
     difficulty: 4,

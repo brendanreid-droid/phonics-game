@@ -105,12 +105,25 @@ export interface WordDistractorArgs {
    * never seen: the session builder must pass one (see `graphemesMetAt`).
    */
   metGraphemes?: GraphemeId[];
+  /**
+   * For Word Pick, which shows one picture and three WRITTEN words. Ranks words
+   * that start with the same grapheme as the target ahead of every other word,
+   * nearest first within them, so a child cannot succeed by matching the first
+   * letter and guessing: `map` against `mat`, not `sip` against `mat`. Picture
+   * Match leaves this off, because its wrong answers are pictures and a shared
+   * first letter is no shortcut there.
+   *
+   * A mix-up the child has actually made still comes first of all.
+   */
+  sharedFirstGrapheme?: boolean;
 }
 
 /**
  * Wrong pictures for a reading question, best teaching value first:
  *   1. words this child has demonstrably confused with the target
- *   2. the closest words by grapheme distance, so minimal pairs first
+ *   2. with `sharedFirstGrapheme`, words starting with the target's first
+ *      grapheme (Word Pick only), nearest first
+ *   3. the closest words by grapheme distance, so minimal pairs first
  *      (mat/map/pat differ by a single grapheme, so choosing between them
  *      requires actually decoding rather than recognising a word's silhouette)
  *
@@ -150,8 +163,13 @@ export function pickWordDistractors(args: WordDistractorArgs): WordId[] {
     pool.filter((id) => !confusedWith.includes(id)),
     rng,
   )
-    .map((id) => ({ id, distance: graphemeDistance(targetGraphemes, getWord(id).graphemes) }))
-    .sort((a, b) => a.distance - b.distance)
+    .map((id) => ({
+      id,
+      distance: graphemeDistance(targetGraphemes, getWord(id).graphemes),
+      // 0 sorts first. Only Word Pick asks for it.
+      sharesFirst: args.sharedFirstGrapheme === true && getWord(id).graphemes[0] === targetGraphemes[0] ? 0 : 1,
+    }))
+    .sort((a, b) => a.sharesFirst - b.sharesFirst || a.distance - b.distance)
     .map((entry) => entry.id);
 
   return [...confusedWith, ...byCloseness].slice(0, clampCount(count));

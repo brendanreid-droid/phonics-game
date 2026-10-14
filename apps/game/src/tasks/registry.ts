@@ -3,6 +3,7 @@ import { PictureMatch } from './PictureMatch';
 import { SoundHunt } from './SoundHunt';
 import { SoundSinger } from './SoundSinger';
 import { WordBuilder } from './WordBuilder';
+import { WordPick } from './WordPick';
 import type { TaskProps } from './TaskProps';
 
 /**
@@ -14,6 +15,7 @@ export const TASK_COMPONENTS: Record<string, ComponentType<TaskProps>> = {
   'sound-hunt': SoundHunt,
   'sound-singer': SoundSinger,
   'picture-match': PictureMatch,
+  'word-pick': WordPick,
   'word-builder': WordBuilder,
 };
 

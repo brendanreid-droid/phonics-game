@@ -303,6 +303,7 @@ const PROMPT_KEYS = [
   'ui.find_letter',
   'ui.build_word',
   'ui.tap_picture',
+  'ui.find_word',
   'ui.all_done',
 ];
 

@@ -449,6 +449,96 @@ describe('pickWordDistractors', () => {
   });
 });
 
+describe('pickWordDistractors, ranking for Word Pick (sharedFirstGrapheme)', () => {
+  // Word Pick shows one picture and three WRITTEN words. A child who matches
+  // only the first letter and guesses is the shortcut it exists to close, so
+  // the wrong words should start with the same grapheme as the right one.
+  const pick = (target: string, count: number, seed: number, extra: object = {}) =>
+    pickWordDistractors({
+      target, count, level: 1, confusions: {}, rng: makeRng(seed), sharedFirstGrapheme: true, ...extra,
+    });
+
+  it('offers the word that shares the first grapheme: mat is met by map', () => {
+    for (const seed of SEEDS) {
+      expect(pick('mat', 2, seed), `seed ${seed}`).toContain('map');
+      expect(pick('mat', 1, seed), `seed ${seed}`).toEqual(['map']);
+    }
+  });
+
+  it('puts words sharing the first grapheme ahead of closer words that do not share it', () => {
+    // pat's nearest neighbour is mat (one grapheme away). pip is two away. With
+    // the first-letter rule, pip must still beat mat, because mat starts with m.
+    for (const seed of SEEDS) {
+      const picks = pick('pat', 2, seed);
+      expect(picks.slice().sort(), `seed ${seed}`).toEqual(['pip', 'pit']);
+      for (const id of picks) expect(WORDS[id].graphemes[0], id).toBe('p');
+    }
+  });
+
+  it('is what separates it from Picture Match: the plain ranking prefers mat for pat', () => {
+    const plain = pickWordDistractors({ target: 'pat', count: 2, level: 1, confusions: {}, rng: makeRng(1) });
+    expect(plain).toContain('mat');
+    expect(plain.map((id) => WORDS[id].graphemes[0]).filter((g) => g === 'p').length).toBeLessThan(2);
+  });
+
+  it('orders words sharing the first grapheme nearest first', () => {
+    // For pat: pit is one grapheme away and pip is two.
+    for (const seed of SEEDS) expect(pick('pat', 2, seed)[0], `seed ${seed}`).toBe('pit');
+  });
+
+  it('falls back to the nearest other words once the shared-first words run out', () => {
+    // mat has only one first-grapheme sibling (map), so the second distractor
+    // comes from the minimal pairs: pat (one away), never tap or sip.
+    for (const seed of SEEDS) {
+      const picks = pick('mat', 2, seed);
+      expect(picks[0], `seed ${seed}`).toBe('map');
+      expect(picks[1], `seed ${seed}`).toBe('pat');
+    }
+  });
+
+  it('still returns a full set for a word with no first-grapheme sibling', () => {
+    // tap is the only picturable word starting with t.
+    for (const seed of SEEDS) {
+      const picks = pick('tap', 2, seed);
+      expect(picks, `seed ${seed}`).toHaveLength(2);
+      expect(picks).not.toContain('tap');
+    }
+  });
+
+  it('still puts a mix-up the child has actually made ahead of the first-grapheme rule', () => {
+    const confusions = { [confusionKey('mat', 'sip')]: 4 };
+    for (const seed of SEEDS) {
+      const picks = pick('mat', 2, seed, { confusions });
+      expect(picks, `seed ${seed}`).toEqual(['sip', 'map']);
+    }
+  });
+
+  it('keeps every other rule: only pictured, met, allowed words, never the target', () => {
+    for (const seed of SEEDS) {
+      const picks = pick('pat', 99, seed, { metGraphemes: ['p', 'a', 't', 'i'] });
+      expect(picks).not.toContain('pat');
+      for (const id of picks) {
+        expect(WORDS[id].picture, id).toBeDefined();
+        for (const g of WORDS[id].graphemes) expect(['p', 'a', 't', 'i'], id).toContain(g);
+      }
+    }
+  });
+
+  it('is deterministic for a seed', () => {
+    expect(pick('pat', 2, 5)).toEqual(pick('pat', 2, 5));
+  });
+
+  it('does not change Picture Match: without the flag the ranking is untouched', () => {
+    for (const seed of SEEDS) {
+      const without = pickWordDistractors({ target: 'mat', count: 2, level: 1, confusions: {}, rng: makeRng(seed) });
+      const off = pickWordDistractors({
+        target: 'mat', count: 2, level: 1, confusions: {}, rng: makeRng(seed), sharedFirstGrapheme: false,
+      });
+      expect(off).toEqual(without);
+    }
+  });
+});
+
 describe('graphemeDistance', () => {
   it('is 0 for identical graphemes', () => {
     expect(graphemeDistance(['m', 'a', 't'], ['m', 'a', 't'])).toBe(0);

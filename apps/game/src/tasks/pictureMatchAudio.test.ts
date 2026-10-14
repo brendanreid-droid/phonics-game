@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { WORD_LIST } from '@soundlings/curriculum';
 import { hasAudio } from '@soundlings/audio';
-import { PICTURE_MATCH_PROMPT_KEYS, soundOutKeys } from './pictureMatchAudio';
+import { PICTURE_MATCH_PROMPT_KEYS, WORD_PICK_PROMPT_KEYS, soundOutKeys } from './pictureMatchAudio';
 
 describe('Picture Match audio', () => {
   it('sounds the graphemes out one at a time, in order', () => {
@@ -37,5 +37,16 @@ describe('Picture Match audio', () => {
     const source = readFileSync(fileURLToPath(new URL('./PictureMatch.tsx', import.meta.url).href), 'utf8');
     expect(source).not.toMatch(/\bword\.audio\b/);
     expect(source).not.toMatch(/['"`]wd\./);
+  });
+});
+
+describe('Word Pick audio', () => {
+  it('never speaks a word in its prompt: the picture is shown and reading the cards is the task', () => {
+    expect(WORD_PICK_PROMPT_KEYS.length).toBeGreaterThan(0);
+    expect(WORD_PICK_PROMPT_KEYS.filter((key) => key.startsWith('wd.'))).toEqual([]);
+  });
+
+  it('only asks for clips that exist', () => {
+    for (const key of WORD_PICK_PROMPT_KEYS) expect(hasAudio(key), key).toBe(true);
   });
 });

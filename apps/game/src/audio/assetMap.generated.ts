@@ -39,6 +39,7 @@ export const AUDIO_ASSETS: Readonly<Record<string, number>> = {
   "ui.all_done": require("../../assets/voice/placeholder-au/ui.all_done.m4a"),
   "ui.build_word": require("../../assets/voice/placeholder-au/ui.build_word.m4a"),
   "ui.find_letter": require("../../assets/voice/placeholder-au/ui.find_letter.m4a"),
+  "ui.find_word": require("../../assets/voice/placeholder-au/ui.find_word.m4a"),
   "ui.lets_go": require("../../assets/voice/placeholder-au/ui.lets_go.m4a"),
   "ui.listen_again": require("../../assets/voice/placeholder-au/ui.listen_again.m4a"),
   "ui.tap_picture": require("../../assets/voice/placeholder-au/ui.tap_picture.m4a"),

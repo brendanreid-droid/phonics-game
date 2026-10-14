@@ -26,7 +26,7 @@ describe('task types', () => {
   });
 
   it('covers the four Level 1 skills', () => {
-    expect(TASK_TYPES.map((t) => t.skill).sort()).toEqual(
+    expect([...new Set(TASK_TYPES.map((t) => t.skill))].sort()).toEqual(
       ['BLEND_READ', 'LETTER_SOUND', 'SEGMENT_SPELL', 'SOUND_ID'].sort(),
     );
   });
@@ -52,6 +52,7 @@ describe('task types', () => {
     expect(taskTypeById('sound-hunt').skill).toBe('SOUND_ID');
     expect(taskTypeById('sound-singer').skill).toBe('LETTER_SOUND');
     expect(taskTypeById('picture-match').skill).toBe('BLEND_READ');
+    expect(taskTypeById('word-pick').skill).toBe('BLEND_READ');
     expect(taskTypeById('word-builder').skill).toBe('SEGMENT_SPELL');
   });
 
@@ -59,14 +60,18 @@ describe('task types', () => {
     expect(taskTypeById('sound-hunt').secondaryTargets).toBe('none');
     expect(taskTypeById('sound-singer').secondaryTargets).toBe('none');
     expect(taskTypeById('picture-match').secondaryTargets).toBe('graphemes');
+    expect(taskTypeById('word-pick').secondaryTargets).toBe('graphemes');
     expect(taskTypeById('word-builder').secondaryTargets).toBe('graphemes');
   });
 
-  it('orders difficulty sound-hunt < sound-singer < picture-match < word-builder', () => {
-    // The frustration guard caps difficulty, so this order is behaviour.
-    const order = ['sound-hunt', 'sound-singer', 'picture-match', 'word-builder'];
-    const byDifficulty = [...TASK_TYPES].sort((a, b) => a.difficulty - b.difficulty).map((t) => t.id);
-    expect(byDifficulty).toEqual(order);
+  it('orders difficulty sound-hunt < sound-singer < the two reading games < word-builder', () => {
+    // The frustration guard caps difficulty, so this order is behaviour. Picture
+    // Match and Word Pick are the same skill at the same stage and share a rung.
+    const rank = (id: string) => taskTypeById(id).difficulty;
+    expect(rank('sound-hunt')).toBeLessThan(rank('sound-singer'));
+    expect(rank('sound-singer')).toBeLessThan(rank('picture-match'));
+    expect(rank('word-pick')).toBe(rank('picture-match'));
+    expect(rank('picture-match')).toBeLessThan(rank('word-builder'));
   });
 
   it('pins each task type\'s choice bounds', () => {
@@ -75,20 +80,23 @@ describe('task types', () => {
       'sound-hunt': [2, 4],
       'sound-singer': [2, 3],
       'picture-match': [2, 3],
+      'word-pick': [2, 3],
       'word-builder': [3, 5],
     });
   });
 
-  it('gives every task type a distinct difficulty, easiest being the single-sound games', () => {
+  it('gives every task type a difficulty of at least 1, with sound-hunt the single easiest', () => {
+    // Distinct difficulties are not required: two games of the same skill at the same stage
+    // deliberately share one, so the frustration guard's cap treats them alike.
     const difficulties = TASK_TYPES.map((t) => t.difficulty);
-    expect(new Set(difficulties).size).toBe(difficulties.length);
     expect(difficulties.every((d) => d >= 1)).toBe(true);
+    expect(difficulties.filter((d) => d === Math.min(...difficulties))).toHaveLength(1);
     const easiest = TASK_TYPES.reduce((a, b) => (b.difficulty < a.difficulty ? b : a));
     expect(easiest.id).toBe('sound-hunt');
   });
 
   it('returns only task types of the requested skill, and none for an unshipped skill', () => {
-    expect(taskTypesForSkill('BLEND_READ').map((t) => t.id)).toEqual(['picture-match']);
+    expect(taskTypesForSkill('BLEND_READ').map((t) => t.id)).toEqual(['picture-match', 'word-pick']);
     expect(taskTypesForSkill('TRICKY_READ')).toEqual([]);
   });
 
@@ -118,11 +126,11 @@ describe('provingTaskTypeCount', () => {
   });
 
   it('counts a skill\'s own type plus every type that grants it secondary credit', () => {
-    // SOUND_ID: sound-hunt directly, plus picture-match and word-builder through
-    // secondary credit. The other three skills get no composite credit.
-    expect(provingTaskTypeCount('SOUND_ID', 's')).toBe(3);
+    // SOUND_ID: sound-hunt directly, plus picture-match, word-pick and word-builder
+    // through secondary credit. The other three skills get no composite credit.
+    expect(provingTaskTypeCount('SOUND_ID', 's')).toBe(4);
     expect(provingTaskTypeCount('LETTER_SOUND', 's')).toBe(1);
-    expect(provingTaskTypeCount('BLEND_READ', 'mat')).toBe(1);
+    expect(provingTaskTypeCount('BLEND_READ', 'mat')).toBe(2);
     expect(provingTaskTypeCount('SEGMENT_SPELL', 'mat')).toBe(1);
   });
 

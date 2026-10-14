@@ -608,9 +608,14 @@ function searchSkeleton(spec: SkeletonSpec): TaskTypeMeta[] | null {
         if (f > spec.focusSlots || r > spec.reviewSlots) continue;
       }
       sequence[i] = type;
-      used.set(type.id, (used.get(type.id) ?? 0) + 1);
+      // Only filler slots count towards "least used". An anchor is placed on a
+      // task type for its own reasons, and counting it made the type the
+      // anchors favour (sound-hunt) the last choice for every filler, so with
+      // six types it vanished from the fillers and the review slots could no
+      // longer be given to the most urgent sound.
+      if (!rule) used.set(type.id, (used.get(type.id) ?? 0) + 1);
       if (go(i + 1, f, r)) return true;
-      used.set(type.id, (used.get(type.id) ?? 0) - 1);
+      if (!rule) used.set(type.id, (used.get(type.id) ?? 0) - 1);
     }
     deadEnds.add(key);
     return false;
@@ -672,6 +677,10 @@ function makeTask(args: MakeTaskArgs): TaskInstance {
       confusions,
       allowedWords,
       metGraphemes: allowedGraphemes,
+      // Word Pick shows written words, so its wrong answers share the target's
+      // first letter and the child has to read to the end. Picture Match shows
+      // pictures, where that is no shortcut.
+      sharedFirstGrapheme: type.id === 'word-pick',
       rng,
     });
     choices = shuffle([pairing.targetId, ...distractors], rng);

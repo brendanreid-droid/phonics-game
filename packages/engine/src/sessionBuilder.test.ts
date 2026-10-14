@@ -1099,3 +1099,81 @@ describe('buildSession: sounds before words (invariant 5a)', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Plan 3 Task 3: Word Pick. Picture Match leaves the wrong answers to the
+// closest-word ranking; Word Pick puts words sharing the first letter first,
+// so a child cannot pass by matching the first letter and guessing.
+// ---------------------------------------------------------------------------
+
+describe('buildSession: Word Pick', () => {
+  // p, i and m have been answered twice, so the picture words are ready (invariant 5a).
+  const ready = { ...masteredGraphemes(['s', 'a', 't']), ...heard({ p: 2, i: 2, m: 2 }) };
+  const wordPicks = (mastery: MasteryMap, extra: Partial<BuildSessionArgs> = {}) =>
+    SEEDS.flatMap((seed) => build(mastery, seed, extra)).filter((t) => t.taskTypeId === 'word-pick');
+
+  it('is scheduled once reading is possible', () => {
+    expect(wordPicks(ready).length).toBeGreaterThan(0);
+  });
+
+  it('is a reading task: words in, a word out, graphemes credited like Picture Match', () => {
+    for (const task of wordPicks(ready)) {
+      expect(task.skill, task.id).toBe('BLEND_READ');
+      expect(task.secondaryTargets, task.id).toEqual([...new Set(getWord(task.primaryTarget).graphemes)]);
+      for (const choice of task.choices) expect(getWord(choice).picture, choice).toBeDefined();
+    }
+  });
+
+  it('offers the word that shares the first letter: mat is always met by map', () => {
+    const mats = wordPicks(ready).filter((t) => t.correctChoice === 'mat');
+    expect(mats.length).toBeGreaterThan(0);
+    for (const task of mats) expect(task.choices, task.id).toContain('map');
+  });
+
+  it('puts first-letter siblings ahead of closer words that start differently', () => {
+    // pat is one grapheme from mat, but pit and pip start with p, so they must win.
+    const pats = wordPicks(ready).filter((t) => t.correctChoice === 'pat' && t.choices.length === 3);
+    expect(pats.length).toBeGreaterThan(0);
+    for (const task of pats) {
+      const wrong = task.choices.filter((c) => c !== 'pat');
+      for (const id of wrong) expect(getWord(id).graphemes[0], `${task.id}: ${id}`).toBe('p');
+    }
+  });
+
+  it('every wrong word shares the first letter whenever enough siblings exist', () => {
+    for (const task of wordPicks(ready)) {
+      const target = getWord(task.correctChoice);
+      const wrong = task.choices.filter((c) => c !== task.correctChoice);
+      const siblings = ['pat', 'pit', 'pip', 'mat', 'map', 'sit', 'sip', 'tap', 'fit']
+        .filter((id) => id !== target.id && getWord(id).graphemes[0] === target.graphemes[0]);
+      const expected = Math.min(wrong.length, siblings.length);
+      const shared = wrong.filter((id) => getWord(id).graphemes[0] === target.graphemes[0]).length;
+      expect(shared, task.id).toBeGreaterThanOrEqual(expected);
+    }
+  });
+
+  it('leaves Picture Match alone: it does not insist on the first letter', () => {
+    const matches = SEEDS.flatMap((seed) => build(ready, seed)).filter((t) => t.taskTypeId === 'picture-match');
+    expect(matches.length).toBeGreaterThan(0);
+    const mixed = matches.some((task) =>
+      task.choices.some((c) => c !== task.correctChoice && getWord(c).graphemes[0] !== getWord(task.correctChoice).graphemes[0]),
+    );
+    expect(mixed).toBe(true);
+  });
+
+  it('still shows a mix-up the child has made, ahead of the first-letter rule', () => {
+    const confusions = { 'mat>sip': 5 };
+    const mats = SEEDS.flatMap((seed) => build(ready, seed, { confusions }))
+      .filter((t) => t.taskTypeId === 'word-pick' && t.correctChoice === 'mat');
+    expect(mats.length).toBeGreaterThan(0);
+    for (const task of mats) expect(task.choices, task.id).toContain('sip');
+  });
+
+  it('keeps the invariants with it in the mix', () => {
+    for (const seed of SEEDS) {
+      const plan = build(ready, seed);
+      expect(plan).toHaveLength(DEFAULT_CONFIG.sessionLength);
+      for (let i = 1; i < plan.length; i += 1) expect(plan[i].taskTypeId, seed).not.toBe(plan[i - 1].taskTypeId);
+    }
+  });
+});

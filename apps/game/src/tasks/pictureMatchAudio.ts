@@ -13,3 +13,10 @@ export const PICTURE_MATCH_PROMPT_KEYS: readonly string[] = ['ui.tap_picture'];
 export function soundOutKeys(word: Word): string[] {
   return word.graphemes.map((grapheme) => `ph.${grapheme}`);
 }
+
+/**
+ * The only spoken instruction in Word Pick. It must never name the word: the
+ * picture is shown and the child reads the cards, so hearing the word would
+ * turn reading into listening.
+ */
+export const WORD_PICK_PROMPT_KEYS: readonly string[] = ['ui.find_word'];

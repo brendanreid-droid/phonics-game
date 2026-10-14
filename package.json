@@ -10,13 +10,14 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.base.json --noEmit",
-    "generate:audio-map": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/generate-audio-asset-map.ts"
+    "generate:audio-map": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/generate-audio-asset-map.ts",
+    "pretest": "./scripts/check-no-secrets.sh"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "react-dom": "19.1.0",
     "typescript": "^5.6.3",
-    "vitest": "^5.0.3",
-    "react-dom": "19.1.0"
+    "vitest": "^5.0.3"
   },
   "overrides": {
     "react": "19.1.0",

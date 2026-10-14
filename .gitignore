@@ -9,3 +9,4 @@ dist/
 expo-env.d.ts
 apps/game/ios/
 apps/game/android/
+.env

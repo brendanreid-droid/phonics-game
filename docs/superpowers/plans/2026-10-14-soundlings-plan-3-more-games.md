@@ -215,7 +215,11 @@ describe('provingTaskTypeCount, per target', () => {
 
 A task type counts toward a target when it serves that skill **and** could be scheduled for that target. For now every existing type can serve any target of its skill, so behaviour is unchanged; Task 5 adds the real constraint for Picture Start.
 
-Floor the result at 1. A target nothing can prove must still be masterable on the other five conditions, or it becomes permanently stuck — which is the deadlock this engine has already had once.
+Floor the result at 1.
+
+**Corrected after implementation — the original reasoning here was wrong.** This plan first said a count of 0 would make a target "permanently unmasterable". It would not: `Math.min(masteryTaskTypes, 0)` is 0, so the condition becomes `taskTypesSeen.length >= 0`, which is always true. A zero count makes the diversity check **vacuous**, not impossible — the opposite failure.
+
+The floor is still right, for that opposite reason: it keeps the condition meaningful, requiring at least one task type to have been seen. In practice the difference is only reachable by a corrupt or hand-edited record, since any record with `primaryCorrectCount >= 1` has necessarily seen a task type. Test it with such a record rather than assuming it cannot happen.
 
 - [ ] **Step 3: Update `isMastered`**
 

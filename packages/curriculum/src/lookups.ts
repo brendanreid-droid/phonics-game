@@ -28,6 +28,19 @@ export function picturableWordsForLevel(levelNumber: number): Word[] {
   return PICTURABLE_WORD_LIST.filter((w) => w.decodableFromLevel <= levelNumber);
 }
 
+/**
+ * Picturable words whose FIRST grapheme is the one given.
+ *
+ * Used by the Picture Start mini-game, which asks a child to pick the picture
+ * beginning with a letter's sound. Note this is empty for `a` and `i` at Level
+ * 1 — their only words are function words with no picture — which is why that
+ * game cannot cover the vowels. See the plan's "vowel gap" section.
+ */
+export function picturableWordsStartingWith(graphemeId: GraphemeId, levelNumber: number): Word[] {
+  getGrapheme(graphemeId); // throws on an unknown grapheme
+  return picturableWordsForLevel(levelNumber).filter((w) => w.graphemes[0] === graphemeId);
+}
+
 export function creatureForGrapheme(graphemeId: GraphemeId): Creature {
   const creature = CREATURE_LIST.find((c) => c.graphemeId === graphemeId);
   if (!creature) throw new Error(`No creature for grapheme: ${graphemeId}`);

@@ -14,6 +14,7 @@ import {
   graphemesForLevel,
   introductionGroupIndex,
   picturableWordsForLevel,
+  picturableWordsStartingWith,
   wordsForLevel,
 } from './index';
 
@@ -117,6 +118,66 @@ describe('picturableWordsForLevel', () => {
     expect(words.length).toBeGreaterThan(0);
     for (const w of words) expect(w.picture).toBeDefined();
     expect(words.length).toBeLessThanOrEqual(PICTURABLE_WORD_LIST.length);
+  });
+});
+
+describe('picturableWordsStartingWith', () => {
+  it('finds the picturable words beginning with a sound', () => {
+    const ids = picturableWordsStartingWith('m', 1).map((w) => w.id);
+    expect(ids.sort()).toEqual(['map', 'mat']);
+  });
+
+  it('returns nothing for a vowel with no picturable word', () => {
+    // `at`, `am`, `if` and `it` exist but are function words with no picture.
+    // This is why Picture Start cannot be built for the vowels — see the plan.
+    expect(picturableWordsStartingWith('a', 1)).toEqual([]);
+    expect(picturableWordsStartingWith('i', 1)).toEqual([]);
+  });
+
+  it('only returns words whose FIRST grapheme is the one asked for', () => {
+    // `map` starts with m; `sam` merely contains it.
+    const ids = picturableWordsStartingWith('m', 1).map((w) => w.id);
+    expect(ids).not.toContain('sam');
+  });
+
+  // The test above is weak on its own: `sam` has no picture, so a filter that
+  // matched words merely CONTAINING the grapheme would still exclude it, and no
+  // picturable word has `m` anywhere but first. These pin the position
+  // directly, using graphemes that do appear mid-word in picturable words
+  // (`t` ends pat/pit/sit/fit/mat; `p` ends tap/sip/pip/map).
+  it('does not match a grapheme in a later position', () => {
+    expect(picturableWordsStartingWith('t', 1).map((w) => w.id)).toEqual(['tap']);
+    expect(picturableWordsStartingWith('f', 1).map((w) => w.id)).toEqual(['fit']);
+    expect(picturableWordsStartingWith('p', 1).map((w) => w.id).sort()).toEqual(['pat', 'pip', 'pit']);
+    expect(picturableWordsStartingWith('s', 1).map((w) => w.id).sort()).toEqual(['sip', 'sit']);
+  });
+
+  it('returns exactly the words whose first grapheme matches, for every Level 1 grapheme', () => {
+    for (const g of graphemesForLevel(1)) {
+      const expected = picturableWordsForLevel(1)
+        .filter((w) => w.graphemes[0] === g.id)
+        .map((w) => w.id)
+        .sort();
+      const actual = picturableWordsStartingWith(g.id, 1).map((w) => w.id).sort();
+      expect(actual, g.id).toEqual(expected);
+    }
+  });
+
+  it('only returns words with a picture', () => {
+    for (const word of picturableWordsStartingWith('s', 1)) {
+      expect(word.picture).toBeDefined();
+    }
+    // `i` starts `it` and `if`, which are real words but unpictured. A filter
+    // that dropped the picture requirement would return them.
+    expect(picturableWordsStartingWith('i', 1)).toEqual([]);
+  });
+
+  it('respects the level cutoff', () => {
+    expect(picturableWordsStartingWith('m', 0)).toEqual([]);
+  });
+
+  it('throws for an unknown grapheme', () => {
+    expect(() => picturableWordsStartingWith('zz', 1)).toThrow(/unknown grapheme/i);
   });
 });
 

@@ -67,7 +67,15 @@ export const GRAPHEME_LIST: readonly Grapheme[] = [
     letterName: 'eye',
     mnemonic: 'insect',
     mnemonicEmoji: '🐛',
-    startPictures: [{ emoji: '🛖', label: 'igloo' }, { emoji: '🖋️', label: 'ink' }],
+    // DELIBERATELY EMPTY. Picture Start cannot be asked about `i`, and it keeps ONE proving game
+    // (Sound Singer) where every other Level 1 sound has two, with `a` the other vowel and now
+    // served. Why: short-/i/ initial words are rare, and none renders unambiguously as an emoji.
+    // Insect is the mnemonic, so it is barred. Ice and iguana begin with the LONG vowel and would
+    // teach the wrong sound, the same failure as `ph.a` once saying "ah". Igloo renders as a thatched
+    // hut, and ink renders as a fountain pen, which a child names "pen" and which is p's answer.
+    // Inventing a picture would repeat exactly that error. Real artwork, or a SAY_IT task (a child
+    // saying the sound aloud), is what lifts it; do not fill this in with a "close enough" emoji.
+    startPictures: [],
     audio: { phoneme: 'ph.i', letterName: 'ln.i' },
     introducedInLevel: 1,
     sequenceIndex: 4,
@@ -91,7 +99,7 @@ export const GRAPHEME_LIST: readonly Grapheme[] = [
     letterName: 'ef',
     mnemonic: 'fish',
     mnemonicEmoji: '🐟',
-    startPictures: [{ emoji: '🔥', label: 'fire' }, { emoji: '🪶', label: 'feather' }, { emoji: '🍟', label: 'fries' }],
+    startPictures: [{ emoji: '🔥', label: 'fire' }, { emoji: '🪶', label: 'feather' }, { emoji: '🦶', label: 'foot' }],
     audio: { phoneme: 'ph.f', letterName: 'ln.f' },
     introducedInLevel: 1,
     sequenceIndex: 6,

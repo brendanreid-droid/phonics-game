@@ -1310,7 +1310,8 @@ describe('buildSession: Missing Letter', () => {
 // ---------------------------------------------------------------------------
 
 describe('buildSession: Picture Start', () => {
-  const ALL_LETTERS = ['s', 'a', 't', 'p', 'i', 'm', 'f'];
+  // Six letters have start pictures. `i` has none: no short-/i/ initial emoji is unambiguous (see graphemes.ts).
+  const ALL_LETTERS = ['s', 'a', 't', 'p', 'm', 'f'];
   const VOWELS = ['a', 'i'];
   const picks = (mastery: MasteryMap, extra: Partial<BuildSessionArgs> = {}, seeds: readonly string[] = SEEDS) =>
     seeds.flatMap((seed) => build(mastery, seed, extra)).filter((t) => t.taskTypeId === 'picture-start');
@@ -1329,16 +1330,36 @@ describe('buildSession: Picture Start', () => {
     expect(picks(masteredGraphemes(['s', 'a', 't', 'p'])).length).toBeGreaterThan(0);
   });
 
-  it('is scheduled for the vowels as well as the consonants, so a and i can be proved a second way', () => {
-    // This used to be refused: no picturable word starts with a vowel. Start pictures of their own
-    // (ant, ambulance; igloo, ink) close that gap, and the vowels are the hardest sounds in phonics.
+  it('is scheduled for the vowel a as well as the consonants, so a can be proved a second way', () => {
+    // This used to be refused: no picturable word starts with a vowel. Start pictures of its own
+    // (ant, ambulance) close that gap for `a`. They cannot for `i`: see the next test.
     const asked = new Set<string>();
     for (const mastery of Object.values(ALL_STATES)) {
       for (const task of picks(mastery)) asked.add(task.primaryTarget);
     }
     expect([...asked].sort()).toEqual([...ALL_LETTERS].sort());
-    const vowelTasks = picks(heard({ a: 2, i: 2, s: 2, t: 2, p: 2 })).filter((t) => VOWELS.includes(t.primaryTarget));
+    const vowelTasks = picks(heard({ a: 2, i: 2, s: 2, t: 2, p: 2 })).filter((t) => t.primaryTarget === 'a');
     expect(vowelTasks.length).toBeGreaterThan(0);
+  });
+
+  it('is never scheduled for `i`, in any state, and never offers `i` as a wrong answer', () => {
+    // i has no unambiguous short-/i/ initial picture, so it keeps Sound Singer as its one proving game.
+    // As a wrong answer it would be a blank card.
+    let seen = 0;
+    for (const [name, mastery] of Object.entries(ALL_STATES)) {
+      for (const task of picks(mastery)) {
+        seen += 1;
+        expect(task.primaryTarget, `${name}: ${task.id}`).not.toBe('i');
+        expect(task.choices, `${name}: ${task.id}`).not.toContain('i');
+      }
+    }
+    expect(seen, 'vacuous if Picture Start never comes up').toBeGreaterThan(30);
+  });
+
+  it('still asks `i` with Sound Singer once it is in play, its one proving game', () => {
+    const singers = SEEDS.flatMap((seed) => build(masteredGraphemes(['s', 'a', 't']), seed))
+      .filter((t) => t.taskTypeId === 'sound-singer' && t.primaryTarget === 'i');
+    expect(singers.length).toBeGreaterThan(0);
   });
 
   it('only ever targets a letter that has pictures, in any state, with any seed', () => {

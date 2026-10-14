@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GRAPHEMES, GRAPHEME_LIST } from './graphemes';
+import { TRICKY_WORD_LIST } from './trickyWords';
 import { WORD_LIST } from './words';
 
 const LEVEL_1 = GRAPHEME_LIST.filter((g) => g.introducedInLevel === 1);
@@ -48,8 +49,38 @@ describe('Level 1 graphemes', () => {
  * picture, so an ambiguous one marks a child wrong for knowing the sound.
  */
 describe('start pictures', () => {
-  it('gives every grapheme at least two, so a question can vary', () => {
-    for (const g of GRAPHEME_LIST) expect(g.startPictures.length, g.id).toBeGreaterThanOrEqual(2);
+  /**
+   * Graphemes with NO start pictures, on purpose, each with its reason in graphemes.ts. Adding to this
+   * list is a decision to give a sound one proving game; it should never happen by accident.
+   */
+  const WITHOUT_PICTURES = ['i'];
+
+  it('gives every grapheme but the documented exception at least two, so a question can vary', () => {
+    for (const g of GRAPHEME_LIST.filter((x) => !WITHOUT_PICTURES.includes(x.id))) {
+      expect(g.startPictures.length, g.id).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('leaves `i` without any: no short-/i/ initial emoji is unambiguous, so none is invented', () => {
+    // Insect is the mnemonic; ice and iguana are the LONG vowel; igloo renders as a hut and ink as a
+    // pen. An empty list is honest, a "close enough" emoji marks a child wrong for knowing the sound.
+    expect(GRAPHEMES['i'].startPictures).toEqual([]);
+    expect(GRAPHEME_LIST.filter((g) => g.startPictures.length === 0).map((g) => g.id)).toEqual(WITHOUT_PICTURES);
+  });
+
+  it('never labels a picture with a word the curriculum teaches with a DIFFERENT initial sound', () => {
+    // If a label were `pat`, a child asked which picture starts with /p/ could be shown the dog the
+    // curriculum teaches under /p/, while the picture sits under another letter, or the reverse. A picture
+    // whose name is a taught word must start with the same grapheme that word does.
+    const taught = [...WORD_LIST.map((w) => ({ text: w.text.toLowerCase(), initial: w.graphemes[0] })),
+      ...TRICKY_WORD_LIST.map((w) => ({ text: w.text.toLowerCase(), initial: w.text.toLowerCase()[0] }))];
+    for (const g of GRAPHEME_LIST) {
+      for (const p of g.startPictures) {
+        for (const word of taught.filter((w) => w.text === p.label.toLowerCase())) {
+          expect(word.initial, `${g.id}: "${p.label}" is a taught word starting with ${word.initial}`).toBe(g.id);
+        }
+      }
+    }
   });
 
   it('never uses a grapheme own mnemonic as one of its pictures', () => {
@@ -108,5 +139,6 @@ describe('start pictures', () => {
 
   it('has the same pictures for the same grapheme every time: a plain data table, no randomness', () => {
     expect(GRAPHEMES['m'].startPictures.map((p) => p.label)).toEqual(['milk', 'monkey', 'map']);
+    expect(GRAPHEMES['f'].startPictures.map((p) => p.label)).toEqual(['fire', 'feather', 'foot']);
   });
 });

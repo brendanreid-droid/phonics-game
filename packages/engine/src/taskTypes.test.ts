@@ -215,8 +215,8 @@ describe('provingTaskTypeCount, per target', () => {
       for (const target of ['s', 'a', 't', 'p', 'i', 'm', 'f', 'mat', 'at']) {
         expect(provingTaskTypeCount(skill, target), `${skill}/${target}`).toBeGreaterThanOrEqual(1);
         // Every shipped type serves any target of its skill except Picture Start,
-        // which has pictures for the seven letters and none for a word id, which is no sound at all.
-        const noPicture = skill === 'LETTER_SOUND' && !['s', 'a', 't', 'p', 'i', 'm', 'f'].includes(target);
+        // which has pictures for six letters and none for `i` or a word id, which is no sound at all.
+        const noPicture = skill === 'LETTER_SOUND' && !['s', 'a', 't', 'p', 'm', 'f'].includes(target);
         const expected = noPicture ? provingTaskTypeCount(skill, 's') - 1 : provingTaskTypeCount(skill, 's');
         expect(provingTaskTypeCount(skill, target), `${skill}/${target}`).toBe(expected);
       }

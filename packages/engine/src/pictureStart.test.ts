@@ -40,8 +40,9 @@ describe('answerPictures', () => {
 });
 
 describe('pictureStartAnswers, from the Level 1 curriculum', () => {
-  it('has pictures for every Level 1 grapheme, the vowels included', () => {
-    for (const g of GRAPHEME_LIST) expect(pictureStartAnswers(g.id).length, g.id).toBeGreaterThanOrEqual(2);
+  it('has pictures for every Level 1 grapheme but `i`', () => {
+    for (const g of GRAPHEME_LIST.filter((x) => x.id !== 'i')) expect(pictureStartAnswers(g.id).length, g.id).toBeGreaterThanOrEqual(2);
+    expect(pictureStartAnswers('i')).toEqual([]);
   });
 
   it('never returns a picture showing its grapheme own mnemonic', () => {
@@ -56,8 +57,9 @@ describe('pictureStartAnswers, from the Level 1 curriculum', () => {
 });
 
 describe('hasInitialPicture', () => {
-  it('is true for all seven letters', () => {
-    for (const g of ['s', 'a', 't', 'p', 'i', 'm', 'f']) expect(hasInitialPicture(g), g).toBe(true);
+  it('is true for six letters, `a` included, and false for `i`, which has no unambiguous short-/i/ picture', () => {
+    for (const g of ['s', 'a', 't', 'p', 'm', 'f']) expect(hasInitialPicture(g), g).toBe(true);
+    expect(hasInitialPicture('i')).toBe(false);
   });
 });
 
@@ -71,8 +73,9 @@ describe('picture-start as a task type', () => {
     expect(type.secondaryTargets).toBe('none');
   });
 
-  it('can serve every Level 1 letter, vowels included', () => {
-    for (const g of ['s', 'a', 't', 'p', 'i', 'm', 'f']) expect(type.canServeTarget?.(g), g).toBe(true);
+  it('can serve six Level 1 letters, `a` included, and not `i`', () => {
+    for (const g of ['s', 'a', 't', 'p', 'm', 'f']) expect(type.canServeTarget?.(g), g).toBe(true);
+    expect(type.canServeTarget?.('i')).toBe(false);
   });
 
   it('does not throw for a target it has never heard of, and says no', () => {
@@ -81,7 +84,8 @@ describe('picture-start as a task type', () => {
     expect(picturesCanAnswerFor('mat')).toBe(false);
   });
 
-  it('makes the proving count two for every letter: both vowels now have a second game', () => {
-    for (const g of ['s', 'a', 't', 'p', 'i', 'm', 'f']) expect(provingTaskTypeCount('LETTER_SOUND', g), g).toBe(2);
+  it('makes the proving count two for six letters and one for `i`, which keeps a single proving game', () => {
+    for (const g of ['s', 'a', 't', 'p', 'm', 'f']) expect(provingTaskTypeCount('LETTER_SOUND', g), g).toBe(2);
+    expect(provingTaskTypeCount('LETTER_SOUND', 'i')).toBe(1);
   });
 });

@@ -429,9 +429,13 @@ describe('isPlayablePlan', () => {
       expect(isPlayablePlan([start({ choices: ['t', 'm', 'f'] })])).toBe(true);
     });
 
-    it('is playable for a vowel, which has start pictures of its own', () => {
+    it('is playable for the vowel a, which has start pictures of its own', () => {
       expect(isPlayablePlan([start({ primaryTarget: 'a', correctChoice: 'a', choices: ['s', 'a'] })])).toBe(true);
-      expect(isPlayablePlan([start({ primaryTarget: 'i', correctChoice: 'i', choices: ['i', 'a', 's'] })])).toBe(true);
+    });
+
+    it('is rejected for `i`, which has no picture to draw, as the target or as a wrong answer', () => {
+      expect(isPlayablePlan([start({ primaryTarget: 'i', correctChoice: 'i', choices: ['i', 's'] })])).toBe(false);
+      expect(isPlayablePlan([start({ choices: ['m', 'i'] })])).toBe(false);
     });
 
     it('is rejected when a choice is not a letter the curriculum has, which could not be drawn', () => {

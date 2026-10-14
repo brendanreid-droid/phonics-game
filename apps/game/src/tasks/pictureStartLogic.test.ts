@@ -4,13 +4,18 @@ import { buildSession, makeRng } from '@soundlings/engine';
 import type { TaskInstance } from '@soundlings/engine';
 import { pictureStartOptions, supportsPictureStart, taskLevel } from './pictureStartLogic';
 
-const ALL = ['s', 'a', 't', 'p', 'i', 'm', 'f'];
+/** The six letters Picture Start can be asked about. `i` cannot: no short-/i/ initial emoji is unambiguous. */
+const ALL = ['s', 'a', 't', 'p', 'm', 'f'];
 
 describe('supportsPictureStart', () => {
-  it('is true for every Level 1 sound, the vowels included', () => {
-    // The pictures are chosen for this game rather than borrowed from words, so the vowels
-    // that no picturable word could serve have a second proving game after all.
+  it('is true for six sounds, the vowel `a` included', () => {
+    // The pictures are chosen for this game rather than borrowed from words, so `a`, which no
+    // picturable word could serve, has a second proving game after all.
     for (const g of ALL) expect(supportsPictureStart(g), g).toBe(true);
+  });
+
+  it('is false for `i`, which has no short-/i/ picture a child names unambiguously', () => {
+    expect(supportsPictureStart('i')).toBe(false);
   });
 
   it('is false for something that is not a letter', () => {
@@ -122,6 +127,16 @@ describe('pictureStartOptions', () => {
 
   it('throws for a letter it has no pictures for, rather than returning nonsense', () => {
     expect(() => pictureStartOptions('zz', 1, 3, makeRng(1))).toThrow(/zz/);
+    expect(() => pictureStartOptions('i', 1, 3, makeRng(1))).toThrow(/picture start/i);
+  });
+
+  it('never offers `i` as a wrong answer: it has no picture to draw, so it would be a blank card', () => {
+    for (let seed = 0; seed < 50; seed += 1) {
+      const { choices } = pictureStartOptions('a', 1, 3, makeRng(seed));
+      expect(choices.map((c) => c.grapheme), `seed ${seed}`).not.toContain('i');
+      const given = pictureStartOptions('m', 1, 3, makeRng(seed), ['m', 'i', 's']);
+      expect(given.choices.map((c) => c.grapheme).sort(), `seed ${seed}`).toEqual(['m', 's']);
+    }
   });
 
   describe('when the engine has already chosen which letters to offer', () => {
@@ -139,11 +154,11 @@ describe('pictureStartOptions', () => {
       }
     });
 
-    it('can ask about a vowel, against consonants or the other vowel', () => {
+    it('can ask about the vowel a, against consonants', () => {
       for (let seed = 0; seed < 30; seed += 1) {
-        const { answer, choices } = pictureStartOptions('a', 1, 3, makeRng(seed), ['a', 'i', 's']);
+        const { answer, choices } = pictureStartOptions('a', 1, 3, makeRng(seed), ['a', 't', 's']);
         expect(['ant', 'ambulance']).toContain(answer.label);
-        expect(choices.map((c) => c.grapheme).sort()).toEqual(['a', 'i', 's']);
+        expect(choices.map((c) => c.grapheme).sort()).toEqual(['a', 's', 't']);
       }
     });
 

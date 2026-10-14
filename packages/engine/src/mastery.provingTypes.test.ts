@@ -24,15 +24,23 @@ function proven(skill: Skill, taskTypeIds: string[], config: EngineConfig = DEFA
 const NOW = 5 * HOUR;
 
 describe('isMastered: the task-type condition is capped by what can prove the skill', () => {
-  it('refuses LETTER_SOUND proven on one task type, for every sound, the vowels included', () => {
-    // Picture Start has pictures of its own for all seven letters, so no Level 1 sound is capped at one
-    // proving game any more: `a` and `i` were the last two.
-    for (const target of ['s', 'a', 't', 'p', 'i', 'm', 'f']) {
+  it('refuses LETTER_SOUND proven on one task type, for every sound but `i`', () => {
+    // Picture Start has pictures of its own for six letters, `a` among them, so those are no longer
+    // capped at one proving game.
+    for (const target of ['s', 'a', 't', 'p', 'm', 'f']) {
       const record = proven('LETTER_SOUND', ['sound-singer'], DEFAULT_CONFIG, target);
       expect(record.taskTypesSeen, target).toEqual(['sound-singer']);
       expect(isMastered(record, NOW, DEFAULT_CONFIG), target).toBe(false);
       expect(isMastered(proven('LETTER_SOUND', ['sound-singer', 'picture-start'], DEFAULT_CONFIG, target), NOW, DEFAULT_CONFIG), target).toBe(true);
     }
+  });
+
+  it('lets `i` be mastered on Sound Singer alone: nothing else can prove it', () => {
+    // No short-/i/ initial emoji is unambiguous (see graphemes.ts), so Picture Start cannot serve it.
+    // Demanding two games would make `i` permanently unmasterable.
+    const record = proven('LETTER_SOUND', ['sound-singer'], DEFAULT_CONFIG, 'i');
+    expect(record.taskTypesSeen).toEqual(['sound-singer']);
+    expect(isMastered(record, NOW, DEFAULT_CONFIG)).toBe(true);
   });
 
   it('lets a target nothing can prove be mastered on one task type, so it is never stuck', () => {

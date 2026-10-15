@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SKILLS } from '@soundlings/curriculum';
+import { SKILLS, getWord } from '@soundlings/curriculum';
 import { DEFAULT_CONFIG } from './config';
 import { TASK_TYPES, easiestTaskTypeForSkill, provingTaskTypeCount, taskTypeById, taskTypesForSkill } from './taskTypes';
 import { attemptsForTask } from './taskOutcome';
@@ -91,6 +91,7 @@ describe('task types', () => {
       'sound-hunt': [2, 4],
       'sound-singer': [2, 3],
       'picture-start': [2, 3],
+      'sound-it-out': [2, 3],
       'picture-match': [2, 3],
       'word-pick': [2, 3],
       'missing-letter': [2, 4],
@@ -116,7 +117,7 @@ describe('task types', () => {
   });
 
   it('returns only task types of the requested skill, and none for an unshipped skill', () => {
-    expect(taskTypesForSkill('BLEND_READ').map((t) => t.id)).toEqual(['picture-match', 'word-pick']);
+    expect(taskTypesForSkill('BLEND_READ').map((t) => t.id)).toEqual(['sound-it-out', 'picture-match', 'word-pick']);
     expect(taskTypesForSkill('TRICKY_READ')).toEqual([]);
   });
 
@@ -147,13 +148,18 @@ describe('provingTaskTypeCount', () => {
   });
 
   it('counts a skill\'s own type plus every type that grants it secondary credit', () => {
-    // SOUND_ID: sound-hunt directly, plus picture-match, word-pick, missing-letter and
-    // word-builder through secondary credit. The other three skills get no composite credit.
-    expect(provingTaskTypeCount('SOUND_ID', 's')).toBe(5);
+    // SOUND_ID: sound-hunt directly, plus sound-it-out, picture-match, word-pick,
+    // missing-letter and word-builder through secondary credit. Robot Talk is
+    // NOT among them — it grants no grapheme credit, because hearing the sounds
+    // in a word is not evidence of knowing its letters.
+    expect(provingTaskTypeCount('SOUND_ID', 's')).toBe(6);
     // LETTER_SOUND: sound-singer and picture-start, which has pictures of its own for every letter.
     expect(provingTaskTypeCount('LETTER_SOUND', 's')).toBe(2);
-    expect(provingTaskTypeCount('BLEND_READ', 'mat')).toBe(2);
+    // A pictured word can be read three ways; a picture-less one only by Sound It Out.
+    expect(provingTaskTypeCount('BLEND_READ', 'mat')).toBe(3);
+    expect(provingTaskTypeCount('BLEND_READ', 'sat')).toBe(1);
     expect(provingTaskTypeCount('SEGMENT_SPELL', 'mat')).toBe(2);
+    expect(provingTaskTypeCount('ORAL_BLEND', 'mat')).toBe(1);
   });
 
   it('is at least 1 even for a skill nothing can prove, so nothing is unmasterable', () => {
@@ -226,14 +232,34 @@ describe('provingTaskTypeCount, per target', () => {
   });
 
   it('never exceeds what is schedulable, so mastery can never deadlock', () => {
-    for (const skill of ['SOUND_ID', 'LETTER_SOUND', 'BLEND_READ', 'SEGMENT_SPELL'] as const) {
-      for (const target of ['s', 'a', 't', 'p', 'i', 'm', 'f', 'mat', 'at']) {
-        expect(provingTaskTypeCount(skill, target), `${skill}/${target}`).toBeGreaterThanOrEqual(1);
-        // Every shipped type serves any target of its skill except Picture Start,
-        // which has pictures for six letters and none for `i` or a word id, which is no sound at all.
-        const noPicture = skill === 'LETTER_SOUND' && !['s', 'a', 't', 'p', 'm', 'f'].includes(target);
-        const expected = noPicture ? provingTaskTypeCount(skill, 's') - 1 : provingTaskTypeCount(skill, 's');
-        expect(provingTaskTypeCount(skill, target), `${skill}/${target}`).toBe(expected);
+    // Each skill is asked about targets it can really have: letters for the
+    // sound skills, words for the word skills. Crossing them (BLEND_READ on the
+    // letter `s`) asks what cannot be scheduled and answers nothing.
+    const letters = ['s', 'a', 't', 'p', 'i', 'm', 'f'];
+    const words = ['mat', 'at'];
+    const cases = [
+      ['SOUND_ID', letters],
+      ['LETTER_SOUND', letters],
+      ['BLEND_READ', words],
+      ['SEGMENT_SPELL', words],
+    ] as const;
+
+    for (const [skill, targets] of cases) {
+      for (const target of targets) {
+        const count = provingTaskTypeCount(skill, target);
+        expect(count, `${skill}/${target}`).toBeGreaterThanOrEqual(1);
+
+        // Two games narrow by target, for the same underlying reason — a card
+        // has to show a picture:
+        //  - Picture Start has start pictures for six letters and none for `i`;
+        //  - Picture Match and Word Pick need the WORD to have one, and `at`
+        //    has none. Only Sound It Out, whose candidates are spoken, can ask
+        //    a child to read it.
+        const letterNoPicture = skill === 'LETTER_SOUND' && !['s', 'a', 't', 'p', 'm', 'f'].includes(target);
+        const wordNoPicture = skill === 'BLEND_READ' && getWord(target).picture === undefined;
+        const missing = (letterNoPicture ? 1 : 0) + (wordNoPicture ? 2 : 0);
+        const full = provingTaskTypeCount(skill, targets === words ? 'mat' : 's');
+        expect(count, `${skill}/${target}`).toBe(full - missing);
       }
     }
   });

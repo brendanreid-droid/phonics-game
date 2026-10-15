@@ -482,8 +482,11 @@ function allPairings(level: number): Pairing[] {
   }
   for (const word of picturableWordsForLevel(level)) {
     pairings.push({ targetId: word.id, skill: 'ORAL_BLEND' });
-    pairings.push({ targetId: word.id, skill: 'BLEND_READ' });
   }
+  // Every decodable word, not only the picturable ones. Sound It Out's
+  // candidates are spoken, so a word without a picture is readable; the games
+  // that do need a picture say so with `canServeTarget`.
+  for (const word of wordsForLevel(level)) pairings.push({ targetId: word.id, skill: 'BLEND_READ' });
   for (const word of wordsForLevel(level)) pairings.push({ targetId: word.id, skill: 'SEGMENT_SPELL' });
   return pairings;
 }
@@ -509,9 +512,11 @@ function teachable(
   const allPicturable = picturableWordsForLevel(level).map((w) => w.id);
   // A choice between one picture is not a question.
   const oralWordIds = allPicturable.length >= 2 ? allPicturable : [];
-  const picturable = picturableWordsForLevel(level).filter((w) => decodable.has(w.id)).map((w) => w.id);
-  // A picture-matching question needs a wrong answer to be a question at all.
-  const blendWordIds = picturable.length >= 2 ? picturable : [];
+  // Every decodable word is readable. It used to be only the picturable ones,
+  // which is the single line that put spelling before reading: after quest 1 a
+  // child can decode `at` and `sat`, neither has a picture, so reading had no
+  // eligible task while spelling had two.
+  const blendWordIds = decodable.size >= 2 ? [...decodable] : [];
   const blend = new Set(blendWordIds);
 
   const pairings = allPairings(level).filter((p) => {
@@ -834,6 +839,10 @@ function makeTask(args: MakeTaskArgs): TaskInstance {
       // first letter and the child has to read to the end. Picture Match shows
       // pictures, where that is no shortcut.
       sharedFirstGrapheme: type.id === 'word-pick',
+      // Sound It Out's candidates are spoken, so a picture-less word is a
+      // perfectly good wrong answer. Leaving this on filtered `sat` out of
+      // `at`'s candidates and produced a reading question with one choice.
+      requirePicture: type.id !== 'sound-it-out',
       rng,
     });
     choices = shuffle([pairing.targetId, ...distractors], rng);

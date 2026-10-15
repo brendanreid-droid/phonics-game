@@ -630,6 +630,18 @@ describe('choiceCountsSeen agrees with the sessions the engine really builds', (
         const isPrimary = attempt.targetId === task.primaryTarget && attempt.skill === task.skill;
         // Word Builder offers tiles to assemble, not choices to pick from.
         if (!isPrimary || task.taskTypeId === 'word-builder') return;
+        // Robot Talk and Sound It Out are excluded, and the reason is a fact
+        // rather than a convenience: both were added after `choiceCount` became
+        // part of every attempt, so no log that lacks the field can contain
+        // one, and the reconstruction below is only ever asked about the games
+        // that predate it.
+        //
+        // Their counts genuinely do not follow the letters-met formula — Robot
+        // Talk's pool is every picturable word whatever the child has met, and
+        // Sound It Out's is every decodable one. Teaching the reconstruction
+        // those rules would mean a second copy of the session builder's pool
+        // logic living here, and the two would drift silently.
+        if (task.taskTypeId === 'robot-talk' || task.taskTypeId === 'sound-it-out') return;
         expect(seen[i], `${task.taskTypeId} for ${task.primaryTarget}`).toBe(task.choices.length);
         checked += 1;
       });

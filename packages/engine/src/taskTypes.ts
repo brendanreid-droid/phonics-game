@@ -87,12 +87,29 @@ export const TASK_TYPES: readonly TaskTypeMeta[] = [
     canServeTarget: picturesCanAnswerFor,
   },
   {
+    id: 'sound-it-out',
+    skill: 'BLEND_READ',
+    baseDifficulty: 4,
+    minChoices: 2,
+    maxChoices: 3,
+    secondaryTargets: 'graphemes',
+    // No `canServeTarget`, and that is the point of the game. Its candidates are
+    // SPOKEN, not pictured, so `at` and `sat` are readable on the day they are
+    // decodable instead of waiting for artwork that does not exist. Requiring a
+    // picture is what left reading with no eligible task at all on day two,
+    // while spelling had two — an artwork gap setting the teaching order.
+  },
+  {
     id: 'picture-match',
     skill: 'BLEND_READ',
     baseDifficulty: 5,
     minChoices: 2,
     maxChoices: 3,
     secondaryTargets: 'graphemes',
+    // Shows pictures as the answers, so the word must have one. This used to be implicit, enforced only by the
+    // session builder narrowing the pool to picturable words — which also, and
+    // invisibly, kept Sound It Out's spoken candidates from existing.
+    canServeTarget: (targetId) => WORDS[targetId]?.picture !== undefined,
   },
   {
     id: 'word-pick',
@@ -102,6 +119,10 @@ export const TASK_TYPES: readonly TaskTypeMeta[] = [
     minChoices: 2,
     maxChoices: 3,
     secondaryTargets: 'graphemes',
+    // Shows a picture as the question, so the word must have one. This used to be implicit, enforced only by the
+    // session builder narrowing the pool to picturable words — which also, and
+    // invisibly, kept Sound It Out's spoken candidates from existing.
+    canServeTarget: (targetId) => WORDS[targetId]?.picture !== undefined,
   },
   {
     id: 'missing-letter',

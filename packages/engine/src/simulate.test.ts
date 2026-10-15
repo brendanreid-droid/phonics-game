@@ -54,15 +54,21 @@ describe('pacing simulation', { timeout: 60_000 }, () => {
   const nearChance = measure('nearChance', 40);
   const strugglingAtCap = measure('struggling', 40);
 
-  it('finishes Level 1 for every strong learner, in about 17 quests', () => {
+  it('finishes Level 1 for every strong learner, in about 21 quests', () => {
+    // Was "about 17". Sound It Out makes every decodable word readable, so a
+    // child now has to prove reading on words that previously had no reading
+    // task at all. The count rising is the point: it used to be bought by
+    // asking a child to spell words it never asked them to read.
+    //
+    // PROVISIONAL — Task 7 re-measures once the Meet card and the gates land.
     expect(fast.completed).toBe(SEED_COUNT);
     expect(fast.meanQuests).toBeGreaterThanOrEqual(12);
-    expect(fast.meanQuests).toBeLessThanOrEqual(19);
-    expect(fast.maxQuests).toBeLessThanOrEqual(26);
-    expect(fast.meanTasks).toBeLessThanOrEqual(265);
+    expect(fast.meanQuests).toBeLessThanOrEqual(23);
+    expect(fast.maxQuests).toBeLessThanOrEqual(30);
+    expect(fast.meanTasks).toBeLessThanOrEqual(320);
   });
 
-  it('finishes Level 1 for every average learner, in about 24 quests', () => {
+  it('finishes Level 1 for every average learner, in about 27 quests', () => {
     // Was "about 22". Oral blending adds a fifth skill to prove, so the count
     // rose, and that is the trade being made rather than a regression: the old
     // number was bought by never teaching a child to hear the sounds in a word.
@@ -72,9 +78,9 @@ describe('pacing simulation', { timeout: 60_000 }, () => {
     // read-before-spell gates land, and they will move again.
     expect(average.completed).toBe(SEED_COUNT);
     expect(average.meanQuests).toBeGreaterThanOrEqual(15);
-    expect(average.meanQuests).toBeLessThanOrEqual(26);
-    expect(average.maxQuests).toBeLessThanOrEqual(45);
-    expect(average.meanTasks).toBeLessThanOrEqual(360);
+    expect(average.meanQuests).toBeLessThanOrEqual(30);
+    expect(average.maxQuests).toBeLessThanOrEqual(52);
+    expect(average.meanTasks).toBeLessThanOrEqual(420);
   });
 
   it('finishes Level 1 for every struggling learner (70% accurate), in about 30 quests', () => {

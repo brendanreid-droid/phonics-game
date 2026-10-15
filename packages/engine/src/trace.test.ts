@@ -77,9 +77,10 @@ const IN_ORDER = QUESTS.flatMap(({ quest, tasks }) => tasks.map((task) => ({ que
  * plain `it` as Plan 6 lands each gate.
  *
  * What they report today:
- *  - the first spelling task is at position 17 and the first reading task at
- *    45: twenty-eight spelling tasks before a child reads one word;
- *  - `at` is spelt before it is ever read;
+ *  - FIXED by Sound It Out: reading now arrives before spelling. It was the
+ *    first spelling task at position 17 against the first reading task at 45 —
+ *    twenty-eight spelling tasks before a child read one word.
+ *  - `at` is still spelt before it is ever read;
  *  - reading never touches a two-sound word at all in ten quests. The VC ramp
  *    (at, am, if, it) exists and is spent entirely on spelling.
  */
@@ -89,7 +90,7 @@ describe('the order a child is actually taught in', () => {
     expect(QUESTS).toHaveLength(10);
   });
 
-  it.fails('asks a child to read a word before it asks them to spell one', () => {
+  it('asks a child to read a word before it asks them to spell one', () => {
     const firstRead = IN_ORDER.findIndex((t) => t.skill === 'BLEND_READ');
     const firstSpell = IN_ORDER.findIndex((t) => t.skill === 'SEGMENT_SPELL');
     expect(firstRead, 'no reading task in ten quests').toBeGreaterThanOrEqual(0);

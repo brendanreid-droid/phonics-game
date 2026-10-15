@@ -160,6 +160,25 @@ describe('buildSession invariants', () => {
     }
   });
 
+  it('never asks a question with only one answer on offer', () => {
+    // A "choice" of one is not a question, and it silently inflates how well a
+    // child looks to be doing. This went unnoticed until Sound It Out, whose
+    // candidates are spoken, was still having them filtered to words with
+    // pictures: `at` was offered against nothing at all.
+    //
+    // Word Builder is excluded: its choices are tiles to assemble, not
+    // alternatives to pick between.
+    for (const [name, mastery] of Object.entries(STATES)) {
+      for (const seed of SEEDS.slice(0, 15)) {
+        for (const task of build(mastery, seed)) {
+          if (task.taskTypeId === 'word-builder') continue;
+          const min = taskTypeById(task.taskTypeId).minChoices;
+          expect(task.choices.length, `${name}, ${seed}, ${task.id}`).toBeGreaterThanOrEqual(min);
+        }
+      }
+    }
+  });
+
   it('never places two of the same mini-game back to back in a short session either', () => {
     // Not 3: with three anchors in three slots and two task types, the middle anchor
     // would have to be the same type as one of its neighbours. No real session is that short.
@@ -461,12 +480,20 @@ describe('buildSession for a brand-new child', () => {
     }
   });
 
-  it('once s, a and t are known, spells only at and sat and never reads, since no picture word is buildable', () => {
+  it('once s, a and t are known, reads and spells at and sat, and nothing else', () => {
+    // This used to assert "spells only at and sat and NEVER READS, since no
+    // picture word is buildable". That sentence was the bug, written down and
+    // locked in by a test: an artwork gap was being treated as a fact about the
+    // curriculum, and because spelling had no such dependency, spelling came
+    // first. Sound It Out's candidates are spoken, so both words are readable
+    // on the day they are decodable.
     const mastery = heard({ s: 2, a: 2, t: 2 });
     for (const seed of SEEDS) {
       for (const task of build(mastery, seed)) {
-        expect(['ORAL_BLEND', 'SOUND_ID', 'LETTER_SOUND', 'SEGMENT_SPELL'], seed).toContain(task.skill);
-        if (task.skill === 'SEGMENT_SPELL') expect(['at', 'sat'], seed).toContain(task.primaryTarget);
+        expect(['ORAL_BLEND', 'SOUND_ID', 'LETTER_SOUND', 'BLEND_READ', 'SEGMENT_SPELL'], seed).toContain(task.skill);
+        if (task.skill === 'SEGMENT_SPELL' || task.skill === 'BLEND_READ') {
+          expect(['at', 'sat'], seed).toContain(task.primaryTarget);
+        }
       }
     }
   });
@@ -646,9 +673,15 @@ describe('buildSession composition', () => {
   });
 
   it('only shows pictures for words that have one', () => {
+    // Narrowed from "every BLEND_READ task". Sound It Out is a reading game
+    // whose candidates are SPOKEN, so a picture-less word is a fine answer
+    // there — which is exactly what lets `at` and `sat` be read on the day a
+    // child can decode them. The games that put a picture on a card declare it
+    // with `canServeTarget`, and this checks them.
+    const picturedGames = ['picture-match', 'word-pick'];
     for (const seed of SEEDS) {
       for (const task of build(masteredGraphemes(['s', 'a', 't', 'p']), seed)) {
-        if (task.skill !== 'BLEND_READ') continue;
+        if (!picturedGames.includes(task.taskTypeId)) continue;
         for (const choice of task.choices) expect(getWord(choice).picture, `${seed}: ${choice}`).toBeDefined();
       }
     }
@@ -793,7 +826,13 @@ describe('buildSession composition', () => {
     expect(strengthAt(sid, NOW, DEFAULT_CONFIG)).toBeCloseTo(strengthAt(ls, NOW, DEFAULT_CONFIG), 10);
     expect(sid.lastSeenAt).toBeGreaterThan(ls.lastSeenAt);
     for (const seed of SEEDS) {
-      const review = build(mastery, seed, { config: { reviewCount: 1 } }).filter((t) => t.band === 'review');
+      // Sound work only. Reading is no longer gated on a picture, so a word can
+      // now take a review slot ahead of a sound; this test is about how two
+      // SOUNDS of equal strength are ranked, so compare those.
+      const review = build(mastery, seed, { config: { reviewCount: 1 } }).filter(
+        (t) => t.band === 'review' && (t.skill === 'SOUND_ID' || t.skill === 'LETTER_SOUND'),
+      );
+      if (review.length === 0) continue;
       expect(`${review[0].primaryTarget}/${review[0].skill}`, seed).toBe('f/LETTER_SOUND');
     }
   });
@@ -898,7 +937,8 @@ describe('buildSession for a child who has mastered everything', () => {
       // "everything" has mastered this too. Without it the engine was right to
       // keep offering Robot Talk and this fixture was simply incomplete.
       ...pictured.map((w): Pair => [w, 'ORAL_BLEND']),
-      ...pictured.map((w): Pair => [w, 'BLEND_READ']),
+      // Every decodable word is readable now, not only the pictured ones.
+      ...words.map((w): Pair => [w, 'BLEND_READ']),
       ...words.map((w): Pair => [w, 'SEGMENT_SPELL']),
     ]);
   }

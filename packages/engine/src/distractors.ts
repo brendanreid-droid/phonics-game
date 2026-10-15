@@ -3,6 +3,7 @@ import {
   getWord,
   graphemesForLevel,
   picturableWordsForLevel,
+  wordsForLevel,
 } from '@soundlings/curriculum';
 import type { GraphemeId, TargetId, WordId } from '@soundlings/curriculum';
 import { shuffle } from './rng';
@@ -116,6 +117,16 @@ export interface WordDistractorArgs {
    * A mix-up the child has actually made still comes first of all.
    */
   sharedFirstGrapheme?: boolean;
+  /**
+   * Whether a distractor must have a picture. True by default, because in every
+   * game that shows cards a picture-less word renders as a blank one.
+   *
+   * Sound It Out sets it false: its candidates are SPOKEN, so a word without a
+   * picture is a perfectly good wrong answer there. That is what lets a child
+   * read `at` and `sat` on the day they can decode them, instead of waiting for
+   * artwork — which is the dependency that put spelling before reading.
+   */
+  requirePicture?: boolean;
 }
 
 /**
@@ -139,15 +150,19 @@ export function pickWordDistractors(args: WordDistractorArgs): WordId[] {
   const targetGraphemes = getWord(target).graphemes;
   const met = args.metGraphemes ? new Set(args.metGraphemes.map((g) => getGrapheme(g).id)) : undefined;
 
-  const basePool = unique(args.allowedWords ?? picturableWordsForLevel(level).map((w) => w.id));
-  // Whatever the caller passes, a distractor without a picture would render as
-  // a blank card in Picture Match, and a word from beyond `level` or built from
-  // an unmet grapheme would be a trick question, so none is ever a candidate.
+  const requirePicture = args.requirePicture ?? true;
+  const basePool = unique(
+    args.allowedWords ??
+      (requirePicture ? picturableWordsForLevel(level) : wordsForLevel(level)).map((w) => w.id),
+  );
+  // A distractor from beyond `level`, or built from an unmet grapheme, would be
+  // a trick question, so none is ever a candidate. A picture-less one is only
+  // excluded where a card has to show a picture.
   const pool = basePool.filter((id) => {
     if (id === target) return false;
     const word = getWord(id);
     return (
-      word.picture !== undefined &&
+      (!requirePicture || word.picture !== undefined) &&
       word.decodableFromLevel <= level &&
       (met === undefined || word.graphemes.every((g) => met.has(g)))
     );

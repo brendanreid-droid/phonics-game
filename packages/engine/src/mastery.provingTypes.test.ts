@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Skill } from '@soundlings/curriculum';
 import { DEFAULT_CONFIG, withDefaults } from './config';
 import { applyAttempt, emptyRecord, isMastered } from './mastery';
+import { provingTaskTypeCount } from './taskTypes';
 import type { EngineConfig } from './config';
 import type { Attempt, MasteryRecord } from './types';
 
@@ -47,13 +48,31 @@ describe('isMastered: the task-type condition is capped by what can prove the sk
     expect(isMastered(proven('TRICKY_READ', ['some-future-game']), NOW, DEFAULT_CONFIG)).toBe(true);
   });
 
-  it('no longer lets BLEND_READ be mastered on one task type, now that Word Pick is a second', () => {
+  it('no longer lets BLEND_READ be mastered on one task type, for a word with a picture', () => {
     // Plan 3 Task 3. This used to assert the opposite: with Picture Match the only
     // reading game the condition was capped at one. It now bites.
-    const one = proven('BLEND_READ', ['picture-match']);
+    //
+    // The target has to be a real pictured word now. Picture Match and Word Pick
+    // put a picture on a card, so they declare that they can only serve a word
+    // that has one; `mat` does.
+    const one = proven('BLEND_READ', ['picture-match'], DEFAULT_CONFIG, 'mat');
     expect(one.taskTypesSeen).toEqual(['picture-match']);
     expect(isMastered(one, NOW, DEFAULT_CONFIG)).toBe(false);
-    expect(isMastered(proven('BLEND_READ', ['picture-match', 'word-pick']), NOW, DEFAULT_CONFIG)).toBe(true);
+    expect(
+      isMastered(proven('BLEND_READ', ['picture-match', 'word-pick'], DEFAULT_CONFIG, 'mat'), NOW, DEFAULT_CONFIG),
+    ).toBe(true);
+  });
+
+  it('accepts one task type for a word only one reading game can serve', () => {
+    // `sat` has no picture, so Sound It Out is the only game that can ask a
+    // child to read it. The cap is what stops that word being unmasterable, and
+    // it is the same rule that keeps `i` masterable without a start picture.
+    //
+    // The cost is real and worth stating: for a picture-less word the
+    // anti-memorisation guarantee rests on one game rather than two. The fix is
+    // artwork, not a weaker rule.
+    expect(provingTaskTypeCount('BLEND_READ', 'sat')).toBe(1);
+    expect(isMastered(proven('BLEND_READ', ['sound-it-out'], DEFAULT_CONFIG, 'sat'), NOW, DEFAULT_CONFIG)).toBe(true);
   });
 
   it('no longer lets SEGMENT_SPELL be mastered on one task type, now that Missing Letter is a second', () => {
@@ -90,12 +109,16 @@ describe('isMastered: the task-type condition is capped by what can prove the sk
   });
 
   it('does not demand the impossible when masteryTaskTypes exceeds what can prove the skill', () => {
-    const six = withDefaults({ masteryTaskTypes: 6 });
-    // Five task types can prove SOUND_ID (the hunt, and four word games through secondary credit).
-    const all = ['sound-hunt', 'picture-match', 'word-pick', 'word-builder', 'missing-letter'];
-    expect(isMastered(proven('SOUND_ID', all.slice(0, 4), six), NOW, six)).toBe(false);
-    expect(isMastered(proven('SOUND_ID', all, six), NOW, six)).toBe(true);
-    expect(isMastered(proven('LETTER_SOUND', ['sound-singer', 'picture-start'], six, 'a'), NOW, six)).toBe(true);
+    const seven = withDefaults({ masteryTaskTypes: 7 });
+    // Six task types can prove SOUND_ID: the hunt, and five word games through
+    // secondary credit. Sound It Out is the sixth. Robot Talk is NOT among them
+    // — it grants no grapheme credit at all, deliberately, because hearing the
+    // sounds in "map" is not evidence a child knows the letter `m`.
+    const all = ['sound-hunt', 'sound-it-out', 'picture-match', 'word-pick', 'word-builder', 'missing-letter'];
+    expect(provingTaskTypeCount('SOUND_ID', 's')).toBe(all.length);
+    expect(isMastered(proven('SOUND_ID', all.slice(0, 5), seven), NOW, seven)).toBe(false);
+    expect(isMastered(proven('SOUND_ID', all, seven), NOW, seven)).toBe(true);
+    expect(isMastered(proven('LETTER_SOUND', ['sound-singer', 'picture-start'], seven, 'a'), NOW, seven)).toBe(true);
   });
 
   it('keeps every other condition in force for a single-type skill', () => {

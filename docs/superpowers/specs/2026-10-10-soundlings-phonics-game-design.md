@@ -157,6 +157,7 @@ The six synthetic-phonics skills, plus one reserved:
 
 | Skill | Child does |
 |---|---|
+| `ORAL_BLEND` | Hears a word said sound by sound, picks what it is — **no letters on screen** |
 | `SOUND_ID` | Hears a sound, picks the letter |
 | `LETTER_SOUND` | Sees a letter, identifies its sound |
 | `BLEND_READ` | Reads a word, matches meaning |
@@ -167,6 +168,10 @@ The six synthetic-phonics skills, plus one reserved:
 
 `SAY_IT` exists in the type system and in the task registry's type signature from day one. Adding it later is configuration plus one component, not a refactor.
 
+**`ORAL_BLEND` was missing from the original spec, and its absence was the largest pedagogical hole in the product.** Phonemic awareness — hearing that /m/-/a/-/p/ is "map", with no print involved — is the single strongest predictor of later reading, and it precedes letters in every synthetic phonics programme. This spec went straight to grapheme work because the grapheme is what a screen can show. That is designing from the medium rather than from the method.
+
+It sits below `SOUND_ID` and `LETTER_SOUND` in the ladder and is not gated behind them: a child can blend orally before they can name a single letter, which is exactly the point.
+
 ### 4.3 Task types
 
 A **task type** is one playable mini-game that exercises one skill. Registry-based:
@@ -175,7 +180,8 @@ A **task type** is one playable mini-game that exercises one skill. Registry-bas
 interface TaskType {
   id: string;
   skill: Skill;
-  difficulty: number;              // 1..5, used by the frustration guard
+  difficulty: number;              // base rung; see difficultyFor() — the real
+                                   // figure depends on the target as well
   minChoices: number;
   maxChoices: number;
   generate(target: Target, distractors: Target[], rng: Rng): TaskInstance;
@@ -184,6 +190,26 @@ interface TaskType {
 ```
 
 `generate` is pure and takes an injected `rng` so any task instance is reproducible from a seed. This makes bug reports replayable and lets the simulation harness run deterministically.
+
+#### Difficulty is a property of the task *and* the word
+
+A single number per mini-game was wrong, and the error was not cosmetic. `missing-letter` (spelling) and `word-pick` (reading) were both rated **3** — spelling judged exactly as hard as reading — and that rating is how an inverted teaching order survived review: nothing in the engine believed reading came first, so nothing objected when it did not.
+
+Difficulty is therefore `difficultyFor(taskType, targetId)`, rating the pairing:
+
+| | VC (`at`) | CVC (`sat`) |
+|---|---|---|
+| Robot Talk | 1 | 2 |
+| Sound Hunt | 1 | — |
+| Sound Singer / Picture Start | 2 | — |
+| **Sound It Out** | 3 | 4 |
+| Picture Match / Word Pick | 4 | 5 |
+| Missing Letter | 5 | 6 |
+| Word Builder | 6 | 7 |
+
+Two claims are encoded here that the old table denied. **Reading is easier than spelling**: blending is receptive and every piece of the answer is on the screen, while segmenting is productive and the child must hold the word in memory, pull it apart, and retrieve letter shapes from nothing. **Two sounds are easier than three**: a VC word is one blend, a CVC word is two.
+
+`cappedDifficulty` is re-based against this scale, since the numbers it compares against have moved.
 
 ### 4.4 One task credits several targets
 
@@ -340,7 +366,21 @@ Hard invariants, each covered by a unit test:
 
    With this gate, a first quest is all sound work — hear the sound, find the letter; see the letter, find the sound — across the three sounds of the first group. Words arrive once those sounds are known, usually in the second quest. The deadlock stays fixed, because the evidence that unlocks words is exactly the evidence the sound tasks produce.
 
-   One known refinement, deliberately not taken yet: synthetic phonics usually introduces *blending* (reading) before *segmenting* (spelling), so spelling could reasonably require a higher threshold than reading. That is a second knob, and one is enough until a real child shows us it is not.
+   **That refinement is now taken, because leaving it out produced exactly the failure it was meant to prevent** (invariant 5b). The note above called it "one known refinement, deliberately not taken yet" and reasoned that one knob was enough until a real child showed otherwise. A real child did, within days: 5a got the sounds in front of the words and then let the child spell `at` and `sat` in quest 2, while the first reading task did not arrive until quest 4.
+
+5b. **Reading before spelling, word by word.** A `SEGMENT_SPELL` task on word W is eligible only once W has at least one unscaffolded correct `BLEND_READ` attempt. Per word, not per skill: being able to read `sat` says nothing about being ready to spell `map`.
+
+   The cause of the original inversion is worth recording, because nobody chose it. After quest 1 a child knows `s a t`, which decodes exactly two words — `at` and `sat`. Neither has a picture. Both reading games required a picture, so reading had **zero** eligible tasks while spelling had two. **A gap in the artwork silently set the teaching order.** No test could have caught it: every invariant passed, and the sequence was still wrong. It was found by printing what a real child would actually be asked, which is now a standing artefact (§11).
+
+   Sound It Out exists partly to break that dependency: its choices are spoken rather than pictured, so `at` and `sat` are readable on the day they are decodable.
+
+5c. **Two sounds before three.** A three-grapheme word is eligible for a skill only once a two-grapheme word has been answered correctly and unaided on that same skill. `at am if it` are the ramp, and they were being spent on spelling before any reading happened.
+
+5d. **Meet before test.** A grapheme's first appearance as a primary target in a quest is preceded, in that same quest, by its Meet card (§7.3). Nothing may be tested before it has been taught.
+
+5e. **One new sound at a time, and the focus grows through the lesson.** A quest opens on a single newly-introduced grapheme and practises it alone for `introPracticeCount` tasks before a second is introduced. Focus never spans a partial introduction group.
+
+   `focusTargetCount: 3` sliced the flat grapheme list and ignored the group boundaries entirely, so a child's third quest opened `p i m f` — four new sounds at once, splitting the `[m, f]` group that the curriculum had deliberately kept together. Day one meanwhile opened with three. A teacher introduces one sound, practises it to the point of recognition, and only then adds the next; a quest should read as a lesson, not a shuffle.
 6. Session length equals `config.sessionLength` (default 14).
 7. If fewer than 2 mastered targets exist (i.e. a brand-new child), win-backs are replaced as follows: the **opening** and **middle-third** anchors use the lowest-difficulty task type available, and the **closing** anchor uses at most the second-lowest and must sit on a target the child has already answered correctly in this session.
 
@@ -385,9 +425,12 @@ The last row is the "bad day" case — tired, unwell, distracted. The right resp
 ### 5.7 Level completion
 
 Level 1 is complete when:
+- At least `oralBlendRequired` Level-1 words mastered for `ORAL_BLEND`
 - All 7 graphemes mastered for `SOUND_ID` **and** `LETTER_SOUND`
 - At least 8 Level-1 words mastered for `BLEND_READ`
 - At least 6 Level-1 words mastered for `SEGMENT_SPELL`
+
+Oral blending is listed first because it is first in the teaching order, not because it is hardest. A child who can hear /m/-/a/-/p/ as "map" has the ability that makes print worth decoding; one who cannot is matching shapes.
 
 **Completion latches.** `levelProgress` is evaluated at `now`, so a level that was complete yesterday can read as incomplete today once strength decays — and condition 6 means a single wrong answer un-masters a target. A child must never lose a finished level, so the runner persists `levelCompletedAt` the first time completion is reached and never clears it. The live `levelProgress` calculation stays as it is; it answers "what can they do right now?", which is what the parent dashboard and the session builder need. Only the *badge* latches.
 
@@ -402,6 +445,8 @@ Quotas: **6** blend-reading words and **5** spelling words. An earlier draft sai
 - Therefore the real figures are higher than this spec previously claimed, and **we do not claim fewer total tasks than the 40-game competitor.**
 
 ### Measured figures
+
+> **These figures are stale and are known to be wrong.** They were measured before the teaching sequence was rebuilt (invariants 5b–5e, Robot Talk, Sound It Out, the Meet card). That change adds two stages below the ones measured here and gates two more, so quest counts will rise — correctly, because the old counts were bought by skipping teaching. They are left in place, marked, until the harness has been re-run. **They must be re-measured, not re-estimated.** This spec has twice published hand-derived pacing figures that were wrong; it will not do so a third time.
 
 From the simulation harness, 30 seeds per profile, one quest per simulated day, with the calibrated config below. **These are measurements, not targets.**
 
@@ -436,7 +481,7 @@ It also defeated the reason this sequence was chosen in the first place. The who
 
 Note this is why the fix is grouping rather than cross-crediting `LETTER_SOUND` into `SOUND_ID`. That alternative was measured and performs similarly, but it would blur the distinction between recognising a letter and recalling it from its sound — and requiring both directions is the strongest part of the completion rule (§5.7). Fixing a content problem by weakening an evidence rule is the wrong trade.
 
-Blend-reading necessarily starts at the second group, because no `s,a,t` word has a picture. That is fine: the requirement is that each skill be *reachable*, not that all four start on day one.
+~~Blend-reading necessarily starts at the second group, because no `s,a,t` word has a picture.~~ **This was accepted far too easily, and it caused the inversion recorded at invariant 5b.** Treating a missing picture as a fact about the curriculum, rather than as a gap in the artwork, let an asset shortage decide when a child starts reading — and because spelling had no such dependency, spelling arrived first. The requirement is not merely that each skill be *reachable*; it is that they become reachable **in the teaching order**. Sound It Out takes spoken choices precisely so that `at` and `sat` can be read on the day they are decodable.
 
 **Decodable words:** at, as, am, if, it, is, sat, pat, tap, sap, pit, sit, tip, sip, pip, fat, fit, mat, map, Sam, Pam
 **Tricky words:** I, the, a
@@ -449,12 +494,19 @@ Every word is asserted decodable by test — i.e. composed only of graphemes int
 
 | # | Name | Skill | Child does |
 |---|---|---|---|
+| 0 | **Robot Talk** | `ORAL_BLEND` | Hears /m/…/a/…/p/, taps the matching picture. **No letters on screen** |
 | 1 | **Sound Hunt** | `SOUND_ID` | Hears /s/, taps the letter among 2–4 |
 | 2 | **Sound Singer** | `LETTER_SOUND` | Sees `s`, taps which of 3 voice buttons says it |
-| 3 | **Word Builder** | `SEGMENT_SPELL` | Hears "sat", drags `s` `a` `t` tiles into slots |
-| 4 | **Picture Match** | `BLEND_READ` | Reads `mat`, taps the matching picture of 3 |
+| 3 | **Picture Start** | `LETTER_SOUND` | Sees `s`, taps which of 3 pictures starts with that sound |
+| 4 | **Sound It Out** | `BLEND_READ` | Taps `s` `a` `t` in order to hear each, pushes them together, picks the spoken word |
+| 5 | **Picture Match** | `BLEND_READ` | Reads `mat`, taps the matching picture of 3 |
+| 6 | **Word Pick** | `BLEND_READ` | Sees a picture, taps the matching word from 3 that share a first letter |
+| 7 | **Missing Letter** | `SEGMENT_SPELL` | Hears "sat", sees `s _ t`, taps the letter for the gap |
+| 8 | **Word Builder** | `SEGMENT_SPELL` | Hears "sat", builds it from letter tiles |
 
-Four task types is the minimum that satisfies the ≥2-task-types mastery rule for both sound skills and both word skills. Fewer, and mastery becomes unprovable.
+Four task types was the minimum that satisfies the ≥2-task-types mastery rule for both sound skills and both word skills. Fewer, and mastery becomes unprovable.
+
+**Sound It Out is the one that teaches rather than tests, and its absence was the central flaw.** Every other reading game here is a matching game on which blending is one available strategy; a child can pass Word Pick by elimination and Picture Match by vocabulary. Sounding out existed only as a tier-2 *hint*, which means a child who never struggled was never once shown the skill the entire method rests on. In Sound It Out the tapping of each letter in sequence **is** the mechanic, so blending is what the child does rather than what we hope they did.
 
 ### 6.2 Creatures
 
@@ -476,6 +528,14 @@ Boot
             ├─ Trophy room   high scores, streaks, total sounds learned
             └─ Parent area   PIN-gated
 ```
+
+### 7.3 Meet the sound
+
+A teaching card, not a task. The first time a grapheme enters a child's focus, the quest opens that stretch with it: the letter large in Andika, the creature saying the sound, the mnemonic present **from the start**, and a tap-to-hear-it-again that costs nothing. No score. No wrong answer. Not skippable the first time it is shown for a grapheme; skippable on every later showing, because a child who already knows Sisi should not be made to sit through her again.
+
+It is not scored and so produces no attempt, which means it cannot be gamed and cannot pollute the mastery data.
+
+**This inverts what was shipped.** The mnemonic was `tier >= 2` in Sound Hunt and Sound Singer — it appeared only *after* a child had already got the sound wrong. A child met `s` for the first time as a quiz, and the teaching was the consolation prize for failing it. Explicit instruction comes first in every synthetic phonics programme; it is the "synthetic" part of the name.
 
 ### 7.1 Parent area
 
@@ -599,6 +659,14 @@ Conflict policy: there is nothing to resolve. The attempt log is a set of uuids,
 | Task components | Render, correct path, incorrect path, each hint tier, scaffolded completion. |
 | `packages/api` | Offline queue: enqueue while offline, flush on reconnect, no duplicate attempts. |
 | Simulation harness | Run synthetic children (fast / average / struggling / bad-day) through Level 1. **Ranges to be derived from the harness itself, then recorded here and in §5.7.1 as measured values alongside the config that produced them.** Once set, they are regression bounds with modest headroom — not aspirations. Re-measured with seven mini-games in Plan 3 (§5.7.1). The prior entry here (fast 4–7, average 7–10, struggling 10–14) was invented and is withdrawn; it also disagreed with the plan's own numbers, which is how you can tell neither was measured. |
+
+### 11.0 Print the first quests and read them
+
+The engine has a standing test that builds the first ten quests for a flawless child and prints every task in order: type, skill, target, band. It asserts the teaching-order invariants against that trace, and the trace itself is readable output.
+
+This exists because **the sequence was wrong for weeks while every test passed**. 1,787 tests, seven mini-games, every §5.4 invariant green — and a child was being asked to spell `sat` two quests before being asked to read a single word. No unit test was looking at the shape of the whole lesson, because each one was looking at a rule.
+
+The general lesson, which has now cost this project three times (trophy room of zeros, Picture Start's 💪 for `fit`, this): **a suite of passing tests is evidence about the rules you thought to write, and nothing else.** Some defects are only visible by looking at the artefact a child would actually meet. Where that artefact can be printed, print it, and make reading it part of the work.
 
 ### 11.1 Not every child should complete Level 1 by playing more
 

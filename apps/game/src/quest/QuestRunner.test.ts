@@ -478,8 +478,13 @@ describe('stars from a played quest', () => {
 });
 
 describe('how much a right answer is worth after help', () => {
+  // The skills a task can be ABOUT, as opposed to the secondary SOUND_ID credit
+  // a word task scatters over its letters. ORAL_BLEND belongs here because a
+  // quest now opens on Robot Talk, which is what these tests answer first.
   const primaryOf = async (repo: ProgressRepo) =>
-    (await repo.loadAttempts(PROFILE)).filter((a) => a.skill === 'SOUND_ID' || a.skill === 'LETTER_SOUND');
+    (await repo.loadAttempts(PROFILE)).filter(
+      (a) => a.skill === 'ORAL_BLEND' || a.skill === 'SOUND_ID' || a.skill === 'LETTER_SOUND',
+    );
 
   it('is full weight when the child was not helped', async () => {
     const { runner, repo } = await started();

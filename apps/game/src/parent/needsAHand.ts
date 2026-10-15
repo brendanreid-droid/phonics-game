@@ -119,6 +119,12 @@ export function choiceCountsSeen(attempts: readonly Attempt[], level = 1): Array
       order.push(attempt.sessionId);
       furthestIn.set(attempt.sessionId, 0);
     }
+    // Oral blending must not move this on. Its target is a word, and the words
+    // it uses are every picturable one at the level regardless of which letters
+    // the child has met — hearing that /m/-/a/-/p/ is "map" says nothing about
+    // having been introduced to `m`. Letting it count made the reconstruction
+    // think a child on day one had reached the last introduction group.
+    if (attempt.skill === 'ORAL_BLEND') continue;
     const group = groupIndexOf(attempt.targetId, level);
     if (group !== null && group > furthestIn.get(attempt.sessionId)!) furthestIn.set(attempt.sessionId, group);
   }

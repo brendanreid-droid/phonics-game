@@ -38,17 +38,19 @@ export interface EngineConfig {
   badDaySessionLength: number;
   /**
    * Difficulty ceiling applied to the rest of a quest after the guard abandons
-   * a task. Must be at least 2: only one Level 1 task type sits on rung 1, so
-   * a cap of 1 leaves the session builder a single mini-game, collapses its
+   * a task. Only one Level 1 task type sits on rung 1, so a cap that admits
+   * just that one leaves the session builder a single mini-game, collapses its
    * no-adjacent-repeats rule, and hands a struggling child a quest of identical
    * tasks.
    *
-   * On the current scale 2 admits Sound Hunt, Sound Singer and Picture Start —
-   * three games across two skills, and no word work at all. That is the right
-   * behaviour and not a coincidence worth relying on: when a child is
-   * struggling, a teacher takes them back to the sounds. `frustration.test.ts`
-   * asserts the property rather than the number, because the scale moved once
-   * already when difficulty became a function of the task AND the word.
+   * On the current scale 3 admits Robot Talk, Sound Hunt, Sound Singer and
+   * Picture Start — four games across three skills, and no word work at all.
+   * That is the right behaviour: when a child is struggling, a teacher takes
+   * them back to the sounds. `frustration.test.ts` asserts the property rather
+   * than the number, because this scale has now moved twice — once when
+   * difficulty became a function of the task AND the word, and once when oral
+   * blending took the bottom rung — and a cap pinned to a number would have
+   * been silently wrong both times.
    */
   cappedDifficulty: number;
 
@@ -108,7 +110,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   abandonAfterErrors: 3,
   badDayDistinctTargets: 3,
   badDaySessionLength: 8,
-  cappedDifficulty: 2,
+  cappedDifficulty: 3,
 
   // Two correct answers means "they can do it", not "they have mastered it".
   // Mastery needs two separate sessions, and gating words on that would make a

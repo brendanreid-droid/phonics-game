@@ -261,6 +261,14 @@ export function isPlayablePlan(plan: readonly TaskInstance[]): boolean {
         return task.choices.includes(task.correctChoice);
       }
       const word = getWord(task.correctChoice);
+      if (task.skill === 'ORAL_BLEND') {
+        // Pictures of whole words. Every card must HAVE a picture, because
+        // there is no letter on this screen to fall back on: a word without one
+        // would render as a blank card the child cannot choose between.
+        task.choices.forEach((c) => getWord(c));
+        if (!task.choices.every((c) => getWord(c).picture !== undefined)) return false;
+        return task.choices.includes(task.correctChoice);
+      }
       if (task.skill === 'BLEND_READ') {
         task.choices.forEach((c) => getWord(c));
         return task.choices.includes(task.correctChoice);

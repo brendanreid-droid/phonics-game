@@ -1,3 +1,4 @@
+import { WORDS } from '@soundlings/curriculum';
 import type { Skill, TargetId } from '@soundlings/curriculum';
 import { picturesCanAnswerFor } from './pictureStart';
 
@@ -32,15 +33,34 @@ export interface TaskTypeMeta {
 }
 
 /**
- * The four mini-games shipped in Level 1. Four is the minimum that lets both
- * sound skills and both word skills clear the two-task-type mastery bar once
- * secondary crediting is taken into account.
+ * The mini-games shipped in Level 1, listed in teaching order.
+ *
+ * The order of this array is documentation, not behaviour — the session builder
+ * schedules by difficulty and skill. But reading it top to bottom should look
+ * like a lesson: hear the sounds in a word, learn a letter, read a word, spell
+ * a word.
  */
 export const TASK_TYPES: readonly TaskTypeMeta[] = [
   {
+    id: 'robot-talk',
+    skill: 'ORAL_BLEND',
+    baseDifficulty: 1,
+    minChoices: 2,
+    maxChoices: 3,
+    // Deliberately 'none'. Blending /m/-/a/-/p/ aloud is evidence a child can
+    // hear the sounds in "map"; it is NOT evidence they know the letter `m`,
+    // which they may never have seen. Granting grapheme credit here would let a
+    // child master letters by never looking at one.
+    secondaryTargets: 'none',
+    // No letters may appear, so pictures are the only possible answer. Unlike
+    // the reading games' picture requirement, this is a fact about the task
+    // rather than a gap in the artwork: there is nothing here to read.
+    canServeTarget: (targetId) => WORDS[targetId]?.picture !== undefined,
+  },
+  {
     id: 'sound-hunt',
     skill: 'SOUND_ID',
-    baseDifficulty: 1,
+    baseDifficulty: 2,
     minChoices: 2,
     maxChoices: 4,
     secondaryTargets: 'none',
@@ -48,7 +68,7 @@ export const TASK_TYPES: readonly TaskTypeMeta[] = [
   {
     id: 'sound-singer',
     skill: 'LETTER_SOUND',
-    baseDifficulty: 2,
+    baseDifficulty: 3,
     minChoices: 2,
     maxChoices: 3,
     secondaryTargets: 'none',
@@ -57,7 +77,7 @@ export const TASK_TYPES: readonly TaskTypeMeta[] = [
     id: 'picture-start',
     skill: 'LETTER_SOUND',
     // The same rung as Sound Singer: the same skill, asked another way.
-    baseDifficulty: 2,
+    baseDifficulty: 3,
     minChoices: 2,
     maxChoices: 3,
     secondaryTargets: 'none',
@@ -69,7 +89,7 @@ export const TASK_TYPES: readonly TaskTypeMeta[] = [
   {
     id: 'picture-match',
     skill: 'BLEND_READ',
-    baseDifficulty: 4,
+    baseDifficulty: 5,
     minChoices: 2,
     maxChoices: 3,
     secondaryTargets: 'graphemes',
@@ -78,7 +98,7 @@ export const TASK_TYPES: readonly TaskTypeMeta[] = [
     id: 'word-pick',
     skill: 'BLEND_READ',
     // The same stage as Picture Match, so the frustration guard's cap treats them alike.
-    baseDifficulty: 4,
+    baseDifficulty: 5,
     minChoices: 2,
     maxChoices: 3,
     secondaryTargets: 'graphemes',
@@ -88,7 +108,7 @@ export const TASK_TYPES: readonly TaskTypeMeta[] = [
     skill: 'SEGMENT_SPELL',
     // One below Word Builder: filling a single gap is easier than assembling a
     // whole word, and the frustration guard should be able to fall back to it.
-    baseDifficulty: 5,
+    baseDifficulty: 6,
     minChoices: 2,
     maxChoices: 4,
     secondaryTargets: 'graphemes',
@@ -96,7 +116,7 @@ export const TASK_TYPES: readonly TaskTypeMeta[] = [
   {
     id: 'word-builder',
     skill: 'SEGMENT_SPELL',
-    baseDifficulty: 6,
+    baseDifficulty: 7,
     minChoices: 3,
     maxChoices: 5,
     secondaryTargets: 'graphemes',

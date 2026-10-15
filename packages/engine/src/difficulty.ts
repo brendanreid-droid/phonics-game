@@ -30,6 +30,15 @@ export function difficultyFor(taskTypeId: string, targetId: TargetId): number {
   const base = taskTypeById(taskTypeId).baseDifficulty;
   const word = WORDS[targetId];
   if (word === undefined) return base;
+  // The length bump is about PRINT. A longer written word is one more
+  // letter-to-sound step to perform and hold, which is why it costs a child
+  // something. Oral blending has no letters on screen at all, so it does not
+  // apply: the step from two spoken sounds to three is far smaller than the
+  // step from two letters to three, and in Level 1 it is unobservable anyway
+  // because every picturable word is CVC. Bumping it there made oral blending
+  // tie with Sound Hunt, which broke the single-easiest-type rule the session
+  // builder's anchors depend on.
+  if (taskTypeId === 'robot-talk') return base;
   // Two graphemes is the floor the base rungs are quoted at, so a VC word adds
   // nothing and each further sound is one more blend to hold.
   return base + Math.max(0, word.graphemes.length - 2);

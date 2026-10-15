@@ -2,6 +2,7 @@ import type { ComponentType } from 'react';
 import { MissingLetter } from './MissingLetter';
 import { PictureMatch } from './PictureMatch';
 import { PictureStart } from './PictureStart';
+import { RobotTalk } from './RobotTalk';
 import { SoundHunt } from './SoundHunt';
 import { SoundSinger } from './SoundSinger';
 import { WordBuilder } from './WordBuilder';
@@ -14,6 +15,7 @@ import type { TaskProps } from './TaskProps';
  * knows a component exists.
  */
 export const TASK_COMPONENTS: Record<string, ComponentType<TaskProps>> = {
+  'robot-talk': RobotTalk,
   'sound-hunt': SoundHunt,
   'sound-singer': SoundSinger,
   'picture-start': PictureStart,

@@ -50,7 +50,25 @@ interface Pairing {
  */
 const MIN_WINBACK_TARGETS = 2;
 
-const isWordSkill = (skill: Skill): boolean => skill === 'BLEND_READ' || skill === 'SEGMENT_SPELL';
+/**
+ * Whether this skill's targets are words rather than graphemes.
+ *
+ * Split from `needsTheLetters` below because `ORAL_BLEND` is both — its targets
+ * are words, and it must NOT wait for the letters. One predicate meaning both
+ * things is how a skill that precedes print would have been gated behind print.
+ */
+const targetsWord = (skill: Skill): boolean =>
+  skill === 'BLEND_READ' || skill === 'SEGMENT_SPELL' || skill === 'ORAL_BLEND';
+
+/**
+ * Whether this skill may only be asked about words whose every grapheme the
+ * child already knows (invariant 5a).
+ *
+ * `ORAL_BLEND` is exempt, and that is the whole point of it: hearing that
+ * /m/-/a/-/p/ is "map" needs no letters at all, so gating it behind letter
+ * knowledge would delay the one stage that is supposed to come first.
+ */
+const needsTheLetters = (skill: Skill): boolean => skill === 'BLEND_READ' || skill === 'SEGMENT_SPELL';
 
 /**
  * Composes one quest.
@@ -116,14 +134,27 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
   // first day has been introduced to two letters, not all seven. Scheduling
   // "review" of a letter they have never seen is not review, it is a trick
   // question, and it is the fastest way to make a five-year-old give up.
-  const { pairings, blendWordIds } = teachable(level, metGraphemeIds, usableSkills, mastery, config);
+  const { pairings, blendWordIds, oralWordIds } = teachable(level, metGraphemeIds, usableSkills, mastery, config);
   if (pairings.length === 0) throw new Error(`No teachable pairings at level ${level}`);
 
   // Whether a task type can actually be built for a pairing. A skill match is
   // not enough for a game that only works for some targets (`canServeTarget`),
   // or that needs something of the child's state: Picture Start needs pictures
   // of OTHER met letters to be wrong answers.
-  const cap = effectiveCap(args.maxDifficulty);
+  // The cap actually applied. `effectiveCap` raises a cap below every base rung
+  // to the easiest rung; this raises it further to the easiest thing that can
+  // really be built for THIS child, because a base rung is only a lower bound.
+  // Without it a cap of 1 admitted Robot Talk by its rung and then rejected
+  // every Robot Talk task by its exact difficulty, and the builder reported
+  // that no arrangement exists.
+  const cap = Math.max(
+    effectiveCap(args.maxDifficulty),
+    Math.min(
+      ...pairings.flatMap((p) =>
+        TASK_TYPES.filter((t) => t.skill === p.skill).map((t) => difficultyFor(t.id, p.targetId)),
+      ),
+    ),
+  );
   const canBuild = (type: TaskTypeMeta, p: Pairing): boolean => {
     if (type.skill !== p.skill) return false;
     if (type.canServeTarget !== undefined && !type.canServeTarget(p.targetId)) return false;
@@ -221,10 +252,28 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
         // Invariant 7's rule, applied when win-backs of one skill cannot be
         // arranged without a repeat.
         { open: winbackTypes, mid: winbackTypes, close: lowestTwo(typesOf(pairings)), closeOnPractised: true, strict: true },
+        // Broaden the close AND drop "on a target already asked about" before
+        // dropping "no two adjacent tasks share a type", for the reason given
+        // in the brand-new ladder below. When a child's win-backs are all one
+        // skill — two sounds mastered for Sound Hunt and nothing else — that
+        // skill supplies exactly one task type, and a short quest opened and
+        // closed on the same mini-game.
+        { open: winbackTypes, mid: winbackTypes, close: lowestTwo(typesOf(pairings)), closeOnPractised: false, strict: true },
         { open: winbackTypes, mid: winbackTypes, close: winbackTypes, closeOnPractised: false, strict: false },
       ]
     : [
         { open: easiest, mid: easiest, close: lowestTwo(anchorTypes), closeOnPractised: true, strict: true },
+        // Give up "close on a target already asked about" BEFORE giving up
+        // "no two adjacent tasks share a type". The spec settled that
+        // precedence once already for invariants 3 and 7, and for the same
+        // reason: back-to-back identical mini-games is what a child actually
+        // notices and resents, while the closing target having appeared earlier
+        // is a refinement they cannot see.
+        //
+        // Without this rung, a short quest for a brand-new child closed on a
+        // second Robot Talk — the only game whose targets are words, so the
+        // only one that could close on the word the quest opened with.
+        { open: easiest, mid: easiest, close: lowestTwo(anchorTypes), closeOnPractised: false, strict: true },
         { open: easiest, mid: easiest, close: lowestTwo(anchorTypes), closeOnPractised: true, strict: false },
       ];
 
@@ -309,16 +358,27 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
     // The opening target must be one the close can come back to, which is what
     // guarantees the closing target was asked earlier in the quest.
     const closeType = skeleton[closeSlot];
+    // Prefer a win-back, but fall back to any teachable pairing when this type
+    // cannot be served by one. The close anchor's type may come from the whole
+    // pairing set rather than the win-back pool (see the ladder above), and
+    // restricting the pick to win-backs then left it with nothing: a quest for
+    // a child whose only mastered material was two sounds crashed outright.
+    const pairing = pick(
+      [anchorPool, pairings],
+      type,
+      true,
+      closeIsPractised && slot === 0
+        ? (p) => pairings.some((q) => q.targetId === p.targetId && canBuild(closeType, q))
+        : undefined,
+    );
     slots[slot] = {
-      pairing: pick(
-        [anchorPool],
-        type,
-        true,
-        closeIsPractised && slot === 0
-          ? (p) => pairings.some((q) => q.targetId === p.targetId && canBuild(closeType, q))
-          : undefined,
-      ),
-      type, band: anchorBand, anchor: true,
+      pairing,
+      type,
+      // Only call it a win-back if it really is one. A mislabelled band would
+      // tell the parent report the child was given a guaranteed success when
+      // they were given new material.
+      band: anchorPool.includes(pairing) ? anchorBand : 'focus',
+      anchor: true,
     };
   }
 
@@ -383,6 +443,7 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
       graphemesMet: metGraphemeCount,
       allowedGraphemes: metGraphemeIds,
       allowedWords: blendWordIds,
+      oralWords: oralWordIds,
       seed: deriveSeed(baseSeed, position),
     }),
   );
@@ -419,7 +480,10 @@ function allPairings(level: number): Pairing[] {
     pairings.push({ targetId: grapheme.id, skill: 'SOUND_ID' });
     pairings.push({ targetId: grapheme.id, skill: 'LETTER_SOUND' });
   }
-  for (const word of picturableWordsForLevel(level)) pairings.push({ targetId: word.id, skill: 'BLEND_READ' });
+  for (const word of picturableWordsForLevel(level)) {
+    pairings.push({ targetId: word.id, skill: 'ORAL_BLEND' });
+    pairings.push({ targetId: word.id, skill: 'BLEND_READ' });
+  }
   for (const word of wordsForLevel(level)) pairings.push({ targetId: word.id, skill: 'SEGMENT_SPELL' });
   return pairings;
 }
@@ -435,13 +499,16 @@ function teachable(
   usableSkills: ReadonlySet<Skill>,
   mastery: MasteryMap,
   config: EngineConfig,
-): { pairings: Pairing[]; blendWordIds: WordId[] } {
+): { pairings: Pairing[]; blendWordIds: WordId[]; oralWordIds: WordId[] } {
   const met = new Set(metGraphemeIds);
   // Invariant 5a: met is not enough for a word, the sounds must be KNOWN.
   const known = knownGraphemes(metGraphemeIds, mastery, config);
   const decodable = new Set(
     wordsDecodableFrom(level, metGraphemeIds).filter((id) => getWord(id).graphemes.every((g) => known.has(g))),
   );
+  const allPicturable = picturableWordsForLevel(level).map((w) => w.id);
+  // A choice between one picture is not a question.
+  const oralWordIds = allPicturable.length >= 2 ? allPicturable : [];
   const picturable = picturableWordsForLevel(level).filter((w) => decodable.has(w.id)).map((w) => w.id);
   // A picture-matching question needs a wrong answer to be a question at all.
   const blendWordIds = picturable.length >= 2 ? picturable : [];
@@ -449,11 +516,16 @@ function teachable(
 
   const pairings = allPairings(level).filter((p) => {
     if (!usableSkills.has(p.skill)) return false;
+    // Oral blending needs no letters, so it is gated on nothing but having
+    // enough pictures to make a question. A child on their first day can hear
+    // that /m/-/a/-/p/ is "map" without having met m, a or p, and that is the
+    // stage this skill exists to cover.
+    if (p.skill === 'ORAL_BLEND') return oralWordIds.includes(p.targetId);
     if (p.skill === 'BLEND_READ') return blend.has(p.targetId);
     if (p.skill === 'SEGMENT_SPELL') return decodable.has(p.targetId);
     return met.has(p.targetId);
   });
-  return { pairings, blendWordIds };
+  return { pairings, blendWordIds, oralWordIds };
 }
 
 /**
@@ -489,7 +561,7 @@ function knownGraphemes(
  */
 function currentFocusGraphemes(level: number, unmastered: Pairing[], config: EngineConfig): GraphemeId[] {
   const unmasteredGraphemes = graphemesForLevel(level)
-    .filter((g) => unmastered.some((p) => !isWordSkill(p.skill) && p.targetId === g.id))
+    .filter((g) => unmastered.some((p) => !targetsWord(p.skill) && p.targetId === g.id))
     .sort(
       (a, b) =>
         introductionGroupIndex(level, a.id) - introductionGroupIndex(level, b.id) ||
@@ -502,7 +574,11 @@ function currentFocusGraphemes(level: number, unmastered: Pairing[], config: Eng
 
 /** True when this pairing exercises one of the focus graphemes. */
 function touchesFocus(pairing: Pairing, focusGraphemes: readonly GraphemeId[]): boolean {
-  if (!isWordSkill(pairing.skill)) return focusGraphemes.includes(pairing.targetId);
+  // Oral blending is never "review": it is the stage below the letters, so it
+  // is current work from day one until it is mastered, and it is not tied to
+  // which graphemes happen to be in focus.
+  if (pairing.skill === 'ORAL_BLEND') return true;
+  if (!targetsWord(pairing.skill)) return focusGraphemes.includes(pairing.targetId);
   return getWord(pairing.targetId).graphemes.some((g) => focusGraphemes.includes(g));
 }
 
@@ -678,12 +754,20 @@ interface MakeTaskArgs {
   graphemesMet: number;
   allowedGraphemes: GraphemeId[];
   allowedWords: WordId[];
+  /**
+   * The words Robot Talk may offer. Kept apart from `allowedWords` because the
+   * two pools answer different questions: one is "what can this child read",
+   * the other is "what can this child hear and name a picture of". A child on
+   * day one can do the second for every word at the level and the first for
+   * none of them.
+   */
+  oralWords: WordId[];
   seed: number;
 }
 
 function makeTask(args: MakeTaskArgs): TaskInstance {
   const { pairing, type, band, anchor, position, level, confusions, graphemesMet, seed } = args;
-  const { allowedGraphemes, allowedWords } = args;
+  const { allowedGraphemes, allowedWords, oralWords } = args;
   const rng = makeRng(seed);
 
   // Choice count grows with how much the child has met, so a first session is
@@ -715,6 +799,26 @@ function makeTask(args: MakeTaskArgs): TaskInstance {
       level,
       confusions,
       allowed,
+      rng,
+    });
+    choices = shuffle([pairing.targetId, ...distractors], rng);
+  } else if (type.skill === 'ORAL_BLEND') {
+    // Pictures of whole words, chosen like Picture Match's: no letter is on
+    // screen, so sharing a first grapheme would be a distinction the child
+    // cannot see. The pool is every picturable word at the level, NOT only the
+    // decodable ones — the child is listening, not reading.
+    const distractors = pickWordDistractors({
+      target: pairing.targetId,
+      count: choiceCount - 1,
+      level,
+      confusions,
+      allowedWords: oralWords,
+      // No `metGraphemes`: that filter exists to stop a child being shown a word
+      // containing a letter they have not met, which is a trick question when
+      // the word is written down. Here nothing is written down. Applying it
+      // would empty the pool on day one and leave a "choice" of one picture.
+      metGraphemes: undefined,
+      sharedFirstGrapheme: false,
       rng,
     });
     choices = shuffle([pairing.targetId, ...distractors], rng);

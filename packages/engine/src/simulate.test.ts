@@ -62,12 +62,19 @@ describe('pacing simulation', { timeout: 60_000 }, () => {
     expect(fast.meanTasks).toBeLessThanOrEqual(265);
   });
 
-  it('finishes Level 1 for every average learner, in about 22 quests', () => {
+  it('finishes Level 1 for every average learner, in about 24 quests', () => {
+    // Was "about 22". Oral blending adds a fifth skill to prove, so the count
+    // rose, and that is the trade being made rather than a regression: the old
+    // number was bought by never teaching a child to hear the sounds in a word.
+    //
+    // Re-set from the measurement, as the ranges have been before. These are
+    // PROVISIONAL — Plan 6 Task 7 re-measures once the Meet card and the
+    // read-before-spell gates land, and they will move again.
     expect(average.completed).toBe(SEED_COUNT);
     expect(average.meanQuests).toBeGreaterThanOrEqual(15);
-    expect(average.meanQuests).toBeLessThanOrEqual(24);
-    expect(average.maxQuests).toBeLessThanOrEqual(41);
-    expect(average.meanTasks).toBeLessThanOrEqual(340);
+    expect(average.meanQuests).toBeLessThanOrEqual(26);
+    expect(average.maxQuests).toBeLessThanOrEqual(45);
+    expect(average.meanTasks).toBeLessThanOrEqual(360);
   });
 
   it('finishes Level 1 for every struggling learner (70% accurate), in about 30 quests', () => {

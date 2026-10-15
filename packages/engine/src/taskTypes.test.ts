@@ -25,9 +25,9 @@ describe('task types', () => {
     }
   });
 
-  it('covers the four Level 1 skills', () => {
+  it('covers the five Level 1 skills', () => {
     expect([...new Set(TASK_TYPES.map((t) => t.skill))].sort()).toEqual(
-      ['BLEND_READ', 'LETTER_SOUND', 'SEGMENT_SPELL', 'SOUND_ID'].sort(),
+      ['BLEND_READ', 'LETTER_SOUND', 'ORAL_BLEND', 'SEGMENT_SPELL', 'SOUND_ID'].sort(),
     );
   });
 
@@ -87,6 +87,7 @@ describe('task types', () => {
   it('pins each task type\'s choice bounds', () => {
     const bounds = Object.fromEntries(TASK_TYPES.map((t) => [t.id, [t.minChoices, t.maxChoices]]));
     expect(bounds).toEqual({
+      'robot-talk': [2, 3],
       'sound-hunt': [2, 4],
       'sound-singer': [2, 3],
       'picture-start': [2, 3],
@@ -97,14 +98,21 @@ describe('task types', () => {
     });
   });
 
-  it('gives every task type a difficulty of at least 1, with sound-hunt the single easiest', () => {
+  it('gives every task type a difficulty of at least 1, with robot-talk the single easiest', () => {
     // Distinct difficulties are not required: two games of the same skill at the same stage
     // deliberately share one, so the frustration guard's cap treats them alike.
+    //
+    // Exactly ONE type must sit on the bottom rung, and that is load-bearing
+    // rather than tidy. The session builder opens and closes a brand-new
+    // child's quest on "the easiest type"; when two types tie for it, both
+    // anchors can pick the same one and in a short session they land adjacent,
+    // breaking invariant 3. That happened the moment Robot Talk was added on
+    // rung 1 beside Sound Hunt.
     const difficulties = TASK_TYPES.map((t) => t.baseDifficulty);
     expect(difficulties.every((d) => d >= 1)).toBe(true);
     expect(difficulties.filter((d) => d === Math.min(...difficulties))).toHaveLength(1);
     const easiest = TASK_TYPES.reduce((a, b) => (b.baseDifficulty < a.baseDifficulty ? b : a));
-    expect(easiest.id).toBe('sound-hunt');
+    expect(easiest.id).toBe('robot-talk');
   });
 
   it('returns only task types of the requested skill, and none for an unshipped skill', () => {

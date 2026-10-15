@@ -11,11 +11,18 @@ export type WordId = string;
 export type TargetId = GraphemeId | WordId;
 
 /**
- * The six synthetic-phonics skills, plus SAY_IT which is declared now and
- * implemented post-v1. Declaring it early means adding voice tasks later is
- * configuration, not a refactor of every mastery record.
+ * The synthetic-phonics skills, in teaching order, plus SAY_IT which is
+ * declared now and implemented post-v1. Declaring it early means adding voice
+ * tasks later is configuration, not a refactor of every mastery record.
+ *
+ * ORAL_BLEND comes first and is not gated behind any of the others: a child can
+ * hear that /m/-/a/-/p/ is "map" long before they can name a letter, and that
+ * ability is the strongest single predictor of later reading. It was missing
+ * from the original design, which went straight to graphemes because a grapheme
+ * is what a screen can show — designing from the medium rather than the method.
  */
 export const SKILLS = [
+  'ORAL_BLEND',
   'SOUND_ID',
   'LETTER_SOUND',
   'BLEND_READ',

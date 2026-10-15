@@ -80,6 +80,16 @@ const STATES: Record<string, MasteryMap> = {
   'six mastered': masteredGraphemes(['s', 'a', 't', 'p', 'i', 'm']),
 };
 
+/**
+ * Oral blending shows no letters at all, so every assertion in this file about
+ * what a child "has met" or "has been introduced to" is about PRINT and must
+ * skip it. A child on day one can hear that /m/-/a/-/p/ is "map" without having
+ * met m, a or p — that is the whole reason the stage exists, and gating it
+ * behind letters would put it after the thing it is supposed to precede.
+ */
+const isOral = (task: TaskInstance) => task.skill === 'ORAL_BLEND';
+const inPrint = (plan: TaskInstance[]) => plan.filter((t) => !isOral(t));
+
 const isSpelling = (task: TaskInstance) => task.skill === 'SEGMENT_SPELL';
 /** Word Builder's tasks: choices are the word's own letter TILES plus extras. Missing Letter's are not. */
 const isTileSpelling = (task: TaskInstance) => task.taskTypeId === 'word-builder';
@@ -190,7 +200,7 @@ describe('buildSession invariants', () => {
     };
     for (const [name, mastery] of Object.entries(STATES)) {
       for (const seed of SEEDS.slice(0, 15)) {
-        for (const task of build(mastery, seed)) {
+        for (const task of inPrint(build(mastery, seed))) {
           const label = `${name}, ${seed}, ${task.id}`;
           const lettersOf = (id: string) =>
             task.skill === 'SOUND_ID' || task.skill === 'LETTER_SOUND' ? [id] : getWord(id).graphemes;
@@ -310,10 +320,12 @@ describe('buildSession for a brand-new child', () => {
       const plan = build({}, seed, { config: { focusTargetCount: 5 } });
       const closing = plan[plan.length - 1];
       const counts = new Map<string, number>();
-      // Sound tasks only: the close is a sound task, so compare like with like.
+      // Letter tasks only: compare like with like. An oral close is on a word
+      // and is skipped — its "most asked about" pool is a different thing.
       for (const task of plan.slice(0, -1).filter((t) => t.skill === 'SOUND_ID' || t.skill === 'LETTER_SOUND')) {
         counts.set(task.primaryTarget, (counts.get(task.primaryTarget) ?? 0) + 1);
       }
+      if (isOral(closing)) continue;
       expect(counts.get(closing.primaryTarget), `${seed}: closed on ${closing.primaryTarget}`).toBe(Math.max(...counts.values()));
     }
   });
@@ -348,14 +360,20 @@ describe('buildSession for a brand-new child', () => {
     }
   });
 
-  it('has three task types on day one, all of them sound games, because words wait until the sounds are known', () => {
-    // Before invariant 5a this asserted three, with spelling credited for s, a and t; then two, the
-    // hunt and Sound Singer. Picture Start (Plan 3) makes it three again. See 'sounds before words' below, which also holds
-    // the anti-deadlock property.
+  it('has four task types on day one: oral blending and the three letter games, and no word in print', () => {
+    // Three, then two, then three again, now four. Each change is recorded
+    // because the count is a consequence rather than a target: invariant 5a
+    // removed the word games, Picture Start added one back, and Robot Talk
+    // added the oral stage that should have been there first.
+    //
+    // The opening task is Robot Talk, which is the right first screen a child
+    // ever sees: no letters, no reading, just "which picture is this word".
     for (const seed of SEEDS) {
       const plan = build({}, seed);
-      expect(new Set(plan.map((t) => t.taskTypeId)), seed).toEqual(new Set(['sound-hunt', 'sound-singer', 'picture-start']));
-      expect(plan[0].taskTypeId, seed).toBe('sound-hunt');
+      expect(new Set(plan.map((t) => t.taskTypeId)), seed).toEqual(
+        new Set(['robot-talk', 'sound-hunt', 'sound-singer', 'picture-start']),
+      );
+      expect(plan[0].taskTypeId, seed).toBe('robot-talk');
     }
   });
 
@@ -371,14 +389,15 @@ describe('buildSession for a brand-new child', () => {
   });
 
   it('keeps alternating, and still opens on the easiest, when the frustration cap leaves only the sound games', () => {
-    // maxDifficulty 2 rules out the word games. The hunt, Sound Singer and Picture Start remain.
-    // (Before Plan 3 only two remained and the no-adjacent-repeat rule forced strict alternation,
-    // which is why the closing anchor may be the second-easiest type. Picture Start shares Sound
-    // Singer's rung, so the close may be either.)
+    // maxDifficulty 2 rules out every game with a word in print, leaving Robot
+    // Talk and Sound Hunt. That is what a teacher does with a struggling child:
+    // back to hearing the sounds. (Before Plan 3 only two types remained and
+    // the no-adjacent-repeat rule forced strict alternation, which is why the
+    // closing anchor may be the second-easiest type.)
     for (const seed of SEEDS) {
       const plan = build({}, seed, { maxDifficulty: 2 });
-      expect(new Set(plan.map((t) => t.taskTypeId)), seed).toEqual(new Set(['sound-hunt', 'sound-singer', 'picture-start']));
-      expect(plan[0].taskTypeId, seed).toBe('sound-hunt');
+      expect(new Set(plan.map((t) => t.taskTypeId)), seed).toEqual(new Set(['robot-talk', 'sound-hunt']));
+      expect(plan[0].taskTypeId, seed).toBe('robot-talk');
       expect(taskTypeById(plan[plan.length - 1].taskTypeId).baseDifficulty, seed).toBeLessThanOrEqual(2);
       for (let i = 1; i < plan.length; i += 1) {
         expect(plan[i].taskTypeId, `${seed} slot ${i}`).not.toBe(plan[i - 1].taskTypeId);
@@ -392,6 +411,9 @@ describe('buildSession for a brand-new child', () => {
     expect(anchors.length).toBe(DEFAULT_CONFIG.winbackCount);
     for (const anchor of anchors) {
       expect(anchor.band).toBe('focus');
+      // An oral-blending anchor's target is a WORD, and deliberately not one
+      // restricted to the letters met: nothing is written on that screen.
+      if (isOral(anchor)) continue;
       expect(['s', 'a', 't']).toContain(anchor.primaryTarget);
     }
   });
@@ -412,7 +434,7 @@ describe('buildSession for a brand-new child', () => {
     const lettersOf = (t: TaskInstance) =>
       t.skill === 'SOUND_ID' || t.skill === 'LETTER_SOUND' ? [t.primaryTarget] : getWord(t.primaryTarget).graphemes;
     for (const seed of SEEDS) {
-      for (const task of build({}, seed)) {
+      for (const task of inPrint(build({}, seed))) {
         for (const letter of lettersOf(task)) expect(['s', 'a', 't'], `${seed}: ${task.id}`).toContain(letter);
       }
     }
@@ -422,16 +444,20 @@ describe('buildSession for a brand-new child', () => {
     // Day one: the child has met s, a and t. Showing them f as a distractor is
     // not a challenge, it is a trick question.
     for (const seed of SEEDS) {
-      for (const task of build({}, seed)) {
+      for (const task of inPrint(build({}, seed))) {
         for (const choice of task.choices) expect(['s', 'a', 't'], `${seed}: saw ${choice}`).toContain(choice);
       }
     }
   });
 
-  it('asks only sound tasks, whatever the seed', () => {
-    // Was "spells only at and sat". Spelling is no longer possible on day one.
+  it('asks only sound work, whatever the seed: oral blending and the letters, never a word in print', () => {
+    // Was "spells only at and sat", then "asks only sound tasks". Day one is now
+    // oral blending plus letter work: no word is READ or SPELT, and the oral
+    // blending involves no print at all.
     for (const seed of SEEDS) {
-      for (const task of build({}, seed)) expect(['SOUND_ID', 'LETTER_SOUND'], seed).toContain(task.skill);
+      for (const task of build({}, seed)) {
+        expect(['ORAL_BLEND', 'SOUND_ID', 'LETTER_SOUND'], seed).toContain(task.skill);
+      }
     }
   });
 
@@ -439,7 +465,7 @@ describe('buildSession for a brand-new child', () => {
     const mastery = heard({ s: 2, a: 2, t: 2 });
     for (const seed of SEEDS) {
       for (const task of build(mastery, seed)) {
-        expect(['SOUND_ID', 'LETTER_SOUND', 'SEGMENT_SPELL'], seed).toContain(task.skill);
+        expect(['ORAL_BLEND', 'SOUND_ID', 'LETTER_SOUND', 'SEGMENT_SPELL'], seed).toContain(task.skill);
         if (task.skill === 'SEGMENT_SPELL') expect(['at', 'sat'], seed).toContain(task.primaryTarget);
       }
     }
@@ -470,7 +496,8 @@ describe('buildSession when only two task types are available but win-backs exis
   it('really has win-backs and really has only the three sound task types', () => {
     const plan = build(mastery, 'test-session', capped);
     expect(plan.some((t) => t.band === 'winback')).toBe(true);
-    expect(new Set(plan.map((t) => t.taskTypeId)).size).toBe(3);
+    // Four now, not three: the cap admits Robot Talk as well as the letter games.
+    expect(new Set(plan.map((t) => t.taskTypeId)).size).toBe(4);
   });
 
   it('opens and breathes on win-backs, and closes on a sound it already asked about', () => {
@@ -516,7 +543,9 @@ describe('buildSession composition', () => {
   it('draws focus from the newest unmastered sounds and the words that contain them', () => {
     // s and a mastered, so focus moves to t, p and i.
     const plan = build(masteredGraphemes(['s', 'a']));
-    for (const task of plan.filter((t) => t.band === 'focus' && !t.anchor)) {
+    // Oral blending is focus work from day one and is not tied to which letters
+    // are in focus, because it involves no letters. See `isOral`.
+    for (const task of plan.filter((t) => t.band === 'focus' && !t.anchor && !isOral(t))) {
       const graphemes = task.skill === 'BLEND_READ' || task.skill === 'SEGMENT_SPELL'
         ? getWord(task.primaryTarget).graphemes
         : [task.primaryTarget];
@@ -599,6 +628,9 @@ describe('buildSession composition', () => {
     for (const seed of SEEDS) {
       for (const task of build(masteredGraphemes(['s', 'a']), seed)) {
         if (task.skill === 'SOUND_ID' || task.skill === 'LETTER_SOUND') continue;
+        // Robot Talk's words are heard, never shown, so "buildable from the
+        // letters met" does not apply to them.
+        if (isOral(task)) continue;
         for (const grapheme of getWord(task.primaryTarget).graphemes) {
           expect(met, `${seed}: ${task.primaryTarget} needs ${grapheme}`).toContain(grapheme);
         }
@@ -701,7 +733,9 @@ describe('buildSession composition', () => {
     const mastery = { ...masteredGraphemes(['s', 'a', 't', 'p']), ...heard({ i: 2 }) };
     // Missing Letter credits only its gap, so it is not what this is about.
     const pips = SEEDS.flatMap((seed) => build(mastery, seed))
-      .filter((t) => t.correctChoice === 'pip' && t.taskTypeId !== 'missing-letter');
+      // Robot Talk credits no graphemes at all, deliberately: hearing the sounds
+      // in "pip" is not evidence the child knows the letter p.
+      .filter((t) => t.correctChoice === 'pip' && t.taskTypeId !== 'missing-letter' && !isOral(t));
     expect(pips.length).toBeGreaterThan(0);
     for (const task of pips) expect(task.secondaryTargets).toEqual(['p', 'i']);
   });
@@ -791,18 +825,34 @@ describe('buildSession under a difficulty cap and a short session (the frustrati
     const hunts = masteredPairs([['s', 'SOUND_ID'], ['a', 'SOUND_ID'], ['t', 'SOUND_ID']]);
     for (const seed of SEEDS) {
       const plan = build(hunts, seed, { maxDifficulty: 2, length: 8 });
+      // Sound Hunt, not Robot Talk, even though Robot Talk is the easier rung:
+      // this child HAS win-backs, and the opening anchor comes from them. The
+      // win-backs here are all Sound Hunt, so that is what opens.
       expect(plan[0].taskTypeId, seed).toBe('sound-hunt');
       const closing = plan[7];
       expect(closing.difficulty, seed).toBeLessThanOrEqual(2);
-      expect(plan.slice(0, 7).some((t) => t.primaryTarget === closing.primaryTarget), seed).toBe(true);
+      // The close is a near-certain success: either a win-back, or the easiest
+      // mini-game in the whole product.
+      //
+      // It used to assert the stronger "closes on a target asked earlier in
+      // this quest", and that was incidentally true rather than guaranteed.
+      // Under this cap the usable types are Robot Talk and Sound Hunt, the
+      // win-backs are all Sound Hunt, and an 8-slot strict alternation puts the
+      // opposite type in the last slot — so the close is a Robot Talk on a word
+      // the quest has not mentioned. Invariant 3 wins that conflict, as the
+      // spec settled for invariants 3 and 7, and the purpose of invariant 7
+      // survives: Robot Talk is rung 1, a two-picture choice with no letters.
+      const isWinback = closing.band === 'winback';
+      const isEasiest = taskTypeById(closing.taskTypeId).baseDifficulty === 1;
+      expect(isWinback || isEasiest, `${seed}: closed on ${closing.taskTypeId}`).toBe(true);
     }
   });
 
   it('stays within the cap by not scheduling a skill whose every task type is above it', () => {
     for (const seed of SEEDS) {
       for (const task of build(mastery, seed, { maxDifficulty: 1 })) {
-        expect(task.taskTypeId).toBe('sound-hunt');
-        expect(task.skill).toBe('SOUND_ID');
+        expect(task.taskTypeId).toBe('robot-talk');
+        expect(task.skill).toBe('ORAL_BLEND');
       }
     }
   });
@@ -819,20 +869,20 @@ describe('buildSession under a difficulty cap and a short session (the frustrati
   });
 
   it('ignores win-backs of a skill the cap rules out, rather than finding it has nothing to open with', () => {
-    // s and a are mastered only for singing (difficulty 2). Under a cap of 1 those are not
+    // s and a are mastered only for singing. Under a cap of 1 those are not
     // usable win-backs, so this child is treated as brand-new, not left with no anchors at all.
     const singing = masteredPairs([['s', 'LETTER_SOUND'], ['a', 'LETTER_SOUND']]);
     for (const seed of SEEDS) {
       const plan = build(singing, seed, { maxDifficulty: 1 });
       expect(plan.length, seed).toBe(DEFAULT_CONFIG.sessionLength);
-      for (const task of plan) expect(task.taskTypeId, seed).toBe('sound-hunt');
+      for (const task of plan) expect(task.taskTypeId, seed).toBe('robot-talk');
     }
   });
 
   it('falls back to the easiest task type when the cap is below every difficulty', () => {
     const plan = build(mastery, 'zero-cap', { maxDifficulty: 0 });
     expect(plan.length).toBe(DEFAULT_CONFIG.sessionLength);
-    expect(new Set(plan.map((t) => t.taskTypeId))).toEqual(new Set(['sound-hunt']));
+    expect(new Set(plan.map((t) => t.taskTypeId))).toEqual(new Set(['robot-talk']));
   });
 });
 
@@ -844,6 +894,10 @@ describe('buildSession for a child who has mastered everything', () => {
     const pictured = ['pat', 'tap', 'pit', 'sit', 'sip', 'pip', 'fit', 'mat', 'map'];
     return masteredPairs([
       ...ids.flatMap((id): Pair[] => [[id, 'SOUND_ID'], [id, 'LETTER_SOUND']]),
+      // Oral blending counts towards Level 1 now, so a child who has mastered
+      // "everything" has mastered this too. Without it the engine was right to
+      // keep offering Robot Talk and this fixture was simply incomplete.
+      ...pictured.map((w): Pair => [w, 'ORAL_BLEND']),
       ...pictured.map((w): Pair => [w, 'BLEND_READ']),
       ...words.map((w): Pair => [w, 'SEGMENT_SPELL']),
     ]);
@@ -953,25 +1007,33 @@ describe('buildSession: sounds before words (invariant 5a)', () => {
     for (const seed of SEEDS) {
       const plan = build({}, seed);
       expect(wordTasks(plan).map((t) => t.id), seed).toEqual([]);
-      for (const task of plan) expect(['SOUND_ID', 'LETTER_SOUND'], `${seed}: ${task.id}`).toContain(task.skill);
+      // Oral blending has a word as its target but puts no word in front of the
+      // child, so it is not what invariant 5a is about. `isWordTask` above is
+      // deliberately the print skills only.
+      for (const task of plan) {
+        expect(['ORAL_BLEND', 'SOUND_ID', 'LETTER_SOUND'], `${seed}: ${task.id}`).toContain(task.skill);
+      }
     }
   });
 
-  it('gives a brand-new child a quest of sound tasks across all three graphemes of the first group', () => {
-    const asked = new Set(SEEDS.flatMap((seed) => build({}, seed).map((t) => t.primaryTarget)));
+  it('gives a brand-new child letter work across all three graphemes of the first group', () => {
+    const asked = new Set(
+      SEEDS.flatMap((seed) => inPrint(build({}, seed)).map((t) => t.primaryTarget)),
+    );
     expect(asked).toEqual(new Set(['s', 'a', 't']));
   });
 
-  it('still arranges a brand-new quest: three sound types, open on the easiest, close on the second-easiest', () => {
-    // With words excluded only the sound games remain: the hunt, Sound Singer and Picture Start.
-    // This is the situation amended invariant 7 exists for. The close may be no harder than the
-    // second-easiest rung, which Sound Singer and Picture Start share; with three types it can also
-    // be the hunt again, which the old two-type parity ruled out.
+  it('still arranges a brand-new quest: four types, open on the easiest, close on the second-easiest', () => {
+    // With words in print excluded, Robot Talk and the three letter games remain.
+    // This is the situation amended invariant 7 exists for. The close may be no
+    // harder than the second-easiest rung.
     for (const seed of SEEDS) {
       const plan = build({}, seed);
       expect(plan.length, seed).toBe(DEFAULT_CONFIG.sessionLength);
-      expect(new Set(plan.map((t) => t.taskTypeId)), seed).toEqual(new Set(['sound-hunt', 'sound-singer', 'picture-start']));
-      expect(plan[0].taskTypeId, seed).toBe('sound-hunt');
+      expect(new Set(plan.map((t) => t.taskTypeId)), seed).toEqual(
+        new Set(['robot-talk', 'sound-hunt', 'sound-singer', 'picture-start']),
+      );
+      expect(plan[0].taskTypeId, seed).toBe('robot-talk');
       expect(taskTypeById(plan[plan.length - 1].taskTypeId).baseDifficulty, seed).toBeLessThanOrEqual(2);
       expect(plan.filter((t) => t.anchor).length, seed).toBe(DEFAULT_CONFIG.winbackCount);
       for (let i = 1; i < plan.length; i += 1) {

@@ -4,8 +4,14 @@ import { picturesCanAnswerFor } from './pictureStart';
 export interface TaskTypeMeta {
   id: string;
   skill: Skill;
-  /** 1 is easiest. The frustration guard caps difficulty, so this must be meaningful. */
-  difficulty: number;
+  /**
+   * The rung this mini-game sits on for a two-sound target. The difficulty the
+   * engine actually uses is `difficultyFor(id, targetId)`, which adds the
+   * word's own length on top: a CVC word is one more blend to hold than a VC
+   * word, and rating a game without its target is how spelling came to be
+   * rated exactly as hard as reading.
+   */
+  baseDifficulty: number;
   minChoices: number;
   maxChoices: number;
   /**
@@ -34,7 +40,7 @@ export const TASK_TYPES: readonly TaskTypeMeta[] = [
   {
     id: 'sound-hunt',
     skill: 'SOUND_ID',
-    difficulty: 1,
+    baseDifficulty: 1,
     minChoices: 2,
     maxChoices: 4,
     secondaryTargets: 'none',
@@ -42,7 +48,7 @@ export const TASK_TYPES: readonly TaskTypeMeta[] = [
   {
     id: 'sound-singer',
     skill: 'LETTER_SOUND',
-    difficulty: 2,
+    baseDifficulty: 2,
     minChoices: 2,
     maxChoices: 3,
     secondaryTargets: 'none',
@@ -51,7 +57,7 @@ export const TASK_TYPES: readonly TaskTypeMeta[] = [
     id: 'picture-start',
     skill: 'LETTER_SOUND',
     // The same rung as Sound Singer: the same skill, asked another way.
-    difficulty: 2,
+    baseDifficulty: 2,
     minChoices: 2,
     maxChoices: 3,
     secondaryTargets: 'none',
@@ -63,7 +69,7 @@ export const TASK_TYPES: readonly TaskTypeMeta[] = [
   {
     id: 'picture-match',
     skill: 'BLEND_READ',
-    difficulty: 3,
+    baseDifficulty: 4,
     minChoices: 2,
     maxChoices: 3,
     secondaryTargets: 'graphemes',
@@ -72,7 +78,7 @@ export const TASK_TYPES: readonly TaskTypeMeta[] = [
     id: 'word-pick',
     skill: 'BLEND_READ',
     // The same stage as Picture Match, so the frustration guard's cap treats them alike.
-    difficulty: 3,
+    baseDifficulty: 4,
     minChoices: 2,
     maxChoices: 3,
     secondaryTargets: 'graphemes',
@@ -82,7 +88,7 @@ export const TASK_TYPES: readonly TaskTypeMeta[] = [
     skill: 'SEGMENT_SPELL',
     // One below Word Builder: filling a single gap is easier than assembling a
     // whole word, and the frustration guard should be able to fall back to it.
-    difficulty: 3,
+    baseDifficulty: 5,
     minChoices: 2,
     maxChoices: 4,
     secondaryTargets: 'graphemes',
@@ -90,7 +96,7 @@ export const TASK_TYPES: readonly TaskTypeMeta[] = [
   {
     id: 'word-builder',
     skill: 'SEGMENT_SPELL',
-    difficulty: 4,
+    baseDifficulty: 6,
     minChoices: 3,
     maxChoices: 5,
     secondaryTargets: 'graphemes',
@@ -113,7 +119,7 @@ export function easiestTaskTypeForSkill(
 ): TaskTypeMeta {
   const candidates = pool.filter((t) => t.skill === skill);
   if (candidates.length === 0) throw new Error(`No task type for skill: ${skill}`);
-  return candidates.reduce((best, t) => (t.difficulty < best.difficulty ? t : best));
+  return candidates.reduce((best, t) => (t.baseDifficulty < best.baseDifficulty ? t : best));
 }
 
 /**

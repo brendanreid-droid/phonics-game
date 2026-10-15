@@ -38,10 +38,17 @@ export interface EngineConfig {
   badDaySessionLength: number;
   /**
    * Difficulty ceiling applied to the rest of a quest after the guard abandons
-   * a task. Must be at least 2: only one Level 1 task type has difficulty 1, so
+   * a task. Must be at least 2: only one Level 1 task type sits on rung 1, so
    * a cap of 1 leaves the session builder a single mini-game, collapses its
    * no-adjacent-repeats rule, and hands a struggling child a quest of identical
-   * tasks. 2 keeps two types alternating and is still easy.
+   * tasks.
+   *
+   * On the current scale 2 admits Sound Hunt, Sound Singer and Picture Start —
+   * three games across two skills, and no word work at all. That is the right
+   * behaviour and not a coincidence worth relying on: when a child is
+   * struggling, a teacher takes them back to the sounds. `frustration.test.ts`
+   * asserts the property rather than the number, because the scale moved once
+   * already when difficulty became a function of the task AND the word.
    */
   cappedDifficulty: number;
 

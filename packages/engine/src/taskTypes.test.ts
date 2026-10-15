@@ -39,7 +39,7 @@ describe('task types', () => {
   });
 
   it('orders difficulty so there is always an easiest task type', () => {
-    const difficulties = TASK_TYPES.map((t) => t.difficulty);
+    const difficulties = TASK_TYPES.map((t) => t.baseDifficulty);
     expect(Math.min(...difficulties)).toBeLessThan(Math.max(...difficulties));
   });
 
@@ -64,17 +64,24 @@ describe('task types', () => {
     expect(taskTypeById('word-builder').secondaryTargets).toBe('graphemes');
   });
 
-  it('orders difficulty sound-hunt < sound-singer < the two reading games and Missing Letter < word-builder', () => {
-    // The frustration guard caps difficulty, so this order is behaviour. Picture
-    // Match and Word Pick are the same skill at the same stage and share a rung;
-    // Missing Letter, one gap of a spelling, sits on the same one.
-    const rank = (id: string) => taskTypeById(id).difficulty;
-    expect(rank('missing-letter')).toBe(rank('picture-match'));
-    expect(rank('missing-letter')).toBeLessThan(rank('word-builder'));
+  it('orders the rungs sounds < reading < spelling', () => {
+    // This test previously asserted `rank('missing-letter') === rank('picture-match')`
+    // — spelling rated exactly as hard as reading — and called it correct,
+    // because Missing Letter is "one gap of a spelling". That reasoning compares
+    // how much typing each game takes, not what it asks of a child, and it is
+    // how an inverted teaching order survived review: the engine was told
+    // reading and spelling were interchangeable, so nothing objected when a
+    // child was asked to spell `sat` two quests before reading a word.
+    //
+    // Blending is receptive and every piece of the answer is on screen.
+    // Segmenting is productive: hold the word, pull it apart, retrieve the
+    // letter shapes from nothing. Reading comes first, and costs less.
+    const rank = (id: string) => taskTypeById(id).baseDifficulty;
     expect(rank('sound-hunt')).toBeLessThan(rank('sound-singer'));
     expect(rank('sound-singer')).toBeLessThan(rank('picture-match'));
-    expect(rank('word-pick')).toBe(rank('picture-match'));
-    expect(rank('picture-match')).toBeLessThan(rank('word-builder'));
+    expect(rank('picture-match')).toBe(rank('word-pick'));
+    expect(rank('picture-match')).toBeLessThan(rank('missing-letter'));
+    expect(rank('missing-letter')).toBeLessThan(rank('word-builder'));
   });
 
   it('pins each task type\'s choice bounds', () => {
@@ -93,10 +100,10 @@ describe('task types', () => {
   it('gives every task type a difficulty of at least 1, with sound-hunt the single easiest', () => {
     // Distinct difficulties are not required: two games of the same skill at the same stage
     // deliberately share one, so the frustration guard's cap treats them alike.
-    const difficulties = TASK_TYPES.map((t) => t.difficulty);
+    const difficulties = TASK_TYPES.map((t) => t.baseDifficulty);
     expect(difficulties.every((d) => d >= 1)).toBe(true);
     expect(difficulties.filter((d) => d === Math.min(...difficulties))).toHaveLength(1);
-    const easiest = TASK_TYPES.reduce((a, b) => (b.difficulty < a.difficulty ? b : a));
+    const easiest = TASK_TYPES.reduce((a, b) => (b.baseDifficulty < a.baseDifficulty ? b : a));
     expect(easiest.id).toBe('sound-hunt');
   });
 
@@ -112,15 +119,15 @@ describe('task types', () => {
   });
 
   it('picks the lowest difficulty from a pool, whichever order it is listed in', () => {
-    const easy: TaskTypeMeta = { id: 'easy', skill: 'SOUND_ID', difficulty: 1, minChoices: 2, maxChoices: 3, secondaryTargets: 'none' };
-    const hard: TaskTypeMeta = { id: 'hard', skill: 'SOUND_ID', difficulty: 5, minChoices: 2, maxChoices: 3, secondaryTargets: 'none' };
+    const easy: TaskTypeMeta = { id: 'easy', skill: 'SOUND_ID', baseDifficulty: 1, minChoices: 2, maxChoices: 3, secondaryTargets: 'none' };
+    const hard: TaskTypeMeta = { id: 'hard', skill: 'SOUND_ID', baseDifficulty: 5, minChoices: 2, maxChoices: 3, secondaryTargets: 'none' };
     expect(easiestTaskTypeForSkill('SOUND_ID', [easy, hard]).id).toBe('easy');
     expect(easiestTaskTypeForSkill('SOUND_ID', [hard, easy]).id).toBe('easy');
   });
 
   it('considers only the requested skill when picking the easiest from a pool', () => {
-    const other: TaskTypeMeta = { id: 'other', skill: 'LETTER_SOUND', difficulty: 1, minChoices: 2, maxChoices: 3, secondaryTargets: 'none' };
-    const mine: TaskTypeMeta = { id: 'mine', skill: 'BLEND_READ', difficulty: 4, minChoices: 2, maxChoices: 3, secondaryTargets: 'none' };
+    const other: TaskTypeMeta = { id: 'other', skill: 'LETTER_SOUND', baseDifficulty: 1, minChoices: 2, maxChoices: 3, secondaryTargets: 'none' };
+    const mine: TaskTypeMeta = { id: 'mine', skill: 'BLEND_READ', baseDifficulty: 4, minChoices: 2, maxChoices: 3, secondaryTargets: 'none' };
     expect(easiestTaskTypeForSkill('BLEND_READ', [other, mine]).id).toBe('mine');
     expect(() => easiestTaskTypeForSkill('SOUND_ID', [other, mine])).toThrow(/no task type for skill/i);
   });
@@ -128,7 +135,7 @@ describe('task types', () => {
 
 describe('provingTaskTypeCount', () => {
   const type = (over: Partial<TaskTypeMeta> & { id: string }): TaskTypeMeta => ({
-    skill: 'SOUND_ID', difficulty: 1, minChoices: 2, maxChoices: 3, secondaryTargets: 'none', ...over,
+    skill: 'SOUND_ID', baseDifficulty: 1, minChoices: 2, maxChoices: 3, secondaryTargets: 'none', ...over,
   });
 
   it('counts a skill\'s own type plus every type that grants it secondary credit', () => {
@@ -149,7 +156,7 @@ describe('provingTaskTypeCount', () => {
   });
 
   it('rises on its own when another mini-game is added for a skill', () => {
-    const pool = [...TASK_TYPES, type({ id: 'singer-three', skill: 'LETTER_SOUND', difficulty: 6 })];
+    const pool = [...TASK_TYPES, type({ id: 'singer-three', skill: 'LETTER_SOUND', baseDifficulty: 6 })];
     expect(provingTaskTypeCount('LETTER_SOUND', 's', pool)).toBe(3);
     expect(provingTaskTypeCount('LETTER_SOUND', 's', TASK_TYPES)).toBe(2);
   });
@@ -183,7 +190,7 @@ describe('provingTaskTypeCount', () => {
         const task: TaskInstance = {
           id: 't', taskTypeId: meta.id, skill: meta.skill, primaryTarget: target,
           secondaryTargets: meta.secondaryTargets === 'graphemes' ? ['p', 'a', 't'] : [],
-          choices: [], correctChoice: target, band: 'focus', anchor: false, difficulty: meta.difficulty, seed: 1,
+          choices: [], correctChoice: target, band: 'focus', anchor: false, difficulty: meta.baseDifficulty, seed: 1,
         };
         const outcome = { sessionId: 's', correct: true, scaffolded: false, latencyMs: 1000, at: 1 };
         for (const a of attemptsForTask(task, outcome, DEFAULT_CONFIG)) {
@@ -199,7 +206,7 @@ describe('provingTaskTypeCount', () => {
 
 describe('provingTaskTypeCount, per target', () => {
   const type = (over: Partial<TaskTypeMeta> & { id: string }): TaskTypeMeta => ({
-    skill: 'LETTER_SOUND', difficulty: 1, minChoices: 2, maxChoices: 3, secondaryTargets: 'none', ...over,
+    skill: 'LETTER_SOUND', baseDifficulty: 1, minChoices: 2, maxChoices: 3, secondaryTargets: 'none', ...over,
   });
   // Stands in for Plan 3's picture-start: provable for `m` but not for `a`.
   const onlyForM = type({ id: 'only-for-m', canServeTarget: (target) => target === 'm' });

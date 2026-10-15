@@ -16,6 +16,7 @@ import { getRecord, isMastered, strengthAt } from './mastery';
 import { graphemesMetAt, wordsDecodableFrom } from './metGraphemes';
 import { deriveSeed, makeRng, seedFromString, shuffle } from './rng';
 import type { Rng } from './rng';
+import { difficultyFor } from './difficulty';
 import { TASK_TYPES } from './taskTypes';
 import type { TaskTypeMeta } from './taskTypes';
 import type { ConfusionMap, MasteryMap, SessionBand, TaskInstance } from './types';
@@ -122,9 +123,14 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
   // not enough for a game that only works for some targets (`canServeTarget`),
   // or that needs something of the child's state: Picture Start needs pictures
   // of OTHER met letters to be wrong answers.
+  const cap = effectiveCap(args.maxDifficulty);
   const canBuild = (type: TaskTypeMeta, p: Pairing): boolean => {
     if (type.skill !== p.skill) return false;
     if (type.canServeTarget !== undefined && !type.canServeTarget(p.targetId)) return false;
+    // The cap is exact here rather than at the type level, because difficulty
+    // depends on the word: `word-builder` on `at` may be allowed where the same
+    // game on `sat` is not.
+    if (difficultyFor(type.id, p.targetId) > cap) return false;
     if (type.id === 'picture-start') {
       const wrong = metGraphemeIds.filter((g) => g !== p.targetId && hasInitialPicture(g));
       return wrong.length >= type.minChoices - 1;
@@ -194,7 +200,7 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
   const anchorPool = winbackMode ? winbackPool : focusBase;
 
   const typesOf = buildableIn;
-  const byDifficulty = (types: TaskTypeMeta[]) => [...types].sort((a, b) => a.difficulty - b.difficulty);
+  const byDifficulty = (types: TaskTypeMeta[]) => [...types].sort((a, b) => a.baseDifficulty - b.baseDifficulty);
   const provenFor = (p: Pairing, type: TaskTypeMeta): boolean =>
     getRecord(mastery, p.targetId, p.skill, config).taskTypesSeen.includes(type.id);
 
@@ -207,7 +213,7 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
     (a, b) =>
       Number(!anchorPool.some((p) => canBuild(a, p) && provenFor(p, a))) -
         Number(!anchorPool.some((p) => canBuild(b, p) && provenFor(p, b))) ||
-      a.difficulty - b.difficulty,
+      a.baseDifficulty - b.baseDifficulty,
   );
   const ladder: AnchorRules[] = winbackMode
     ? [
@@ -384,11 +390,26 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
 
 // --- pools ----------------------------------------------------------------
 
+/**
+ * The cap actually applied, which is not always the cap asked for.
+ *
+ * A cap below every rung must still leave something to teach with, so it is
+ * raised to the easiest rung rather than emptying the pool. Both the type
+ * filter and the exact per-target check in `canBuild` read this same number —
+ * if they disagreed, the fallback type would be offered and then rejected, and
+ * the builder would report that no arrangement exists.
+ */
+function effectiveCap(maxDifficulty: number | undefined): number {
+  if (maxDifficulty === undefined) return Number.POSITIVE_INFINITY;
+  const easiest = Math.min(...TASK_TYPES.map((t) => t.baseDifficulty));
+  return Math.max(maxDifficulty, easiest);
+}
+
 function usableTaskTypes(maxDifficulty: number | undefined): readonly TaskTypeMeta[] {
-  const allowed = TASK_TYPES.filter((t) => t.difficulty <= (maxDifficulty ?? Number.POSITIVE_INFINITY));
-  if (allowed.length > 0) return allowed;
-  // A cap below every difficulty must still leave something to teach with.
-  return [TASK_TYPES.reduce((best, t) => (t.difficulty < best.difficulty ? t : best))];
+  // The base rung is a LOWER bound on what any target of this type can cost,
+  // so a type above the cap can never qualify for any word. The exact check is
+  // per (type, target) and lives in `canBuild`.
+  return TASK_TYPES.filter((t) => t.baseDifficulty <= effectiveCap(maxDifficulty));
 }
 
 /** Every (target, skill) pairing teachable at this level, before the child's progress narrows it. */
@@ -764,7 +785,7 @@ function makeTask(args: MakeTaskArgs): TaskInstance {
     correctChoice: pairing.targetId,
     band,
     anchor,
-    difficulty: type.difficulty,
+    difficulty: difficultyFor(type.id, pairing.targetId),
     seed,
     ...(blankIndex === undefined ? {} : { blankIndex }),
   };

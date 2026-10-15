@@ -379,7 +379,7 @@ describe('buildSession for a brand-new child', () => {
       const plan = build({}, seed, { maxDifficulty: 2 });
       expect(new Set(plan.map((t) => t.taskTypeId)), seed).toEqual(new Set(['sound-hunt', 'sound-singer', 'picture-start']));
       expect(plan[0].taskTypeId, seed).toBe('sound-hunt');
-      expect(taskTypeById(plan[plan.length - 1].taskTypeId).difficulty, seed).toBeLessThanOrEqual(2);
+      expect(taskTypeById(plan[plan.length - 1].taskTypeId).baseDifficulty, seed).toBeLessThanOrEqual(2);
       for (let i = 1; i < plan.length; i += 1) {
         expect(plan[i].taskTypeId, `${seed} slot ${i}`).not.toBe(plan[i - 1].taskTypeId);
       }
@@ -972,7 +972,7 @@ describe('buildSession: sounds before words (invariant 5a)', () => {
       expect(plan.length, seed).toBe(DEFAULT_CONFIG.sessionLength);
       expect(new Set(plan.map((t) => t.taskTypeId)), seed).toEqual(new Set(['sound-hunt', 'sound-singer', 'picture-start']));
       expect(plan[0].taskTypeId, seed).toBe('sound-hunt');
-      expect(taskTypeById(plan[plan.length - 1].taskTypeId).difficulty, seed).toBeLessThanOrEqual(2);
+      expect(taskTypeById(plan[plan.length - 1].taskTypeId).baseDifficulty, seed).toBeLessThanOrEqual(2);
       expect(plan.filter((t) => t.anchor).length, seed).toBe(DEFAULT_CONFIG.winbackCount);
       for (let i = 1; i < plan.length; i += 1) {
         expect(plan[i].taskTypeId, `${seed} slot ${i}`).not.toBe(plan[i - 1].taskTypeId);

@@ -3,7 +3,7 @@ import { DEFAULT_CONFIG, withDefaults } from './config';
 import { FrustrationGuard } from './frustration';
 import type { GuardDirective } from './frustration';
 import { buildSession } from './sessionBuilder';
-import { taskTypeById } from './taskTypes';
+import { TASK_TYPES, taskTypeById } from './taskTypes';
 
 const NO_HELP: GuardDirective = {
   hintTier: 0,
@@ -70,10 +70,24 @@ describe('FrustrationGuard escalation on one target', () => {
 
 describe('FrustrationGuard cap', () => {
   it('caps at a difficulty that still leaves two mini-games playable', () => {
-    // Capping at 1 looks kinder and is worse: only one Level 1 task type has
-    // difficulty 1, so the session builder's no-adjacent rule collapses and a
+    // Capping at 1 looks kinder and is worse: only one Level 1 task type sits
+    // on rung 1, so the session builder's no-adjacent rule collapses and a
     // struggling child gets fourteen identical tasks in a row.
     expect(DEFAULT_CONFIG.cappedDifficulty).toBeGreaterThanOrEqual(2);
+  });
+
+  it('leaves a struggling child two skills and three games, on whatever the rungs currently are', () => {
+    // Asserted as a property rather than pinned to a number, because the scale
+    // itself moved once already: difficulty became a function of the task AND
+    // the word, and a cap chosen against the old 1-4 scale would have been
+    // silently wrong against the new 1-7 one.
+    //
+    // Two skills matters more than three games. What the cap should do when a
+    // child is struggling is put them back on sounds, which is what a teacher
+    // does; what it must not do is leave one game repeating.
+    const usable = TASK_TYPES.filter((t) => t.baseDifficulty <= DEFAULT_CONFIG.cappedDifficulty);
+    expect(usable.length).toBeGreaterThanOrEqual(3);
+    expect(new Set(usable.map((t) => t.skill)).size).toBeGreaterThanOrEqual(2);
   });
 
   it('reads the cap from config rather than hard-coding it', () => {
@@ -97,7 +111,7 @@ describe('FrustrationGuard cap', () => {
       }).map((t) => t.taskTypeId),
     );
     expect(types.size).toBeGreaterThanOrEqual(2);
-    for (const id of types) expect(taskTypeById(id).difficulty).toBeLessThanOrEqual(capped);
+    for (const id of types) expect(taskTypeById(id).baseDifficulty).toBeLessThanOrEqual(capped);
   });
 
   it('yields no adjacent repeats under the cap', () => {

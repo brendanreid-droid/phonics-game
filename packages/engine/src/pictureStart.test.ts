@@ -68,7 +68,7 @@ describe('picture-start as a task type', () => {
 
   it('is a LETTER_SOUND game at the same difficulty as Sound Singer, with the Sound Singer bounds', () => {
     expect(type.skill).toBe('LETTER_SOUND');
-    expect(type.difficulty).toBe(taskTypeById('sound-singer').difficulty);
+    expect(type.baseDifficulty).toBe(taskTypeById('sound-singer').baseDifficulty);
     expect([type.minChoices, type.maxChoices]).toEqual([2, 3]);
     expect(type.secondaryTargets).toBe('none');
   });

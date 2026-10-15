@@ -27,20 +27,51 @@ export type AuthLink =
  * link with neither is ignored rather than guessed at.
  */
 export function parseAuthLink(url: string): AuthLink | null {
-  const hashAt = url.indexOf('#');
-  const queryAt = url.indexOf('?');
-  const query = queryAt >= 0 ? url.slice(queryAt + 1, hashAt >= 0 && hashAt > queryAt ? hashAt : undefined) : '';
-  const fragment = hashAt >= 0 ? url.slice(hashAt + 1) : '';
+  const [q, f] = partsOf(url);
 
-  const q = new URLSearchParams(query);
   const code = q.get('code');
   if (code) return { kind: 'code', code };
 
-  const f = new URLSearchParams(fragment);
   const accessToken = f.get('access_token');
   const refreshToken = f.get('refresh_token');
   if (accessToken && refreshToken) return { kind: 'tokens', accessToken, refreshToken };
   return null;
+}
+
+/**
+ * The reason Supabase refused the link, in words a parent can act on, or null
+ * if it did not refuse it.
+ *
+ * Supabase reports a dead link by redirecting WITH an error rather than by
+ * failing the redirect, so a refusal arrives at the app looking much like a
+ * good sign-in. Read it before trying to use the link, or the parent is shown
+ * a generic failure for something with an exact and reassuring explanation.
+ *
+ * `otp_expired` is the common one and does not mean what it says: it covers a
+ * link that was simply used twice — including by an email scanner opening it
+ * before the parent did — as well as one that is genuinely old.
+ */
+export function parseAuthRefusal(url: string): string | null {
+  for (const params of partsOf(url)) {
+    const code = params.get('error_code');
+    const description = params.get('error_description');
+    const error = params.get('error');
+    if (code === null && description === null && error === null) continue;
+
+    if (code === 'otp_expired') return 'That link had already been used, or it was too old. Each link works once.';
+    if (description !== null) return description;
+    return 'The link was refused.';
+  }
+  return null;
+}
+
+/** A URL's query and fragment, each as parameters. Neither is required. */
+function partsOf(url: string): [URLSearchParams, URLSearchParams] {
+  const hashAt = url.indexOf('#');
+  const queryAt = url.indexOf('?');
+  const query = queryAt >= 0 ? url.slice(queryAt + 1, hashAt >= 0 && hashAt > queryAt ? hashAt : undefined) : '';
+  const fragment = hashAt >= 0 ? url.slice(hashAt + 1) : '';
+  return [new URLSearchParams(query), new URLSearchParams(fragment)];
 }
 
 /** Sends the sign-in email. Throws an Error with a message fit to show a parent. */

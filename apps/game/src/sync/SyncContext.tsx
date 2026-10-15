@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { createContext, useContext, useEffect, useMemo, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
 import { AppState } from 'react-native';
 import * as Linking from 'expo-linking';
@@ -21,13 +21,24 @@ interface SyncState {
   verifyCode: (email: string, code: string) => Promise<void>;
   signOut: () => Promise<void>;
   syncNow: () => Promise<void>;
+  /**
+   * Finishes a sign-in from the URL the email link opened. Returns false when
+   * the URL carries no sign-in at all.
+   *
+   * The /auth screen owns this rather than the provider watching for links.
+   * Both doing it would exchange the same one-time code twice, and the second
+   * exchange fails — so whichever lost the race would look like a broken
+   * sign-in. One caller, which is also the one that can show the result.
+   */
+  completeSignIn: (url: string) => Promise<boolean>;
 }
 
 const SyncCtx = createContext<SyncState | null>(null);
 
 /**
- * Connects the sync to the app: remembers who is signed in, hears about sign-in
- * links, and asks for a sync when the app comes to the foreground.
+ * Connects the sync to the app: remembers who is signed in, and asks for a
+ * sync when the app comes to the foreground. A sign-in link is handled by the
+ * /auth screen the link opens, not here.
  *
  * Everything here is best effort and none of it is on the path of play. If the
  * session cannot be read, the app is simply signed out.
@@ -36,7 +47,6 @@ export function SyncProvider({ runtime, children }: { runtime: SyncRuntime; chil
   const { service, client } = runtime;
   const { refresh } = useProfile();
   const status = useSyncExternalStore(service.subscribe, service.getStatus, service.getStatus);
-  const [, setLinkError] = useState<string | null>(null);
 
   // What a sync changed on the device (a child arriving, a rebuilt mastery) is shown by refreshing.
   useEffect(() => {
@@ -62,13 +72,6 @@ export function SyncProvider({ runtime, children }: { runtime: SyncRuntime; chil
     };
   }, [client, service]);
 
-  // A sign-in link opening the app.
-  const url = Linking.useURL();
-  useEffect(() => {
-    if (client === null || !url) return;
-    void completeSignInFromLink(client, url).catch((error: Error) => setLinkError(error.message));
-  }, [client, url]);
-
   // Coming back to the app is a good moment to catch up.
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
@@ -87,6 +90,10 @@ export function SyncProvider({ runtime, children }: { runtime: SyncRuntime; chil
       verifyCode: async (email, code) => {
         if (client === null) throw new Error('Sync is not set up in this version of the app.');
         await verifyEmailCode(client, email, code);
+      },
+      completeSignIn: async (url) => {
+        if (client === null) throw new Error('Sync is not set up in this version of the app.');
+        return completeSignInFromLink(client, url);
       },
       signOut: async () => {
         if (client !== null) await signOut(client);

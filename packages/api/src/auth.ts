@@ -80,7 +80,7 @@ export async function sendSignInLink(client: SupabaseClient, email: string, redi
     email: email.trim(),
     options: { emailRedirectTo: redirectTo },
   });
-  if (error) throw new Error(friendly(error.message));
+  if (error) throw new Error(friendlyAuthMessage(error.message));
 }
 
 /** Completes sign-in from a link the app was opened with. Returns whether it was a sign-in link. */
@@ -91,14 +91,14 @@ export async function completeSignInFromLink(client: SupabaseClient, url: string
     link.kind === 'code'
       ? await client.auth.exchangeCodeForSession(link.code)
       : await client.auth.setSession({ access_token: link.accessToken, refresh_token: link.refreshToken });
-  if (error) throw new Error(friendly(error.message));
+  if (error) throw new Error(friendlyAuthMessage(error.message));
   return true;
 }
 
 /** Completes sign-in from the code in the email, for a parent reading the email on another device. */
 export async function verifyEmailCode(client: SupabaseClient, email: string, token: string): Promise<void> {
   const { error } = await client.auth.verifyOtp({ email: email.trim(), token: token.trim(), type: 'email' });
-  if (error) throw new Error(friendly(error.message));
+  if (error) throw new Error(friendlyAuthMessage(error.message));
 }
 
 /** Who is signed in, read from the session stored on the device. Makes no network call. */
@@ -121,9 +121,32 @@ export async function signOut(client: SupabaseClient): Promise<void> {
   await client.auth.signOut({ scope: 'local' });
 }
 
-function friendly(message: string): string {
-  if (/rate limit|too many|security purposes/i.test(message)) return 'Too many tries. Please wait a minute and try again.';
-  if (/invalid|expired|otp|token/i.test(message)) return 'That link or code did not work. It may have expired, so please ask for a new one.';
-  if (/fetch|network|failed/i.test(message)) return 'Could not reach the internet. Please check the connection and try again.';
+/**
+ * Turns what the auth server said into something to show a parent.
+ *
+ * Exported so the wording can be tested, because two of these are the
+ * difference between a parent waiting and a parent giving up.
+ *
+ * The two refusals are separated deliberately. One is the few seconds between
+ * sends; the other is the hourly cap on the project's email allowance, which no
+ * amount of trying will clear. Both arrive as "rate limit", and telling a parent
+ * "too many tries" for either means they try again at once and are refused
+ * again.
+ */
+export function friendlyAuthMessage(message: string): string {
+  const wait = /after (\d+) seconds?/i.exec(message);
+  if (wait !== null) {
+    const seconds = Number(wait[1]);
+    return `Please wait ${seconds} second${seconds === 1 ? '' : 's'} before asking for another email.`;
+  }
+  if (/rate limit|too many/i.test(message)) {
+    return 'That is as many emails as this project can send for now. Please try again in about an hour.';
+  }
+  if (/invalid|expired|otp|token/i.test(message)) {
+    return 'That link or code did not work. It may have expired, so please ask for a new one.';
+  }
+  if (/fetch|network|failed/i.test(message)) {
+    return 'Could not reach the internet. Please check the connection and try again.';
+  }
   return 'Something went wrong. Please try again.';
 }

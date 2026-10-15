@@ -128,8 +128,11 @@ function Form() {
       ) : (
         <>
           <Text style={styles.body}>
-            We have emailed {email.trim()}. Open the link on this device to finish. If the email shows a code instead, type
-            it here.
+            We have emailed {email.trim()}. Open the newest one, on this device.
+          </Text>
+          <Text style={styles.note}>
+            Each link works once, so an earlier email will not do it — if there are several, use the one that just
+            arrived. If the email shows a code, typing it here works even when the link does not.
           </Text>
           <TextInput
             accessibilityLabel="Code from the email"

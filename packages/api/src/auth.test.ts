@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseAuthLink, parseAuthRefusal } from './auth';
+import { friendlyAuthMessage, parseAuthLink, parseAuthRefusal } from './auth';
 
 describe('parseAuthLink', () => {
   it('reads the one-time code from a PKCE link', () => {
@@ -53,5 +53,29 @@ describe('parseAuthRefusal', () => {
     expect(parseAuthRefusal('http://x/auth#access_token=aa&refresh_token=rr')).toBeNull();
     expect(parseAuthRefusal('http://x/auth')).toBeNull();
     expect(parseAuthRefusal('')).toBeNull();
+  });
+});
+
+describe('friendlyAuthMessage', () => {
+  it('says how long the wait is, when the server said', () => {
+    // A parent who is told "too many tries" tries again immediately and is
+    // refused again. A number lets them put the phone down.
+    expect(friendlyAuthMessage('For security purposes, you can only request this after 31 seconds.')).toBe(
+      'Please wait 31 seconds before asking for another email.',
+    );
+    expect(friendlyAuthMessage('For security purposes, you can only request this after 1 seconds.')).toBe(
+      'Please wait 1 second before asking for another email.',
+    );
+  });
+
+  it('distinguishes the hourly cap from the short wait between sends', () => {
+    expect(friendlyAuthMessage('email rate limit exceeded')).toMatch(/about an hour/);
+    expect(friendlyAuthMessage('email rate limit exceeded')).not.toMatch(/seconds/);
+  });
+
+  it('keeps a plain message for the other failures', () => {
+    expect(friendlyAuthMessage('Email link is invalid or has expired')).toMatch(/did not work/);
+    expect(friendlyAuthMessage('failed to fetch')).toMatch(/reach the internet/);
+    expect(friendlyAuthMessage('kaboom')).toBe('Something went wrong. Please try again.');
   });
 });

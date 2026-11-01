@@ -63,6 +63,16 @@ Counts rose when the second mini-game per skill landed, which is the intended tr
 
 **Not done:** real voice, illustrated artwork, Levels 2–6, `SAY_IT` voice tasks, and a signed-in run of the sync against the live Supabase project.
 
+**The voice pack** is 68 clips, defined once in [`packages/audio/voice-script.txt`](packages/audio/voice-script.txt) with IPA and a delivery note per line. Three things read it, so they cannot drift apart:
+
+| | |
+|---|---|
+| `./scripts/generate-placeholder-audio.sh` | macOS `say` stand-in. Ships today. Says "tuh" for /t/, which is wrong. |
+| `./scripts/generate-voice-pack.sh` | Amazon Polly from the IPA, so /t/ is /t/. Needs your own AWS credentials; `DRY_RUN=1` prints the SSML and calls nothing. |
+| `npm run generate:voice-script` | [docs/VOICE-SCRIPT.md](docs/VOICE-SCRIPT.md), the brief for whoever records the real pack. |
+
+Synthetic speech is for building and demonstrating. Before any child uses this, a human records it — and **every phoneme is checked individually**, because two were wrong before and were caught by acoustic analysis rather than by ear.
+
 **Not verified by anyone:** **no child has played it**, and the sync has not been run signed in against the real project. The pacing figures are simulated children, the pictures are emoji standing in for artwork, and the voice is machine-generated — usable for testing, but a human voice is needed before wider use. When it lands, check each phoneme individually: two were wrong before and were caught by acoustic analysis rather than by ear.
 
 ## Config worth knowing about

@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.base.json --noEmit",
     "generate:audio-map": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/generate-audio-asset-map.ts",
-    "pretest": "./scripts/check-no-secrets.sh"
+    "pretest": "./scripts/check-no-secrets.sh",
+    "generate:voice-script": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/generate-voice-script-doc.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

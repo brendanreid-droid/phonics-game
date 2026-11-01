@@ -36,78 +36,22 @@ fi
 
 mkdir -p "$OUT_DIR"
 
-# key|spoken text[|vowel]   (vowel: keep only the vowel of the spoken word)
-CLIPS=$(cat <<'CLIPS'
-ph.s|sss
-ph.a|at|vowel
-ph.t|tuh
-ph.p|puh
-ph.i|it|vowel
-ph.m|mmm
-ph.f|fff
-ln.s|ess
-ln.a|ay
-ln.t|tee
-ln.p|pee
-ln.i|eye
-ln.m|em
-ln.f|ef
-wd.at|at
-wd.am|am
-wd.if|if
-wd.it|it
-wd.pat|pat
-wd.tap|tap
-wd.pit|pit
-wd.sit|sit
-wd.sip|sip
-wd.pip|pip
-wd.fat|fat
-wd.fit|fit
-wd.mat|mat
-wd.map|map
-wd.sat|sat
-wd.tip|tip
-wd.sap|sap
-wd.sam|Sam
-wd.pam|Pam
-wd.i_pronoun|I
-wd.the|the
-wd.a_word|a
-wd.as|as
-wd.is|is
-ui.which_says|Which one says
-ui.find_letter|Find the letter that says
-ui.build_word|Build the word
-ui.tap_picture|Tap the picture
-ui.listen_again|Listen again
-ui.lets_go|Let's go!
-ui.all_done|All done!
-ui.try_this_one|Try this one
-ui.which_sound|Which sound does it make?
-ui.find_word|Which word is it?
-ui.missing_letter|Which letter is missing?
-ui.which_starts|Which picture starts with this sound?
-ui.robot_listen|Listen. Which one is it?
-ui.sound_it_out|Tap each letter, then push them together.
-praise.1|Yes!
-praise.2|That's it!
-praise.3|Lovely!
-praise.4|You got it!
-praise.5|Well done!
-praise.6|Brilliant!
-praise.7|Nice one!
-praise.8|Perfect!
-praise.9|Clever!
-praise.10|Good listening!
-praise.11|Beautiful!
-praise.12|You're reading!
-encourage.1|Nearly! Have another go.
-encourage.2|Good try. Listen again.
-encourage.3|Not that one. Try again.
-encourage.4|Let's listen together.
-CLIPS
-)
+# The clip list lives in packages/audio/voice-script.txt, which is also what
+# the Polly generator and the script handed to a human reader are built from.
+# It used to be inline here, which meant the recording script would have been a
+# second copy of it; two copies of 68 lines drift, and the drift shows up as a
+# clip nobody recorded.
+#
+#   key | spoken text | IPA | mode | delivery note
+#
+# This script uses the first, second and fourth fields. IPA is for Polly and for
+# the person reading; `mode` of `vowel` means cut the vowel out of the word.
+SCRIPT_FILE="packages/audio/voice-script.txt"
+if [ ! -f "$SCRIPT_FILE" ]; then
+  echo "error: $SCRIPT_FILE not found. Run from the repository root." >&2
+  exit 1
+fi
+CLIPS=$(grep -v '^#' "$SCRIPT_FILE" | grep -v '^[[:space:]]*$')
 
 # Keeps only the vowel of a short word like "at": from onset to the point where
 # the energy falls away into the closure of the final consonant. stdlib only.
@@ -138,7 +82,7 @@ count=0
 ENTRIES="$TMP/entries.txt"
 : > "$ENTRIES"
 
-while IFS='|' read -r key text mode; do
+while IFS='|' read -r key text ipa mode note; do
   [ -z "$key" ] && continue
   aiff="$TMP/$key.aiff"
   m4a="$OUT_DIR/$key.m4a"

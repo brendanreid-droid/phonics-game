@@ -1,0 +1,154 @@
+#!/usr/bin/env bash
+#
+# Generates a voice pack with Amazon Polly, from packages/audio/voice-script.txt.
+#
+# Why this exists alongside generate-placeholder-audio.sh: the macOS `say`
+# stand-in cannot be told a phoneme. It is handed spellings — "sss", "tuh" —
+# and "tuh" is wrong in a way that matters, because a child sounding out t-a-p
+# hears "tuh-a-puh" and never reaches "tap". Polly takes IPA directly:
+#
+#   <phoneme alphabet="ipa" ph="t">t</phoneme>
+#
+# so /t/ comes out as /t/ rather than as a syllable, and /s/ as /sss/ rather
+# than "ess". That is the whole reason to prefer it.
+#
+# This is still not a human. It is a far better pack to test and demonstrate
+# with, and the real one is still recorded by a person from docs/VOICE-SCRIPT.md.
+#
+# REQUIREMENTS
+#   - the AWS CLI, configured with credentials that can call Polly
+#   - ffmpeg, for the m4a conversion
+#
+# This script never sees or stores a credential: it shells out to `aws`, which
+# reads your own profile. Do not paste a key into this file or into the repo —
+# the repository is public.
+#
+# USAGE
+#   ./scripts/generate-voice-pack.sh                  # neural Olivia (en-AU)
+#   VOICE=Nicole ENGINE=standard ./scripts/generate-voice-pack.sh
+#   DRY_RUN=1 ./scripts/generate-voice-pack.sh         # print the SSML, call nothing
+#
+# DRY_RUN needs no credentials and no tools. Use it to read the markup before
+# spending anything, and to check that a sound really is being asked for by IPA
+# rather than by spelling.
+#
+# Run from the repository root.
+
+set -euo pipefail
+
+VOICE="${VOICE:-Olivia}"      # en-AU neural. Nicole is the older standard en-AU voice.
+ENGINE="${ENGINE:-neural}"
+PACK="${PACK:-polly-au}"
+OUT_DIR="apps/game/assets/voice/$PACK"
+MANIFEST="packages/audio/src/manifest.json"
+SCRIPT_FILE="packages/audio/voice-script.txt"
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+DRY_RUN="${DRY_RUN:-}"
+
+if [ -z "$DRY_RUN" ]; then
+  for tool in aws ffmpeg; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+      echo "error: '$tool' not found." >&2
+      exit 1
+    fi
+  done
+fi
+
+if [ ! -f "$SCRIPT_FILE" ]; then
+  echo "error: $SCRIPT_FILE not found. Run from the repository root." >&2
+  exit 1
+fi
+
+if [ -z "$DRY_RUN" ]; then
+  if ! aws polly describe-voices --language-code en-AU >/dev/null 2>&1; then
+    echo "error: the AWS CLI cannot reach Polly. Check your credentials and region." >&2
+    exit 1
+  fi
+  mkdir -p "$OUT_DIR"
+fi
+
+# Escapes the five XML characters. A clip's text is authored by us rather than
+# by a user, but an unescaped apostrophe in "Let's go!" would still break SSML.
+escape_xml() {
+  printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e "s/'/\&apos;/g" -e 's/"/\&quot;/g'
+}
+
+count=0
+ENTRIES="$TMP/entries.txt"
+: > "$ENTRIES"
+
+while IFS='|' read -r key text ipa mode note; do
+  case "$key" in ''|'#'*) continue ;; esac
+
+  safe_text="$(escape_xml "$text")"
+  case "$key" in
+    ph.*)
+      # The sound itself, from IPA. Said alone, slowly, so a child hears it
+      # whole — a phoneme clipped short is a phoneme a five-year-old misses.
+      #
+      # The fallback content is the IPA rather than the spelling, deliberately.
+      # A <phoneme> tag whose alphabet the engine cannot parse falls back to
+      # reading its content, and the spelling of /t/ in this script is "tuh" —
+      # which is WRONG but sounds almost plausible, so a broken clip would ship
+      # unnoticed. Reading raw IPA sounds like nonsense, which is audible in one
+      # listen. Fail loudly.
+      ssml="<speak><prosody rate=\"slow\"><phoneme alphabet=\"ipa\" ph=\"${ipa}\">${ipa}</phoneme></prosody></speak>"
+      ;;
+    wd.*|ln.*)
+      # The word or letter name, pronounced from IPA rather than from spelling,
+      # so `as` and `is` end in the /z/ they really have and `the` stays
+      # unstressed instead of becoming "thee".
+      ssml="<speak><phoneme alphabet=\"ipa\" ph=\"${ipa}\">${safe_text}</phoneme></speak>"
+      ;;
+    *)
+      # Ordinary sentences. Slightly slow: this is spoken to a five-year-old.
+      ssml="<speak><prosody rate=\"95%\">${safe_text}</prosody></speak>"
+      ;;
+  esac
+
+  if [ -n "$DRY_RUN" ]; then
+    printf '%-18s %s\n' "$key" "$ssml"
+  else
+    aws polly synthesize-speech \
+      --text-type ssml \
+      --text "$ssml" \
+      --voice-id "$VOICE" \
+      --engine "$ENGINE" \
+      --output-format mp3 \
+      "$TMP/$key.mp3" >/dev/null
+
+    # m4a/AAC to match the existing pack, so nothing in the app has to change.
+    ffmpeg -loglevel error -y -i "$TMP/$key.mp3" -c:a aac -b:a 96k "$OUT_DIR/$key.m4a"
+  fi
+
+  printf '  "%s": "assets/voice/%s/%s.m4a"\n' "$key" "$PACK" "$key" >> "$ENTRIES"
+  count=$((count + 1))
+done < "$SCRIPT_FILE"
+
+if [ -n "$DRY_RUN" ]; then
+  echo
+  echo "Dry run: $count clips would be generated with $VOICE ($ENGINE). Nothing was called and nothing was written."
+  exit 0
+fi
+
+{
+  printf '{\n'
+  printf '  "_comment": "GENERATED by scripts/generate-voice-pack.sh. Amazon Polly voice %s (%s). Better than the macOS stand-in because the sounds come from IPA, but still not a human: see docs/VOICE-SCRIPT.md.",\n' "$VOICE" "$ENGINE"
+  printf '  "_pack": "%s",\n' "$PACK"
+  printf '  "_placeholder": true,\n'
+  # Written the long way on purpose: macOS ships bash 3.2, which has no negative
+  # array indices (${arr[-1]}), so do not "modernise" this into a bash 4 idiom.
+  sed '$!s/$/,/' "$ENTRIES"
+  printf '}\n'
+} > "$MANIFEST"
+
+echo "Generated $count clips with Polly ($VOICE, $ENGINE) in $OUT_DIR"
+echo "Wrote manifest to $MANIFEST"
+echo
+echo "Next: npm run generate:audio-map"
+echo
+echo "_placeholder stays true. Synthetic speech is for building and demonstrating."
+echo "Listen to all seven ph.* clips individually before showing this to a child —"
+echo "IPA makes the right sound far more likely, it does not guarantee it."

@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { allAudioKeys } from '@soundlings/curriculum';
@@ -57,5 +57,55 @@ describe('audio manifest', () => {
     // When this flips to false, a real voice pack has landed and the in-app
     // placeholder banner will disappear on its own.
     expect(isPlaceholderPack()).toBe(true);
+  });
+});
+
+describe('the recording script', () => {
+  // packages/audio/voice-script.txt is what a human records from, what Polly
+  // generates from, and what the macOS stand-in generates from. If it and the
+  // manifest disagree, someone records 68 clips and the game still has a hole.
+  const lines = readFileSync(join(REPO_ROOT, 'packages', 'audio', 'voice-script.txt'), 'utf8')
+    .split('\n')
+    .filter((line) => line.trim() !== '' && !line.startsWith('#'));
+  const rows = lines.map((line) => {
+    const [key, text, ipa, mode, note] = line.split('|');
+    return { key, text, ipa, mode, note };
+  });
+
+  it('covers exactly the clips the game plays, with nothing spare', () => {
+    expect(rows.map((r) => r.key).sort()).toEqual(manifestKeys().sort());
+  });
+
+  it('gives every line something to say', () => {
+    for (const row of rows) expect(row.text?.trim(), row.key).toBeTruthy();
+  });
+
+  it('tells whoever records it how to say every sound and every word', () => {
+    // The delivery note is the whole value of this file. A voice actor reading
+    // "sss" with no instruction says "ess"; reading `t` they say "tuh". Both
+    // are the confusions synthetic phonics exists to prevent, and neither is
+    // catchable by any test — only by a person listening.
+    for (const row of rows) expect(row.note?.trim(), `${row.key} has no delivery note`).toBeTruthy();
+  });
+
+  it('gives every sound and every word an IPA transcription', () => {
+    // IPA is what lets a speech engine produce /s/ rather than "ess", and what
+    // removes the ambiguity for a human. The interface lines do not need one:
+    // they are ordinary sentences.
+    for (const row of rows) {
+      if (row.key.startsWith('ui.') || row.key.startsWith('praise.') || row.key.startsWith('encourage.')) continue;
+      expect(row.ipa?.trim(), `${row.key} has no IPA`).toBeTruthy();
+    }
+  });
+
+  it('never writes a stop consonant with a vowel after it', () => {
+    // "tuh" and "puh" are what the macOS stand-in says, and they are wrong: a
+    // child sounding out t-a-p hears "tuh-a-puh" and never reaches "tap". The
+    // stand-in is stuck with them, so the note beside each one must say so —
+    // it is the instruction that stops a human repeating the mistake.
+    for (const key of ['ph.t', 'ph.p']) {
+      const row = rows.find((r) => r.key === key)!;
+      expect(row.note.toLowerCase(), key).toContain('no schwa');
+    }
   });
 });

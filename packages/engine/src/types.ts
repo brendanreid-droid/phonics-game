@@ -115,6 +115,19 @@ export type SessionBand = 'focus' | 'review' | 'winback';
 
 export interface TaskInstance {
   id: string;
+  /**
+   * What this slot in the quest is.
+   *
+   * `'meet'` is a teaching card, not a task: the letter shown large, its sound
+   * said, its mnemonic there from the start. No choices, no right answer, and
+   * no attempt recorded — so it cannot be gamed and cannot put anything into
+   * the mastery data.
+   *
+   * Required rather than optional, so that every place a task is constructed
+   * has to say which it is. An optional field defaulting to `'task'` would let
+   * a teaching card be built by accident and then scored.
+   */
+  kind: 'task' | 'meet';
   taskTypeId: string;
   skill: Skill;
   primaryTarget: TargetId;

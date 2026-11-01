@@ -41,6 +41,12 @@ export function attemptsForTask(
   outcome: TaskOutcome,
   config: EngineConfig,
 ): Attempt[] {
+  // Throwing, rather than returning [], because a caller that tries to score a
+  // teaching card has a bug and an empty array would hide it. The quest runner
+  // checks `kind` and advances without coming here at all.
+  if (task.kind === 'meet') {
+    throw new Error(`A teaching card earns no evidence and must not be scored: ${task.id}`);
+  }
   const scale = outcome.aided === true && outcome.correct && !outcome.scaffolded ? config.secondaryWeight : 1;
   const shared = {
     sessionId: outcome.sessionId,

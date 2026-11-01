@@ -248,6 +248,12 @@ export function isPlayablePlan(plan: readonly TaskInstance[]): boolean {
       const type = TASK_TYPES.find((t) => t.id === task.taskTypeId);
       if (!type || type.skill !== task.skill) return false;
       if (typeof task.id !== 'string' || typeof task.primaryTarget !== 'string') return false;
+      if (task.kind === 'meet') {
+        // A teaching card has no choices and no right answer, so every check
+        // below would reject it. All it needs is a real grapheme to show.
+        getGrapheme(task.primaryTarget);
+        return true;
+      }
       if (!Array.isArray(task.choices) || !task.choices.every((c) => typeof c === 'string')) return false;
       if (!Array.isArray(task.secondaryTargets)) return false;
       if (typeof task.correctChoice !== 'string') return false;

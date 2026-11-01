@@ -241,6 +241,15 @@ export class QuestRunner {
     const task = current?.plan[current.index];
     if (!current || !task) return;
 
+    // A teaching card is acknowledged, not answered. It advances the quest and
+    // records nothing at all: no attempt, no confusion, no guard entry, no
+    // praise. Nothing a child does here is right or wrong, which is the point
+    // of it — this is the first time they have been shown the letter.
+    if (task.kind === 'meet') {
+      await this.advance(current, Promise.resolve());
+      return;
+    }
+
     const judgement = judgeAnswer(task, given);
     const at = now();
     const latencyMs = Math.max(0, at - this.shownAt);

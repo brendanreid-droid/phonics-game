@@ -202,7 +202,7 @@ describe('provingTaskTypeCount', () => {
         const target = primary(meta.skill);
         if (meta.canServeTarget !== undefined && !meta.canServeTarget(target)) continue;
         const task: TaskInstance = {
-          id: 't', taskTypeId: meta.id, skill: meta.skill, primaryTarget: target,
+          id: 't', kind: 'task', taskTypeId: meta.id, skill: meta.skill, primaryTarget: target,
           secondaryTargets: meta.secondaryTargets === 'graphemes' ? ['p', 'a', 't'] : [],
           choices: [], correctChoice: target, band: 'focus', anchor: false, difficulty: meta.baseDifficulty, seed: 1,
         };

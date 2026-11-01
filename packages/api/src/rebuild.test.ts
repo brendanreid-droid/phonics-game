@@ -249,7 +249,7 @@ describe('rebuildFrom: high scores', () => {
     const quest = flawlessQuest();
     const sessionId = quest[0].sessionId;
     const word: TaskInstance = {
-      id: 'w',
+      id: 'w', kind: 'task',
       taskTypeId: 'word-pick',
       skill: 'BLEND_READ',
       primaryTarget: 'sat',

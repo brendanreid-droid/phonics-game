@@ -7,6 +7,7 @@ import { ExpoClipPlayer } from '../src/audio/ExpoClipPlayer';
 import { useProfile } from '../src/profiles/ProfileContext';
 import { levelFromParam } from '../src/progress/levelCards';
 import { useQuest } from '../src/quest/useQuest';
+import { MeetTheSound } from '../src/quest/MeetTheSound';
 import { componentFor } from '../src/tasks/registry';
 
 export default function QuestScreen() {
@@ -81,7 +82,11 @@ function Quest({ profileId }: { profileId: string }) {
     );
   }
 
-  const TaskComponent = componentFor(state.task.taskTypeId);
+  // A teaching card is chosen by `kind`, not by task type: it is not a
+  // mini-game and has no entry in the registry.
+  // A teaching card is chosen by `kind`, not by task type: it is not a
+  // mini-game and has no entry in the registry.
+  const TaskComponent = state.task.kind === 'meet' ? MeetTheSound : componentFor(state.task.taskTypeId);
 
   return (
     // Keyed on the task so each one starts with clean state: two tasks in a

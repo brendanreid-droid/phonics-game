@@ -17,6 +17,7 @@ const HOUR = 3_600_000;
 function task(overrides: Partial<TaskInstance> = {}): TaskInstance {
   return {
     id: 't1',
+    kind: 'task',
     taskTypeId: 'word-builder',
     skill: 'SEGMENT_SPELL',
     primaryTarget: 'sat',
@@ -213,5 +214,24 @@ describe('recordTaskResult', () => {
     const before: MasteryMap = {};
     recordTaskResult(before, task(), outcome(), config);
     expect(before).toEqual({});
+  });
+});
+
+describe('a teaching card earns nothing', () => {
+  it('refuses to be scored at all', () => {
+    // Throwing rather than returning [], because a caller that scores a
+    // teaching card has a bug and an empty array would hide it. There is no
+    // right answer on that screen, so any evidence drawn from it is invented.
+    const meet = task({ kind: 'meet', taskTypeId: 'sound-hunt', skill: 'SOUND_ID', primaryTarget: 's' });
+    expect(() =>
+      attemptsForTask(meet, { sessionId: 'q', correct: true, scaffolded: false, latencyMs: 900, at: 1 }, DEFAULT_CONFIG),
+    ).toThrow(/must not be scored/);
+  });
+
+  it('refuses even when the caller claims the child got it wrong', () => {
+    const meet = task({ kind: 'meet', taskTypeId: 'sound-hunt', skill: 'SOUND_ID', primaryTarget: 's' });
+    expect(() =>
+      attemptsForTask(meet, { sessionId: 'q', correct: false, scaffolded: false, latencyMs: 900, at: 1 }, DEFAULT_CONFIG),
+    ).toThrow(/must not be scored/);
   });
 });

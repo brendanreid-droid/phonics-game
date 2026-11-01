@@ -14,7 +14,12 @@ export function TaskFrame(props: {
   position: { index: number; total: number };
   tier: HintTier;
   onReplay: () => void;
-  onAskForHelp: () => void;
+  /**
+   * Omitted by a screen with nothing to be stuck on, where the owl is then
+   * hidden. The teaching card is the one such screen: it has no right answer,
+   * so an owl offering help would be offering help with nothing.
+   */
+  onAskForHelp?: () => void;
   children: ReactNode;
 }) {
   const { position, tier, onReplay, onAskForHelp, children } = props;
@@ -37,18 +42,20 @@ export function TaskFrame(props: {
           <Text style={styles.controlIcon}>🔈</Text>
         </Pressable>
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Help me"
-          style={({ pressed }) => [
-            styles.control,
-            tier >= 1 && styles.controlNudging,
-            pressed && styles.controlPressed,
-          ]}
-          onPress={onAskForHelp}
-        >
-          <Text style={styles.controlIcon}>🦉</Text>
-        </Pressable>
+        {onAskForHelp ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Help me"
+            style={({ pressed }) => [
+              styles.control,
+              tier >= 1 && styles.controlNudging,
+              pressed && styles.controlPressed,
+            ]}
+            onPress={onAskForHelp}
+          >
+            <Text style={styles.controlIcon}>🦉</Text>
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );

@@ -890,6 +890,7 @@ function makeTask(args: MakeTaskArgs): TaskInstance {
 
   return {
     id: `${position}-${type.id}-${pairing.targetId}`,
+    kind: 'task',
     taskTypeId: type.id,
     skill: type.skill,
     primaryTarget: pairing.targetId,

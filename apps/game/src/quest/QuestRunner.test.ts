@@ -902,3 +902,66 @@ describe('finishing a quest records the day and latches completion', () => {
     });
   });
 });
+
+describe('a teaching card', () => {
+  const meetCard = (id: string, grapheme: string): TaskInstance => ({
+    id,
+    kind: 'meet',
+    taskTypeId: 'sound-hunt',
+    skill: 'SOUND_ID',
+    primaryTarget: grapheme,
+    secondaryTargets: [],
+    choices: [],
+    correctChoice: grapheme,
+    band: 'focus',
+    anchor: false,
+    difficulty: 1,
+    seed: 1,
+  });
+
+  it('advances the quest and records absolutely nothing', async () => {
+    // Nothing a child does on that screen is right or wrong — it is the first
+    // time they have been shown the letter. An attempt from it would be
+    // evidence about a question nobody asked.
+    const repo = new MemoryProgressRepo();
+    const plan = freshPlan();
+    await storeQuest(repo, [meetCard('meet-s', 's'), ...plan.slice(0, 3)]);
+    const runner = runnerFor(repo);
+    await runner.start();
+
+    expect(taskOf(runner).kind).toBe('meet');
+    await runner.answer('s');
+
+    expect(viewOf(runner).index).toBe(1);
+    expect(taskOf(runner).kind).toBe('task');
+    expect(await repo.loadAttempts(PROFILE)).toEqual([]);
+    expect(await repo.loadMastery(PROFILE)).toEqual({});
+  });
+
+  it('cannot be got wrong, however the child taps', async () => {
+    const repo = new MemoryProgressRepo();
+    const plan = freshPlan();
+    await storeQuest(repo, [meetCard('meet-s', 's'), ...plan.slice(0, 3)]);
+    const runner = runnerFor(repo);
+    await runner.start();
+
+    // A tap that would be an error on any other screen.
+    await runner.answer('zzz');
+
+    expect(viewOf(runner).index).toBe(1);
+    expect(await repo.loadAttempts(PROFILE)).toEqual([]);
+    expect(await repo.loadConfusions(PROFILE)).toEqual({});
+  });
+
+  it('costs no stars, so meeting a sound cannot spoil a clean run', async () => {
+    const repo = new MemoryProgressRepo();
+    const plan = freshPlan();
+    await storeQuest(repo, [meetCard('meet-s', 's'), ...plan.slice(0, 2)]);
+    const runner = runnerFor(repo);
+    await runner.start();
+    await runner.answer('anything');
+    await finishCleanly(runner);
+
+    expect(viewOf(runner).stars).toBe(3);
+  });
+});

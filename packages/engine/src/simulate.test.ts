@@ -186,7 +186,7 @@ describe('simulation mechanics', () => {
 
 describe('closingTask: the runner promise that a quest does not close on a fluffed target', () => {
   const task = (id: string, target: string, taskTypeId: string, difficulty: number, skill: TaskInstance['skill'] = 'SOUND_ID'): TaskInstance => ({
-    id, taskTypeId, skill, primaryTarget: target, secondaryTargets: [], choices: [], correctChoice: target,
+    id, kind: 'task', taskTypeId, skill, primaryTarget: target, secondaryTargets: [], choices: [], correctChoice: target,
     band: 'focus', anchor: false, difficulty, seed: 1,
   });
   const hunt = (id: string, target: string) => task(id, target, 'sound-hunt', 1);

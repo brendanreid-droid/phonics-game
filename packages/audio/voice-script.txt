@@ -90,6 +90,7 @@ ui.missing_letter|Which letter is missing?|||A real question, lightly asked.
 ui.which_starts|Which picture starts with this sound?|||A real question, lightly asked.
 ui.robot_listen|Listen. Which one is it?|||Slight pause after "Listen". Robot sounds follow.
 ui.sound_it_out|Tap each letter, then push them together.|||Unhurried. This explains the game.
+ui.meet_this_sound|Here is a new sound.|||Warm and slow. A letter is being introduced for the first time; the sound follows three times.
 # --- praise -----------------------------------------------------------------
 # Twelve, so a child does not hear the same one twice in a row. Vary them in the
 # booth: different energy each time, none of them shouted.

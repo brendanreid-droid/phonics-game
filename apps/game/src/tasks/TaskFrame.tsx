@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { tokens } from '@soundlings/ui';
+import { PaperGrain, SoftBackdrop } from '../art/Scenery';
 import type { HintTier } from './useHintLadder';
 
 /**
@@ -26,6 +27,10 @@ export function TaskFrame(props: {
 
   return (
     <View style={styles.screen}>
+      {/* Warmth only. The island belongs on the home screen; here the letters
+          and pictures are the content and nothing may compete with them. */}
+      <SoftBackdrop />
+      <PaperGrain />
       <View style={styles.top}>
         <Pips index={position.index} total={position.total} />
       </View>

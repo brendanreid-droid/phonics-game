@@ -3,6 +3,7 @@ import { Redirect, useFocusEffect, useRouter } from 'expo-router';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { LEVELS } from '@soundlings/curriculum';
 import { tokens } from '@soundlings/ui';
+import { IslandScene, PaperGrain } from '../src/art/Scenery';
 import { CreatureArt, EggArt } from '../src/art/creatures';
 import type { CreatureId } from '../src/art/creatures';
 import { avatarById } from '../src/profiles/avatars';
@@ -77,6 +78,10 @@ export default function Island() {
 
   return (
     <View style={styles.screen}>
+      {/* Behind everything, and not interactive. The slots and the Play button
+          must still be the first two things the eye lands on. */}
+      <IslandScene />
+      <PaperGrain />
       <View style={styles.topBar}>
         <View accessible accessibilityLabel={`${selected.name}'s island`} style={styles.who}>
           <Text style={styles.whoFace}>{avatar.emoji}</Text>
@@ -190,7 +195,19 @@ const styles = StyleSheet.create({
   },
   // A hatched friend is a raised, lit card; an egg is a flat, dashed hollow.
   // The two must differ at a glance, without reading anything.
-  slotHatched: { backgroundColor: tokens.color.tile, borderBottomWidth: 5, borderBottomColor: tokens.color.tileEdge },
+  slotHatched: {
+    backgroundColor: tokens.color.tile,
+    borderBottomWidth: 5,
+    borderBottomColor: tokens.color.tileEdge,
+    // A soft shadow, now that there is scenery behind it: the slots read as
+    // paper cards laid on the island rather than as holes cut into it, which
+    // is the collage the whole style is after.
+    shadowColor: tokens.color.ink,
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
   slotEgg: { borderWidth: 2, borderStyle: 'dashed', borderColor: tokens.color.tileEdge },
   slotName: { fontFamily: tokens.font.ui, fontSize: tokens.type.caption, color: tokens.color.ink },
   streak: { fontFamily: tokens.font.ui, fontSize: tokens.type.body, color: tokens.color.inkSoft, minHeight: 24 },

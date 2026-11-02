@@ -1,7 +1,64 @@
 # Review gate: playable Level 1, with the shell around it
 
-**Built:** Plan 1 (tasks 1–29), Plan 2 (tasks 1–10), Plan 3 (tasks 1–8), Plan 4 (the parent area) and Plan 5 (Supabase and sync).
-**Tests:** 1,787 passing across 81 files.
+**Built:** Plan 1 (tasks 1–29), Plan 2 (tasks 1–10), Plan 3 (tasks 1–8), Plan 4 (the parent area), Plan 5 (Supabase and sync) and Plan 6 (the teaching sequence rebuild).
+**Tests:** 1,858 passing across 86 files.
+
+## New in Plan 6: the quest is a lesson, not a shuffle
+
+The reported defect: *"it appears that you are still asking the child to spell words or finish words, without going through the sounds properly."* That was right, and the cause was worse than the symptom. A child met three letters at once, every one of them as a quiz, and was asked to spell `at` and `sat` in quest 2 while the first reading task did not arrive until quest 4.
+
+**Five things changed.** Oral blending (Robot Talk) and blending-as-the-mechanic (Sound It Out) were added as mini-games; a **Meet card** teaches a sound before anything tests it; and four gates now order the lesson — a word is read before it is spelt, a two-sound word comes before a three-sound one, nothing is tested before it is taught, and one new sound is introduced at a time.
+
+### What I actually saw, playing it
+
+A fresh profile, quest 1, on the web build. Every screen below was looked at, not inferred from a test.
+
+| Slot | What was on screen |
+|---|---|
+| 1 | Robot Talk. A robot, three dots, "Which one is it?", a drink and a chair. **No letters at all** — the right first screen for a child who has never played. |
+| 2 | **"A new sound" — `s` large in Andika, 🐍, "Sisi the snake", "Got it".** No choices, no owl in the corner (nothing to be stuck on). |
+| 3 | The same card for `a`, and the Andika single-storey `a` is visibly the letter a child is taught to write. |
+| 4 | "Which one says /s/?" with **exactly `a` and `s` on screen** — the two letters just taught, and nothing else. |
+| 6 | Picture Start: `s` large, a sun and an ant. Again only the two taught letters' pictures. |
+| 7 | Sound Singer: `a` large, two speaker buttons. Got it wrong, and the mnemonic 🍎 appeared as the tier-1 hint. |
+
+Quest 1 held **no `t` task at all**, though `t` is in the same introduction group and "met". That is invariant 5e in a live quest rather than in a test.
+
+Quest 2, read from the stored plan of that same child:
+
+```
+ 1 robot-talk     ORAL_BLEND    mat    ← open on a success
+ 2 sound-singer   LETTER_SOUND  s      ← revise what they know
+ 3 picture-start  LETTER_SOUND  a
+ 4 robot-talk     ORAL_BLEND    pat
+ 5 sound-hunt     SOUND_ID      a
+ 6 ── MEET t ──                        ← the new sound, after the revision
+ 7 sound-singer   LETTER_SOUND  t
+ 8 robot-talk     ORAL_BLEND    pit
+ 9 picture-start  LETTER_SOUND  t
+10 robot-talk     ORAL_BLEND    tap
+11 sound-hunt     SOUND_ID      t      ← practise it
+12 sound-singer   LETTER_SOUND  s      ← mix the old back in
+13 picture-start  LETTER_SOUND  a
+14 robot-talk     ORAL_BLEND    pat    ← close on a success
+```
+
+Revise, teach, practise, mix, close. **No spelling task anywhere**, because nothing has been read yet. The original complaint is closed in the running app, not only in the suite.
+
+**Resume was also checked**, because it was broken and the break was invisible: `isPlayablePlan` looked up the task type before the teaching-card branch, and `meet-the-sound` is deliberately not a registered type, so every stored quest containing a card was silently discarded and rebuilt from the start on each launch. After the fix: answer one task, navigate away, and the island says **"Keep going"** and resumes on **task 2 of 14** with the card intact.
+
+### Things that were wrong and are worth someone else's eyes
+
+- **`mat` is 🧘 and `fit` is 💪.** A five-year-old will say "person" and "muscle". Robot Talk is pure listening, so an unreadable picture makes a sound question into a guess. Both are placeholder emoji and this is an artwork problem, but it is a *teaching* problem until the artwork lands.
+- **Sound Singer's two speaker buttons are identical.** The child hears one, hears the other, and must remember which was which — working memory, not phonics. Sound It Out had the same defect and was given a tint per card; Sound Singer was not. It is partly mitigated (the selected card is highlighted and says "Tap it again to choose it"), but the same fix would apply.
+- **Teaching cards are silent in the stand-in voice pack.** The card says "Here is a new sound" and then the phoneme three times — and the macOS stand-in says "sss" and "tuh", the second of which is wrong in the way that matters. The card is the one screen where the sound has to be right. **Do not show this to a child until the voice is recorded.**
+
+### What to judge it on
+
+1. **Does quest 1 feel like a lesson or a shuffle?** To me it reads as a lesson — open gently, teach, practise, mix. Judge it yourself: the first five screens are the whole argument.
+2. **Is the Meet card dull enough to skip and useful enough to keep?** It is deliberately plain: a letter, a creature, four words, one button. It has no right answer and records nothing, so a child who taps straight through loses nothing but has still seen and heard the sound.
+3. **Does Sound It Out teach blending, or just look like it?** It makes the child tap each letter, push them together, then choose from *spoken* candidates — near neighbours like `sat` / `sit` / `sap`, because far-apart distractors would let a child win on the first sound alone and make the tapping decoration. It does not appear until a child can decode a word, so it is several quests in.
+4. **Is seven weeks too long?** A struggling child now needs about 47 daily quests to finish Level 1, up from 32. The rise is correct — the old number was bought by skipping the teaching — but it is the number that decides whether that child is still here at the end, and no simulation can answer it.
 
 ## New in Plan 5: progress that survives a lost device
 
@@ -67,7 +124,7 @@ No charts and no percentages anywhere, on purpose: "68% correct" reads as a scho
 
 ## New in Plan 3: a second way to prove each skill
 
-The game now has **seven mini-games**, not four. The point is the anti-memorisation guarantee: a child cannot be marked as knowing a sound, a word to read or a word to spell by learning one game's answer pattern, because mastery now needs two *different* games.
+The game now has **seven mini-games**, not four. (Plan 6 took it to nine: see above.) The point is the anti-memorisation guarantee: a child cannot be marked as knowing a sound, a word to read or a word to spell by learning one game's answer pattern, because mastery now needs two *different* games.
 
 - **Word Pick** (reading). A picture, and three *written words* to choose from. It runs the opposite way to Picture Match, and its wrong words share the right word's first letter (`mat` against `map`), so matching the first letter and guessing does not work: the child has to read to the end. The word is never spoken.
 - **Missing Letter** (spelling). Hear "mat", see `m _ t`, tap the missing letter. It asks for the **vowel in the middle** about 70% of the time. Word Builder lets a child reach the vowel by elimination, placing the two consonants they are sure of until the vowel drops into the last gap without ever being chosen; this game removes that escape. Only the letter the child chose counts as evidence for that sound, not the letters they were shown.
@@ -165,7 +222,8 @@ Two places where it is legible:
 
 ```bash
 npx vitest run packages/engine          # the invariants, in plain language
-npx vitest run packages/engine/src/simulate.test.ts   # pacing for four kinds of learner, now with seven mini-games
+npx vitest run packages/engine/src/simulate.test.ts   # pacing for four kinds of learner, re-measured after Plan 6
+npx vitest run packages/engine/src/trace.test.ts     # prints the first ten quests in order, and asserts the teaching order
 ```
 
 Measured pacing, 30 simulated children per profile, one quest per day:

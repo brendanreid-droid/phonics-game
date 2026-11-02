@@ -37,7 +37,8 @@ npm run typecheck
 
 - **[The spec](docs/superpowers/specs/2026-10-10-soundlings-phonics-game-design.md)** — the design, and every decision's reasoning. It records what was got wrong as well as what was got right, because several things were only correct on the second or third attempt.
 - **[The review gate](docs/REVIEW-GATE.md)** — what to try, what to listen for, and what is deliberately unfinished.
-- **[Plan 1](docs/superpowers/plans/2026-10-10-soundlings-level-1.md)** and **[Plan 2](docs/superpowers/plans/2026-10-10-soundlings-plan-2-shell.md)** — the implementation plans, with amendment tables recording where the original instructions turned out to be wrong.
+- **[Plan 1](docs/superpowers/plans/2026-10-10-soundlings-level-1.md)**, **[Plan 2](docs/superpowers/plans/2026-10-10-soundlings-plan-2-shell.md)** and **[Plan 6](docs/superpowers/plans/2026-10-15-soundlings-plan-6-teaching-sequence.md)** — the implementation plans, with amendment tables recording where the original instructions turned out to be wrong.
+- **`npx vitest run packages/engine/src/trace.test.ts`** — prints the first ten quests a real child would be given, in order, and asserts the teaching order across them. The sequence was wrong for weeks while every test passed; this is the artefact that would have shown it.
 
 Three principles that look like fussiness and are not:
 

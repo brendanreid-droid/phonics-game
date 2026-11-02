@@ -28,6 +28,9 @@ export function masteredSounds(ids: readonly string[], at: number): MasteryMap {
 /** Every Level 1 requirement met at `at`. */
 export function masteredLevelOne(at: number): MasteryMap {
   const mastery = masteredSounds(['s', 'a', 't', 'p', 'i', 'm', 'f'], at);
+  // Oral blending is a quota of its own (spec §5.7): a child who cannot hear
+  // /p/-/a/-/t/ as "pat" has not finished the level, however well they decode.
+  for (const w of ['pat', 'tap', 'pit']) mastered(mastery, w, 'ORAL_BLEND', at);
   for (const w of ['pat', 'tap', 'pit', 'sit', 'sip', 'pip']) mastered(mastery, w, 'BLEND_READ', at);
   for (const w of ['sat', 'tip', 'sap', 'mat', 'map']) mastered(mastery, w, 'SEGMENT_SPELL', at);
   return mastery;

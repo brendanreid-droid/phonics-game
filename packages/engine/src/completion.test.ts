@@ -47,9 +47,14 @@ const GRAPHEMES = ['s', 'a', 't', 'p', 'i', 'm', 'f'];
 const graphemeEntries = (ids: string[] = GRAPHEMES): Entry[] =>
   ids.flatMap((g) => [mastered(g, 'SOUND_ID'), mastered(g, 'LETTER_SOUND')]);
 
-// Exactly the quota: six of the nine picturable words, and five spellable ones.
+// Exactly the quota: three picturable words blended orally, six of the nine
+// read, and five spelt.
+const ORAL_WORDS = ['pat', 'tap', 'pit'];
 const BLEND_WORDS = ['pat', 'tap', 'pit', 'sit', 'sip', 'pip'];
 const SPELL_WORDS = ['sat', 'tip', 'sap', 'mat', 'map'];
+// Robot Talk shows pictures, so oral blending is drawn from the picturable
+// words like reading is.
+const oralEntries = (ids: string[]): Entry[] => ids.map((w) => mastered(w, 'ORAL_BLEND'));
 const blendEntries = (ids: string[]): Entry[] => ids.map((w) => mastered(w, 'BLEND_READ'));
 const spellEntries = (ids: string[]): Entry[] => ids.map((w) => mastered(w, 'SEGMENT_SPELL'));
 
@@ -123,7 +128,7 @@ describe('a grapheme counts only when both sound skills are mastered', () => {
   });
 });
 
-describe('the three completion quotas', () => {
+describe('the four completion quotas', () => {
   const allGraphemes = graphemeEntries();
 
   it('is not complete with every grapheme but no words', () => {
@@ -132,13 +137,33 @@ describe('the three completion quotas', () => {
     expect(progress.complete).toBe(false);
   });
 
-  it('is complete when graphemes, blend words and spelling words all clear', () => {
-    const entries = [...allGraphemes, ...blendEntries(BLEND_WORDS), ...spellEntries(SPELL_WORDS)];
+  it('is complete when graphemes, oral words, blend words and spelling words all clear', () => {
+    const entries = [
+      ...allGraphemes, ...oralEntries(ORAL_WORDS), ...blendEntries(BLEND_WORDS), ...spellEntries(SPELL_WORDS),
+    ];
     const progress = levelProgress(1, mapOf(entries), NOW);
     expect(progress.graphemesMastered).toBe(7);
+    expect(progress.oralWordsMastered).toBe(3);
     expect(progress.blendWordsMastered).toBe(6);
     expect(progress.segmentWordsMastered).toBe(5);
     expect(progress.complete).toBe(true);
+  });
+
+  it('is not complete one oral word short, however well the child reads', () => {
+    // Spec §5.7 lists oral blending FIRST, and this is what that means: a child
+    // who can decode every word in the level but cannot hear /m/-/a/-/p/ as
+    // "map" has not finished it. Hearing the sounds in a word is the ability
+    // that makes print worth decoding; without it the reading is shape
+    // matching, and passing them would be certifying the shape matching.
+    const entries = [
+      ...allGraphemes,
+      ...oralEntries(ORAL_WORDS.slice(0, 2)),
+      ...blendEntries([...BLEND_WORDS, 'fit', 'mat', 'map']),
+      ...spellEntries([...SPELL_WORDS, 'sam', 'pam', 'fat']),
+    ];
+    const progress = levelProgress(1, mapOf(entries), NOW);
+    expect(progress.oralWordsMastered).toBe(2);
+    expect(progress.complete).toBe(false);
   });
 
   it('is not complete one grapheme short', () => {
@@ -153,14 +178,14 @@ describe('the three completion quotas', () => {
   });
 
   it('is not complete one blend word short', () => {
-    const entries = [...allGraphemes, ...blendEntries(BLEND_WORDS.slice(0, 5)), ...spellEntries(SPELL_WORDS)];
+    const entries = [...allGraphemes, ...oralEntries(ORAL_WORDS), ...blendEntries(BLEND_WORDS.slice(0, 5)), ...spellEntries(SPELL_WORDS)];
     const progress = levelProgress(1, mapOf(entries), NOW);
     expect(progress.blendWordsMastered).toBe(5);
     expect(progress.complete).toBe(false);
   });
 
   it('is not complete one spelling word short', () => {
-    const entries = [...allGraphemes, ...blendEntries(BLEND_WORDS), ...spellEntries(SPELL_WORDS.slice(0, 4))];
+    const entries = [...allGraphemes, ...oralEntries(ORAL_WORDS), ...blendEntries(BLEND_WORDS), ...spellEntries(SPELL_WORDS.slice(0, 4))];
     const progress = levelProgress(1, mapOf(entries), NOW);
     expect(progress.segmentWordsMastered).toBe(4);
     expect(progress.complete).toBe(false);
@@ -174,6 +199,7 @@ describe('the three completion quotas', () => {
   it('still counts words beyond the quota', () => {
     const entries = [
       ...allGraphemes,
+      ...oralEntries([...ORAL_WORDS, 'sit']),
       ...blendEntries([...BLEND_WORDS, 'fit', 'mat', 'map']),
       ...spellEntries([...SPELL_WORDS, 'sam', 'pam', 'fat']),
     ];
@@ -184,20 +210,32 @@ describe('the three completion quotas', () => {
   });
 
   it('reads the word quotas from config', () => {
-    const entries = [...allGraphemes, ...blendEntries(BLEND_WORDS.slice(0, 2)), ...spellEntries(SPELL_WORDS.slice(0, 1))];
+    const entries = [
+      ...allGraphemes, ...oralEntries(ORAL_WORDS.slice(0, 1)),
+      ...blendEntries(BLEND_WORDS.slice(0, 2)), ...spellEntries(SPELL_WORDS.slice(0, 1)),
+    ];
     expect(levelProgress(1, mapOf(entries), NOW).complete).toBe(false);
-    const relaxed = levelProgress(1, mapOf(entries), NOW, { blendWordsRequired: 2, segmentWordsRequired: 1 });
+    const relaxed = levelProgress(1, mapOf(entries), NOW, {
+      oralBlendRequired: 1, blendWordsRequired: 2, segmentWordsRequired: 1,
+    });
+    expect(relaxed.oralWordsRequired).toBe(1);
     expect(relaxed.blendWordsRequired).toBe(2);
     expect(relaxed.segmentWordsRequired).toBe(1);
     expect(relaxed.complete).toBe(true);
   });
 
   it('each word quota is enforced independently under a custom config', () => {
-    const entries = [...allGraphemes, ...blendEntries(BLEND_WORDS.slice(0, 2)), ...spellEntries(SPELL_WORDS.slice(0, 1))];
-    const config = { blendWordsRequired: 3, segmentWordsRequired: 1 };
-    expect(levelProgress(1, mapOf(entries), NOW, config).complete).toBe(false);
-    const config2 = { blendWordsRequired: 2, segmentWordsRequired: 2 };
-    expect(levelProgress(1, mapOf(entries), NOW, config2).complete).toBe(false);
+    const entries = [
+      ...allGraphemes, ...oralEntries(ORAL_WORDS.slice(0, 1)),
+      ...blendEntries(BLEND_WORDS.slice(0, 2)), ...spellEntries(SPELL_WORDS.slice(0, 1)),
+    ];
+    for (const config of [
+      { oralBlendRequired: 1, blendWordsRequired: 3, segmentWordsRequired: 1 },
+      { oralBlendRequired: 1, blendWordsRequired: 2, segmentWordsRequired: 2 },
+      { oralBlendRequired: 2, blendWordsRequired: 2, segmentWordsRequired: 1 },
+    ]) {
+      expect(levelProgress(1, mapOf(entries), NOW, config).complete, JSON.stringify(config)).toBe(false);
+    }
   });
 });
 
@@ -207,8 +245,24 @@ describe('which records count towards which quota', () => {
       mastered('pat', 'SEGMENT_SPELL'),
       mastered('tap', 'SOUND_ID'),
       mastered('pit', 'LETTER_SOUND'),
+      mastered('sit', 'ORAL_BLEND'),
     ];
     expect(levelProgress(1, mapOf(entries), NOW).blendWordsMastered).toBe(0);
+  });
+
+  it('counts an oral word only through ORAL_BLEND: reading it is not hearing it', () => {
+    // The whole reason oral blending is a separate skill. A child who can
+    // decode `pat` from its letters has not shown they can hear /p/-/a/-/t/
+    // said aloud and know what it is.
+    const entries = [mastered('pat', 'BLEND_READ'), mastered('tap', 'SEGMENT_SPELL')];
+    expect(levelProgress(1, mapOf(entries), NOW).oralWordsMastered).toBe(0);
+  });
+
+  it('does not count a word with no picture as an oral word', () => {
+    // Robot Talk shows pictures to choose between, so a word without one
+    // cannot be asked orally any more than it can be asked by Picture Match.
+    const entries = [mastered('sat', 'ORAL_BLEND')];
+    expect(levelProgress(1, mapOf(entries), NOW).oralWordsMastered).toBe(0);
   });
 
   it('counts a spelling word only through SEGMENT_SPELL', () => {
@@ -241,6 +295,7 @@ describe('which records count towards which quota', () => {
 describe('mastery is judged at the time asked', () => {
   const everything = [
     ...graphemeEntries(),
+    ...oralEntries(ORAL_WORDS),
     ...blendEntries(BLEND_WORDS),
     ...spellEntries(SPELL_WORDS),
   ];
@@ -254,6 +309,7 @@ describe('mastery is judged at the time asked', () => {
     // that wants "has ever completed" must latch it; see the report.
     const later = levelProgress(1, mapOf(everything), NOW + 5000 * HOUR);
     expect(later.graphemesMastered).toBe(0);
+    expect(later.oralWordsMastered).toBe(0);
     expect(later.blendWordsMastered).toBe(0);
     expect(later.segmentWordsMastered).toBe(0);
     expect(later.complete).toBe(false);
@@ -282,20 +338,28 @@ describe('each skill of a grapheme is judged at the time asked', () => {
 });
 
 describe('fraction', () => {
-  it('weights graphemes, blend words and spelling words equally', () => {
+  // FOUR parts now, not three: oral blending joined the quotas (spec §5.7), so
+  // each is a quarter of the bar rather than a third.
+  const PARTS = 4;
+
+  it('weights graphemes, oral words, blend words and spelling words equally', () => {
     const one = levelProgress(1, mapOf(graphemeEntries(['s'])), NOW);
-    expect(one.fraction).toBeCloseTo(1 / 7 / 3, 10);
+    expect(one.fraction).toBeCloseTo(1 / 7 / PARTS, 10);
+
+    const oralThird = levelProgress(1, mapOf(oralEntries(ORAL_WORDS.slice(0, 1))), NOW);
+    expect(oralThird.fraction).toBeCloseTo(1 / 3 / PARTS, 10);
 
     const blendHalf = levelProgress(1, mapOf(blendEntries(BLEND_WORDS.slice(0, 3))), NOW);
-    expect(blendHalf.fraction).toBeCloseTo(0.5 / 3, 10);
+    expect(blendHalf.fraction).toBeCloseTo(0.5 / PARTS, 10);
 
     const spellFifth = levelProgress(1, mapOf(spellEntries(SPELL_WORDS.slice(0, 1))), NOW);
-    expect(spellFifth.fraction).toBeCloseTo(0.2 / 3, 10);
+    expect(spellFifth.fraction).toBeCloseTo(0.2 / PARTS, 10);
   });
 
   it('is exactly 1 when complete, and never exceeds 1 with surplus words', () => {
     const entries = [
       ...graphemeEntries(),
+      ...oralEntries([...ORAL_WORDS, 'sit']),
       ...blendEntries([...BLEND_WORDS, 'fit', 'mat', 'map']),
       ...spellEntries([...SPELL_WORDS, 'sam', 'pam', 'fat']),
     ];
@@ -303,7 +367,10 @@ describe('fraction', () => {
   });
 
   it('is below 1 whenever the level is not complete', () => {
-    const entries = [...graphemeEntries(), ...blendEntries(BLEND_WORDS), ...spellEntries(SPELL_WORDS.slice(0, 4))];
+    const entries = [
+      ...graphemeEntries(), ...oralEntries(ORAL_WORDS),
+      ...blendEntries(BLEND_WORDS), ...spellEntries(SPELL_WORDS.slice(0, 4)),
+    ];
     const progress = levelProgress(1, mapOf(entries), NOW);
     expect(progress.complete).toBe(false);
     expect(progress.fraction).toBeGreaterThan(0.9);

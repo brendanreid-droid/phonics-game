@@ -245,15 +245,24 @@ export function isPlayablePlan(plan: readonly TaskInstance[]): boolean {
   if (plan.length === 0) return false;
   return plan.every((task) => {
     try {
-      const type = TASK_TYPES.find((t) => t.id === task.taskTypeId);
-      if (!type || type.skill !== task.skill) return false;
       if (typeof task.id !== 'string' || typeof task.primaryTarget !== 'string') return false;
       if (task.kind === 'meet') {
         // A teaching card has no choices and no right answer, so every check
         // below would reject it. All it needs is a real grapheme to show.
+        //
+        // Checked BEFORE the task type is looked up, and that order matters:
+        // `meet-the-sound` is deliberately not a registered task type, because
+        // it is not a mini-game and must never be scheduled as one. What
+        // renders a card is `kind`, which the quest screen reads before it
+        // looks at the type at all — so requiring a registered type here was
+        // checking a field nothing reads, and it rejected every stored quest
+        // that contained a card. The child's quest was silently discarded and
+        // rebuilt from the start on every launch.
         getGrapheme(task.primaryTarget);
         return true;
       }
+      const type = TASK_TYPES.find((t) => t.id === task.taskTypeId);
+      if (!type || type.skill !== task.skill) return false;
       if (!Array.isArray(task.choices) || !task.choices.every((c) => typeof c === 'string')) return false;
       if (!Array.isArray(task.secondaryTargets)) return false;
       if (typeof task.correctChoice !== 'string') return false;

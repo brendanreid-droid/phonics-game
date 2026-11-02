@@ -56,6 +56,14 @@ function playQuests(options: {
     bySession.set(sessionId, []);
 
     for (const task of plan) {
+      // A teaching card is acknowledged, never answered — the quest runner
+      // advances past it without recording anything. Scoring one here would
+      // put evidence into the log that the real game can never produce, and
+      // `attemptsForTask` throws rather than let that happen.
+      if (task.kind === 'meet') {
+        now += 2500 + Math.floor(rng() * 9000);
+        continue;
+      }
       now += 2500 + Math.floor(rng() * 9000);
       const slip = options.slipRates?.[q - 1] ?? 0.45;
       const roll = rng();
@@ -328,11 +336,18 @@ function starsOf(attempts: readonly Attempt[]): number {
   });
 }
 
-/** One finished 14-task quest with every task answered cleanly first time. */
+/**
+ * One finished quest with every task answered cleanly first time.
+ *
+ * The teaching cards are dropped: they are acknowledged rather than answered,
+ * so they contribute nothing to a log and nothing to a star rating.
+ */
 function flawlessQuest(): Attempt[] {
   const sessionId = 'kid-flawless';
   let mastery: MasteryMap = {};
-  const plan = buildSession({ sessionId, level: 1, mastery, confusions: {}, now: DAY0, config: CONFIG });
+  const plan = buildSession({
+    sessionId, level: 1, mastery, confusions: {}, now: DAY0, config: CONFIG,
+  }).filter((task) => task.kind !== 'meet');
   const log: Attempt[] = [];
   let at = DAY0;
   for (const task of plan) {

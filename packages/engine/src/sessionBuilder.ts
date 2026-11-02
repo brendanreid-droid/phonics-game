@@ -14,6 +14,7 @@ import { blankPositionFor } from './missingLetter';
 import { hasInitialPicture } from './pictureStart';
 import { getRecord, isMastered, strengthAt } from './mastery';
 import { graphemesMetAt, wordsDecodableFrom } from './metGraphemes';
+import { readyForThreeSounds, readyToSpell } from './readiness';
 import { deriveSeed, makeRng, seedFromString, shuffle } from './rng';
 import type { Rng } from './rng';
 import { difficultyFor } from './difficulty';
@@ -137,6 +138,119 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
   const { pairings, blendWordIds, oralWordIds } = teachable(level, metGraphemeIds, usableSkills, mastery, config);
   if (pairings.length === 0) throw new Error(`No teachable pairings at level ${level}`);
 
+  // --- the lesson's shape: one new sound at a time (invariant 5e) ----------
+  //
+  // A quest is not a shuffle of everything in focus. It is a lesson: meet a
+  // letter, practise it, meet the next, mix the two. So the focus GROWS across
+  // the quest, and a letter the child has not met yet may not appear anywhere
+  // before its teaching card — not as a target and not as a wrong answer.
+  //
+  // `pending` is every focus letter the child has not been shown. The quest
+  // introduces as many as it has room for; the rest stay invisible until a
+  // later quest, which is why the forbidden set below is sliced from `pending`
+  // and not from the ones being introduced today. Slicing it from today's
+  // introductions would have left the third letter of the group free to turn
+  // up as a distractor in a quest that never taught it.
+  const introduced = introducedGraphemes(focusGraphemes, mastery, config);
+  const pending = focusGraphemes.filter((g) => !introduced.includes(g));
+  // Each introduction costs its teaching card plus `introPracticeCount` slots
+  // of practice. Two fit in a 14-task quest, which is the pace the config
+  // argues for.
+  const roomForIntroductions = Math.floor(length / (1 + config.introPracticeCount));
+  // A child with no letter yet gets one however short the quest is. Without
+  // this, a four-slot quest for a brand-new child had no room for an
+  // introduction, every letter was therefore still untaught and so unusable,
+  // and the only legal game was Robot Talk — four of them in a row. One letter
+  // and two tasks on it is a lesson; four identical screens is not.
+  // How many letters have to be taught before a letter QUESTION can be asked
+  // at all. Every letter game is multiple choice, so one taught letter is not
+  // a question: it is a card with a single answer on it.
+  //
+  // This is why a child's very first lesson introduces a PAIR. `s` and `a` are
+  // the first two of the Australian sequence for exactly this reason — one
+  // letter cannot be contrasted with anything, and `s a t` makes `sat`. After
+  // the first pair, one at a time: by then the letters already taught supply
+  // the wrong answers.
+  const letterTypes = usable.filter((t) => t.skill === 'SOUND_ID' || t.skill === 'LETTER_SOUND');
+  const lettersForAQuestion = letterTypes.length === 0 ? 0 : Math.min(...letterTypes.map((t) => t.minChoices));
+  const lettersAfter = (taughtSoFar: number): number => {
+    const hidden = new Set(pending.slice(taughtSoFar));
+    return metGraphemeIds.filter((g) => !hidden.has(g)).length;
+  };
+  let opening = 0;
+  while (opening < pending.length && lettersAfter(opening) < lettersForAQuestion) opening += 1;
+
+  const mustIntroduce =
+    introduced.length === 0 && pending.length > 0 ? Math.min(pending.length, Math.max(1, opening)) : 0;
+  // No SECOND new sound while the frustration guard is capping difficulty. The
+  // guard caps after a child has failed a task repeatedly and been shown the
+  // answer, and the response to that is to go back to what they know. The
+  // first letter is still given: a capped child who has met nothing has no
+  // other legal work at all, so withholding it would leave them a quest of
+  // Robot Talk and nothing else.
+  //
+  // A short session alone (`length`) is not the same signal as a cap: that is
+  // a gentler day, and a teaching card is the gentlest screen there is.
+  const wantedMeets = Math.min(
+    pending.length,
+    args.maxDifficulty === undefined ? Math.max(mustIntroduce, roomForIntroductions) : mustIntroduce,
+  );
+  // Slot 1, not slot 0: the first slot is the quest's opening anchor
+  // (invariant 1) — a guaranteed success before anything new is asked of the
+  // child. For a brand-new child that is Robot Talk, which has no letters on
+  // screen at all, so it is the one task that can legally come before the very
+  // first teaching card.
+  //
+  // Positions past the end are dropped, and at least one task slot is kept: a
+  // one-slot quest is a task, not a card on its own, and a quest of nothing but
+  // teaching cards would record no evidence and could never end.
+  // The opening block sits back to back — "here is /s/", "here is /a/" — and
+  // every introduction after it is spaced by its practice.
+  const meetAt = Array.from({ length: wantedMeets }, (_, k) =>
+    k < opening
+      ? 1 + k
+      : // Past the opening block, each introduction follows its predecessor's
+        // practice. The `+ introPracticeCount` is what puts the practice
+        // BEFORE the next card rather than after it: without it, an opening
+        // block of one was followed immediately by a second card, and a child
+        // met two letters in a row having practised neither.
+        opening + 1 + config.introPracticeCount + (k - opening) * (1 + config.introPracticeCount),
+  )
+    .filter((position) => position < length)
+    .slice(0, Math.max(0, length - 1));
+  const meetCount = meetAt.length;
+  const taskLength = length - meetCount;
+
+  /**
+   * Letters not yet taught at this point in the quest, by task slot index.
+   *
+   * Indexed by position in the TASK sequence, before the teaching cards are
+   * spliced in: the search and the pairing picks all work in that space.
+   */
+  const forbiddenBySlot: ReadonlySet<GraphemeId>[] = Array.from({ length: taskLength }, (_, slot) => {
+    let met = 0;
+    let position = slot;
+    for (const at of meetAt) {
+      if (at <= position) {
+        met += 1;
+        position += 1;
+      }
+    }
+    return new Set(pending.slice(met));
+  });
+  const emptySet: ReadonlySet<GraphemeId> = new Set();
+
+  /** Does this pairing put a not-yet-taught letter on the screen? */
+  const touchesForbidden = (p: Pairing, forbidden: ReadonlySet<GraphemeId>): boolean => {
+    if (forbidden.size === 0) return false;
+    // Oral blending shows no letters, so no letter it involves is on screen.
+    // Gating it would stall the one stage that is meant to run from day one.
+    if (p.skill === 'ORAL_BLEND') return false;
+    if (!targetsWord(p.skill)) return forbidden.has(p.targetId as GraphemeId);
+    return getWord(p.targetId).graphemes.some((g) => forbidden.has(g));
+  };
+  const allowedAt = (slot: number) => (p: Pairing) => !touchesForbidden(p, forbiddenBySlot[slot]);
+
   // Whether a task type can actually be built for a pairing. A skill match is
   // not enough for a game that only works for some targets (`canServeTarget`),
   // or that needs something of the child's state: Picture Start needs pictures
@@ -155,21 +269,58 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
       ),
     ),
   );
-  const canBuild = (type: TaskTypeMeta, p: Pairing): boolean => {
+  const canBuild = (
+    type: TaskTypeMeta,
+    p: Pairing,
+    forbidden: ReadonlySet<GraphemeId> = emptySet,
+  ): boolean => {
     if (type.skill !== p.skill) return false;
     if (type.canServeTarget !== undefined && !type.canServeTarget(p.targetId)) return false;
     // The cap is exact here rather than at the type level, because difficulty
     // depends on the word: `word-builder` on `at` may be allowed where the same
     // game on `sat` is not.
     if (difficultyFor(type.id, p.targetId) > cap) return false;
-    if (type.id === 'picture-start') {
-      const wrong = metGraphemeIds.filter((g) => g !== p.targetId && hasInitialPicture(g));
+    if (type.skill === 'SOUND_ID' || type.skill === 'LETTER_SOUND') {
+      // The wrong answers must be letters the child has MET, which early in a
+      // quest is fewer than the ones they have met overall: a child who has
+      // just been shown `s` and nothing else cannot be offered a choice
+      // between `s` and `a`. Without this, the first lesson asked "which one
+      // says /s/?" over a single card.
+      //
+      // Picture Start draws each letter as one of its own start pictures, so
+      // its wrong answers must also HAVE one.
+      const wrong = metGraphemeIds.filter(
+        (g) =>
+          g !== p.targetId &&
+          !forbidden.has(g) &&
+          (type.id !== 'picture-start' || hasInitialPicture(g)),
+      );
       return wrong.length >= type.minChoices - 1;
+    }
+    // Picture Match shows pictures and Word Pick shows written words, so both
+    // need enough OTHER words the child may be shown in print. Sound It Out is
+    // absent on purpose: its candidates are spoken and come from the whole
+    // level, so it can always make a question (see `makeTask`).
+    if (type.id === 'picture-match' || type.id === 'word-pick') {
+      const others = blendWordIds.filter(
+        (id) =>
+          id !== p.targetId &&
+          getWord(id).picture !== undefined &&
+          // `forbidden` holds LETTERS, so a word is excluded when one of its
+          // letters has not been taught yet — not by its own id.
+          getWord(id).graphemes.every((g) => !forbidden.has(g)),
+      );
+      return others.length >= type.minChoices - 1;
     }
     return true;
   };
   const buildableIn = (pool: readonly Pairing[]): TaskTypeMeta[] =>
     usable.filter((type) => pool.some((p) => canBuild(type, p)));
+  /** Which task types a given slot could hold, given what has been taught by then. */
+  const buildableAt = (slot: number, pool: readonly Pairing[]): TaskTypeMeta[] => {
+    const forbidden = forbiddenBySlot[slot];
+    return usable.filter((type) => pool.some((p) => canBuild(type, p, forbidden) && allowedAt(slot)(p)));
+  };
 
   const unmastered = pairings.filter((p) => !masteredPair(p));
   const mastered = pairings.filter(masteredPair);
@@ -222,9 +373,9 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
     rankByUrgency(pairings.filter((p) => !inReviewSource.has(p)), mastery, now, config),
   ];
 
-  const anchorCount = Math.min(config.winbackCount, length);
-  const reviewCount = Math.min(config.reviewCount, length - anchorCount);
-  const fillerCount = length - anchorCount;
+  const anchorCount = Math.min(config.winbackCount, taskLength);
+  const reviewCount = Math.min(config.reviewCount, taskLength - anchorCount);
+  const fillerCount = taskLength - anchorCount;
   const focusCount = fillerCount - reviewCount;
 
   const winbackMode = winbackPool.length >= MIN_WINBACK_TARGETS;
@@ -259,6 +410,16 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
         // skill supplies exactly one task type, and a short quest opened and
         // closed on the same mini-game.
         { open: winbackTypes, mid: winbackTypes, close: lowestTwo(typesOf(pairings)), closeOnPractised: false, strict: true },
+        // Broaden the OPEN too. A win-back's task types are judged against the
+        // whole quest, but the opening slot comes before any teaching card, so
+        // early in a lesson it may be able to hold none of them: a child with
+        // one letter mastered and the next two not yet taught had an anchor
+        // pool of letter games and an opening slot where no letter was legal,
+        // and the builder reported that no arrangement exists. The pairing pick
+        // already falls back from the win-back pool to the whole pairing set
+        // and labels the band by what it actually got, so this rung is the
+        // arrangement catching up with it.
+        { open: lowestTwo(typesOf(pairings)), mid: lowestTwo(typesOf(pairings)), close: lowestTwo(typesOf(pairings)), closeOnPractised: false, strict: true },
         { open: winbackTypes, mid: winbackTypes, close: winbackTypes, closeOnPractised: false, strict: false },
       ]
     : [
@@ -279,29 +440,55 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
 
   // Which task types each band can supply, by id rather than by skill: two types
   // of one skill need not be able to serve the same targets.
-  const typeIdsOf = (tiers: readonly (readonly Pairing[])[]) => new Set(buildableIn(tiers.flat()).map((t) => t.id));
-  const focusTypes = typeIdsOf(focusTiers);
-  const reviewTypes = typeIdsOf(reviewTiers);
-  const fillerTypes = usable.filter((t) => focusTypes.has(t.id) || reviewTypes.has(t.id));
+  //
+  // Per slot, not once for the quest. Early slots have fewer letters taught, so
+  // they can hold fewer games: a slot before the first teaching card cannot
+  // hold Sound Hunt at all for a brand-new child, because there is no letter it
+  // would be allowed to ask about. Computing this once and reusing it is how
+  // the search would come back with an arrangement the pairing picks then
+  // cannot fill, and throw mid-quest.
+  const typeIdsAt = (slot: number, tiers: readonly (readonly Pairing[])[]) =>
+    new Set(buildableAt(slot, tiers.flat()).map((t) => t.id));
+  const slotIndices = Array.from({ length: taskLength }, (_, i) => i);
+  const focusIdsBySlot = slotIndices.map((slot) => typeIdsAt(slot, focusTiers));
+  const reviewIdsBySlot = slotIndices.map((slot) => typeIdsAt(slot, reviewTiers));
+  const fillerTypesBySlot = slotIndices.map((slot) =>
+    usable.filter((t) => focusIdsBySlot[slot].has(t.id) || reviewIdsBySlot[slot].has(t.id)),
+  );
+  // Anchors may fall back to the whole pairing set (see the pick below), so
+  // their availability is judged against it rather than against the anchor pool.
+  const anchorIdsBySlot = slotIndices.map((slot) => new Set(buildableAt(slot, pairings).map((t) => t.id)));
 
   // Can the open anchor's skill be followed by a close of skill `close` on the
   // same target? That is what guarantees the closing target was asked earlier.
-  const closeCompatible = (open: TaskTypeMeta, close: TaskTypeMeta): boolean =>
-    anchorPool.some(
-      (p) => canBuild(open, p) && pairings.some((q) => q.targetId === p.targetId && canBuild(close, q)),
+  const closeCompatible = (open: TaskTypeMeta, close: TaskTypeMeta, slot: number): boolean => {
+    const openForbidden = forbiddenBySlot[0];
+    const closeForbidden = forbiddenBySlot[slot];
+    return anchorPool.some(
+      (p) =>
+        canBuild(open, p, openForbidden) &&
+        !touchesForbidden(p, openForbidden) &&
+        pairings.some(
+          (q) =>
+            q.targetId === p.targetId &&
+            canBuild(close, q, closeForbidden) &&
+            !touchesForbidden(q, closeForbidden),
+        ),
     );
+  };
 
   let skeleton: TaskTypeMeta[] | null = null;
   let rules: AnchorRules = ladder[0];
   let middle = -1;
   search: for (const attempt of ladder) {
-    for (const mid of middleSlots(length, anchorCount)) {
+    for (const mid of middleSlots(taskLength, anchorCount)) {
       skeleton = searchSkeleton({
-        length,
-        anchors: anchorRulesBySlot(length, anchorCount, mid, attempt),
-        fillerTypes,
-        focusTypes,
-        reviewTypes,
+        length: taskLength,
+        anchors: anchorRulesBySlot(taskLength, anchorCount, mid, attempt),
+        fillerTypesAt: (slot) => fillerTypesBySlot[slot],
+        focusTypesAt: (slot) => focusIdsBySlot[slot],
+        reviewTypesAt: (slot) => reviewIdsBySlot[slot],
+        anchorAllowedAt: (slot, type) => anchorIdsBySlot[slot].has(type.id),
         focusSlots: focusCount,
         reviewSlots: reviewCount,
         strict: attempt.strict,
@@ -320,14 +507,20 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
   // --- assign a pairing to every slot -------------------------------------
   const usage = new Map<string, number>();
   const pick = (
+    slot: number,
     tiers: readonly (readonly Pairing[])[],
     type: TaskTypeMeta,
     preferProven: boolean,
     only?: (p: Pairing) => boolean,
   ): Pairing => {
+    const forbidden = forbiddenBySlot[slot];
     const candidates =
       tiers
-        .map((tier) => tier.filter((p) => canBuild(type, p) && (only?.(p) ?? true)))
+        .map((tier) =>
+          tier.filter(
+            (p) => canBuild(type, p, forbidden) && !touchesForbidden(p, forbidden) && (only?.(p) ?? true),
+          ),
+        )
         .find((tier) => tier.length > 0) ?? [];
     if (candidates.length === 0) throw new Error(`No ${type.skill} pairing available for ${type.id}`);
     const used = (p: Pairing) => usage.get(`${p.targetId}::${p.skill}`) ?? 0;
@@ -344,9 +537,9 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
   };
 
   interface Slot { pairing: Pairing; type: TaskTypeMeta; band: SessionBand; anchor: boolean }
-  const slots: (Slot | undefined)[] = new Array(length).fill(undefined);
-  const anchorSlots = anchorRulesBySlot(length, anchorCount, middle, rules);
-  const closeSlot = length - 1;
+  const slots: (Slot | undefined)[] = new Array(taskLength).fill(undefined);
+  const anchorSlots = anchorRulesBySlot(taskLength, anchorCount, middle, rules);
+  const closeSlot = taskLength - 1;
   const closeIsPractised = rules.closeOnPractised && anchorCount >= 2 && anchorSlots.has(closeSlot);
   const anchorBand: SessionBand = winbackMode ? 'winback' : 'focus';
 
@@ -364,11 +557,18 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
     // restricting the pick to win-backs then left it with nothing: a quest for
     // a child whose only mastered material was two sounds crashed outright.
     const pairing = pick(
+      slot,
       [anchorPool, pairings],
       type,
       true,
       closeIsPractised && slot === 0
-        ? (p) => pairings.some((q) => q.targetId === p.targetId && canBuild(closeType, q))
+        ? (p) =>
+            pairings.some(
+              (q) =>
+                q.targetId === p.targetId &&
+                canBuild(closeType, q, forbiddenBySlot[closeSlot]) &&
+                !touchesForbidden(q, forbiddenBySlot[closeSlot]),
+            )
         : undefined,
     );
     slots[slot] = {
@@ -389,8 +589,8 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
   const flexible: number[] = [];
   let reviewLeft = reviewCount;
   for (const i of fillerSlots) {
-    const inFocus = focusTypes.has(skeleton[i].id);
-    const inReview = reviewTypes.has(skeleton[i].id);
+    const inFocus = focusIdsBySlot[i].has(skeleton[i].id);
+    const inReview = reviewIdsBySlot[i].has(skeleton[i].id);
     if (inFocus && inReview) flexible.push(i);
     else if (inReview) { bandOf.set(i, 'review'); reviewLeft -= 1; } else bandOf.set(i, 'focus');
   }
@@ -399,7 +599,12 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
   const review = new Set<number>();
   for (const p of reviewSource) {
     if (review.size >= reviewLeft) break;
-    const slot = flexible.find((i) => !review.has(i) && canBuild(skeleton[i], p));
+    const slot = flexible.find(
+      (i) =>
+        !review.has(i) &&
+        canBuild(skeleton[i], p, forbiddenBySlot[i]) &&
+        !touchesForbidden(p, forbiddenBySlot[i]),
+    );
     if (slot !== undefined) review.add(slot);
   }
   for (const i of shuffle(flexible.filter((j) => !review.has(j)), rng)) {
@@ -410,7 +615,7 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
   for (const i of fillerSlots) {
     const band = bandOf.get(i) as SessionBand;
     slots[i] = {
-      pairing: pick(band === 'review' ? reviewTiers : focusTiers, skeleton[i], false),
+      pairing: pick(i, band === 'review' ? reviewTiers : focusTiers, skeleton[i], false),
       type: skeleton[i], band, anchor: false,
     };
   }
@@ -422,7 +627,12 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
     // Most-asked target first: "practised a dozen times" is the whole
     // justification for letting the close be the second-easiest type.
     const pairing = pairings
-      .filter((p) => canBuild(type, p) && asked.has(p.targetId))
+      .filter(
+        (p) =>
+          canBuild(type, p, forbiddenBySlot[closeSlot]) &&
+          !touchesForbidden(p, forbiddenBySlot[closeSlot]) &&
+          asked.has(p.targetId),
+      )
       .sort((a, b) => (asked.get(b.targetId) ?? 0) - (asked.get(a.targetId) ?? 0))[0];
     if (!pairing) throw new Error('No practised target available for the closing anchor');
     slots[closeSlot] = {
@@ -433,20 +643,86 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
     };
   }
 
-  const metGraphemeCount = metGraphemeIds.length;
-  return (slots as Slot[]).map((slot, position) =>
-    makeTask({
-      ...slot,
-      position,
-      level,
-      confusions,
-      graphemesMet: metGraphemeCount,
-      allowedGraphemes: metGraphemeIds,
-      allowedWords: blendWordIds,
-      oralWords: oralWordIds,
-      seed: deriveSeed(baseSeed, position),
-    }),
-  );
+  // --- the finished quest, teaching cards included -------------------------
+  //
+  // The tasks are built in their own coordinate space and the teaching cards
+  // are spliced in afterwards, so the arrangement rules (no two adjacent tasks
+  // of one type, anchors at the ends, the review count) are all about tasks and
+  // are not thrown off by a card that is not one. A teaching card between two
+  // Sound Hunts would still be two Sound Hunts in a row to the child, which is
+  // why invariant 3 is enforced over the task sequence and not over the final
+  // positions.
+  //
+  // The seed is derived from the FINAL position. A task must not change because
+  // a teaching card appeared earlier in the quest.
+  const levelWordIds = wordsForLevel(level).map((w) => w.id);
+  const quest: TaskInstance[] = [];
+  let taskIndex = 0;
+  for (let position = 0; position < length; position += 1) {
+    const meet = meetAt.indexOf(position);
+    if (meet >= 0) {
+      quest.push(meetCard(pending[meet], position, deriveSeed(baseSeed, position)));
+      continue;
+    }
+    const slot = (slots as Slot[])[taskIndex];
+    const allowed = metGraphemeIds.filter((g) => !forbiddenBySlot[taskIndex].has(g));
+    quest.push(
+      makeTask({
+        ...slot,
+        position,
+        level,
+        confusions,
+        // What the child has met BY THIS POINT, which is what the choice count
+        // should grow with. Using the whole level's met letters here would give
+        // a four-way choice on a letter introduced one slot earlier.
+        graphemesMet: allowed.length,
+        allowedGraphemes: allowed,
+        // Wrong answers must not contain a letter the child has not been
+        // taught yet, in a written word any more than on a letter card.
+        allowedWords: blendWordIds.filter((id) =>
+          getWord(id).graphemes.every((g) => !forbiddenBySlot[taskIndex].has(g)),
+        ),
+        oralWords: oralWordIds,
+        spokenWords: levelWordIds,
+        seed: deriveSeed(baseSeed, position),
+      }),
+    );
+    taskIndex += 1;
+  }
+  return quest;
+}
+
+/**
+ * A teaching card: this letter, its sound, its mnemonic. Not a task.
+ *
+ * It carries no choices and no difficulty, and `recordTaskResult` throws if one
+ * is ever scored (see taskOutcome.ts), so it cannot put anything into a child's
+ * mastery data. `correctChoice` repeats the target only because the field is
+ * not optional; nothing reads it.
+ *
+ * `taskTypeId` is `meet-the-sound`, which is deliberately NOT a registered task
+ * type: this is not a mini-game, it has no difficulty rung, and the session
+ * builder must never schedule it as one. What renders it is `kind`, which the
+ * quest screen checks before it looks at the type at all.
+ */
+function meetCard(grapheme: GraphemeId, position: number, seed: number): TaskInstance {
+  return {
+    id: `${position}-meet-${grapheme}`,
+    kind: 'meet',
+    taskTypeId: 'meet-the-sound',
+    // The card shows a letter and says its sound, which is LETTER_SOUND's
+    // direction. It proves nothing in that skill — nothing is recorded — but
+    // the field should not misdescribe what is on the screen.
+    skill: 'LETTER_SOUND',
+    primaryTarget: grapheme,
+    secondaryTargets: [],
+    choices: [],
+    correctChoice: grapheme,
+    band: 'focus',
+    anchor: false,
+    difficulty: 0,
+    seed,
+  };
 }
 
 // --- pools ----------------------------------------------------------------
@@ -516,8 +792,27 @@ function teachable(
   // which is the single line that put spelling before reading: after quest 1 a
   // child can decode `at` and `sat`, neither has a picture, so reading had no
   // eligible task while spelling had two.
-  const blendWordIds = decodable.size >= 2 ? [...decodable] : [];
-  const blend = new Set(blendWordIds);
+  //
+  // This is the pool of WRITTEN or PICTURED wrong answers, and it is
+  // deliberately not narrowed by invariant 5c below. A child who may only be
+  // ASKED to read `at` can still have `sat` among the candidates: the two
+  // reading games that show words in print both need a picture, so a two-sound
+  // target can only be a Sound It Out, whose candidates are spoken. Rejecting
+  // a heard "sat" needs no ability to decode three letters.
+  //
+  // There is no "at least two of them" rule here, and there used to be. It
+  // deadlocked the whole teaching sequence: a child who knew `a` and `t` but
+  // not `s` had exactly one decodable word, so reading had no question to ask,
+  // so invariant 5b never let them spell it either. Spelling-without-reading
+  // was what had been papering over it. Sound It Out draws its spoken
+  // candidates from the level instead (see `makeTask`), and the two games that
+  // need a picture declare their own minimum in `canBuild`.
+  const blendWordIds = [...decodable];
+  const blend = decodable;
+
+  const twoSoundsOnly = (skill: Skill): boolean => !readyForThreeSounds(skill, mastery, config);
+  const rightLength = (id: WordId, skill: Skill): boolean =>
+    getWord(id).graphemes.length === 2 || !twoSoundsOnly(skill);
 
   const pairings = allPairings(level).filter((p) => {
     if (!usableSkills.has(p.skill)) return false;
@@ -526,8 +821,17 @@ function teachable(
     // that /m/-/a/-/p/ is "map" without having met m, a or p, and that is the
     // stage this skill exists to cover.
     if (p.skill === 'ORAL_BLEND') return oralWordIds.includes(p.targetId);
-    if (p.skill === 'BLEND_READ') return blend.has(p.targetId);
-    if (p.skill === 'SEGMENT_SPELL') return decodable.has(p.targetId);
+    // Invariant 5c: VC before CVC, per skill.
+    if (p.skill === 'BLEND_READ') return blend.has(p.targetId) && rightLength(p.targetId, p.skill);
+    // Invariants 5b and 5c: this exact word must have been read, and two sounds
+    // must have been spelt before three are asked for.
+    if (p.skill === 'SEGMENT_SPELL') {
+      return (
+        decodable.has(p.targetId) &&
+        readyToSpell(p.targetId, mastery, config) &&
+        rightLength(p.targetId, p.skill)
+      );
+    }
     return met.has(p.targetId);
   });
   return { pairings, blendWordIds, oralWordIds };
@@ -563,6 +867,19 @@ function knownGraphemes(
  * The graphemes the child is currently learning: the earliest introduction
  * groups that still contain something unmastered, capped at
  * `focusTargetCount` graphemes so the front stays small and finishable.
+ *
+ * Whole groups, never part of one (invariant 5e). This used to slice the flat
+ * teaching order by `focusTargetCount` and ignore where the groups fell, which
+ * is why a child's third quest opened on `p i m f`: a front of four letters
+ * spanning two introduction groups, with `p` from one and `m f` from the next
+ * while `i` was left behind. The groups are the curriculum's own statement of
+ * what belongs together — `s a t` because they make `sat` — and a front that
+ * cuts across them is a front with no pedagogical shape.
+ *
+ * The cap is applied by group: groups are added while the total stays within
+ * `focusTargetCount`, and the earliest group is always included even if it is
+ * alone larger than the cap. A cap that could return nothing would be worse
+ * than a front one letter too wide.
  */
 function currentFocusGraphemes(level: number, unmastered: Pairing[], config: EngineConfig): GraphemeId[] {
   const unmasteredGraphemes = graphemesForLevel(level)
@@ -574,7 +891,42 @@ function currentFocusGraphemes(level: number, unmastered: Pairing[], config: Eng
     );
 
   if (unmasteredGraphemes.length === 0) return getLevel(level).graphemeIds;
-  return unmasteredGraphemes.slice(0, config.focusTargetCount).map((g) => g.id);
+
+  // Group index -1 means "taught at an earlier level". Those share one bucket,
+  // which sorts first: they are all equally old news, and splitting them by
+  // level would make a front out of material the child has already finished.
+  const byGroup = new Map<number, GraphemeId[]>();
+  for (const grapheme of unmasteredGraphemes) {
+    const group = introductionGroupIndex(level, grapheme.id);
+    byGroup.set(group, [...(byGroup.get(group) ?? []), grapheme.id]);
+  }
+
+  const focus: GraphemeId[] = [];
+  for (const group of [...byGroup.keys()].sort((a, b) => a - b)) {
+    const members = byGroup.get(group) as GraphemeId[];
+    if (focus.length > 0 && focus.length + members.length > config.focusTargetCount) break;
+    focus.push(...members);
+  }
+  return focus;
+}
+
+/**
+ * The focus graphemes the child has already been shown, in teaching order.
+ *
+ * "Shown" is any attempt at all on either sound skill — right, wrong or
+ * scaffolded. This is not a claim about ability, it is a record of having been
+ * introduced, and it is what stops a letter being taught twice.
+ */
+function introducedGraphemes(
+  focusGraphemes: readonly GraphemeId[],
+  mastery: MasteryMap,
+  config: EngineConfig,
+): GraphemeId[] {
+  return focusGraphemes.filter(
+    (id) =>
+      getRecord(mastery, id, 'SOUND_ID', config).attemptCount > 0 ||
+      getRecord(mastery, id, 'LETTER_SOUND', config).attemptCount > 0,
+  );
 }
 
 /** True when this pairing exercises one of the focus graphemes. */
@@ -666,15 +1018,22 @@ function anchorRulesBySlot(
 interface SkeletonSpec {
   length: number;
   anchors: Map<number, AnchorSlotRule>;
-  fillerTypes: readonly TaskTypeMeta[];
-  /** Ids of the task types the focus band can supply a pairing for. */
-  focusTypes: ReadonlySet<string>;
-  /** Ids of the task types the review band can supply a pairing for. */
-  reviewTypes: ReadonlySet<string>;
+  /**
+   * The filler task types this slot could hold. Per slot, because the focus
+   * grows across the quest: a slot before the first teaching card may have
+   * only the games that need no letter.
+   */
+  fillerTypesAt: (slot: number) => readonly TaskTypeMeta[];
+  /** Ids of the task types the focus band can supply a pairing for, at this slot. */
+  focusTypesAt: (slot: number) => ReadonlySet<string>;
+  /** Ids of the task types the review band can supply a pairing for, at this slot. */
+  reviewTypesAt: (slot: number) => ReadonlySet<string>;
+  /** Whether an anchor at this slot could be filled with this type. */
+  anchorAllowedAt: (slot: number, type: TaskTypeMeta) => boolean;
   focusSlots: number;
   reviewSlots: number;
   strict: boolean;
-  closeCompatible: (open: TaskTypeMeta, close: TaskTypeMeta) => boolean;
+  closeCompatible: (open: TaskTypeMeta, close: TaskTypeMeta, slot: number) => boolean;
   rng: Rng;
 }
 
@@ -697,7 +1056,14 @@ function searchSkeleton(spec: SkeletonSpec): TaskTypeMeta[] | null {
   const { length, anchors } = spec;
   const sequence: TaskTypeMeta[] = new Array(length);
   const used = new Map<string, number>();
-  const tieOrder = new Map(shuffle([...spec.fillerTypes], spec.rng).map((t, i) => [t.id, i]));
+  // The tie-break order is drawn once for the whole quest, from the union of
+  // what every slot can hold: a per-slot shuffle would consume the rng a
+  // different number of times depending on the search path, and the same seed
+  // would stop producing the same quest.
+  const everyFillerType = [...new Map(
+    Array.from({ length }, (_, slot) => spec.fillerTypesAt(slot)).flat().map((t) => [t.id, t]),
+  ).values()];
+  const tieOrder = new Map(shuffle(everyFillerType, spec.rng).map((t, i) => [t.id, i]));
   const deadEnds = new Set<string>();
 
   const go = (i: number, focusOnly: number, reviewOnly: number): boolean => {
@@ -708,8 +1074,12 @@ function searchSkeleton(spec: SkeletonSpec): TaskTypeMeta[] | null {
 
     const rule = anchors.get(i);
     let options = rule
-      ? rule.allowed.filter((t) => !rule.isClose || i === 0 || spec.closeCompatible(sequence[0], t))
-      : [...spec.fillerTypes].sort(
+      ? rule.allowed.filter(
+          (t) =>
+            spec.anchorAllowedAt(i, t) &&
+            (!rule.isClose || i === 0 || spec.closeCompatible(sequence[0], t, i)),
+        )
+      : [...spec.fillerTypesAt(i)].sort(
           (a, b) =>
             (used.get(a.id) ?? 0) - (used.get(b.id) ?? 0) || (tieOrder.get(a.id) ?? 0) - (tieOrder.get(b.id) ?? 0),
         );
@@ -722,8 +1092,8 @@ function searchSkeleton(spec: SkeletonSpec): TaskTypeMeta[] | null {
       let f = focusOnly;
       let r = reviewOnly;
       if (!rule) {
-        const inFocus = spec.focusTypes.has(type.id);
-        const inReview = spec.reviewTypes.has(type.id);
+        const inFocus = spec.focusTypesAt(i).has(type.id);
+        const inReview = spec.reviewTypesAt(i).has(type.id);
         if (inFocus && !inReview) f += 1;
         else if (!inFocus && inReview) r += 1;
         if (f > spec.focusSlots || r > spec.reviewSlots) continue;
@@ -767,12 +1137,23 @@ interface MakeTaskArgs {
    * none of them.
    */
   oralWords: WordId[];
+  /**
+   * Every word at the level, for Sound It Out's candidates.
+   *
+   * A third pool, because it answers a third question. `allowedWords` is "what
+   * may this child be shown in print"; `oralWords` is "what can they hear and
+   * name a picture of"; this is "what may they hear SAID". Nothing is written
+   * and nothing is pictured, so a word the child could neither read nor
+   * recognise a drawing of is still a perfectly good wrong answer — they only
+   * have to notice it is not the word they just blended.
+   */
+  spokenWords: WordId[];
   seed: number;
 }
 
 function makeTask(args: MakeTaskArgs): TaskInstance {
   const { pairing, type, band, anchor, position, level, confusions, graphemesMet, seed } = args;
-  const { allowedGraphemes, allowedWords, oralWords } = args;
+  const { allowedGraphemes, allowedWords, oralWords, spokenWords } = args;
   const rng = makeRng(seed);
 
   // Choice count grows with how much the child has met, so a first session is
@@ -828,13 +1209,20 @@ function makeTask(args: MakeTaskArgs): TaskInstance {
     });
     choices = shuffle([pairing.targetId, ...distractors], rng);
   } else if (type.skill === 'BLEND_READ') {
+    // Sound It Out's candidates are SPOKEN, so they are drawn from the level
+    // rather than from what the child can read, and the met-letter filter does
+    // not apply: that filter stops a child being shown a word containing a
+    // letter they have not met, which is a trick question only when the word
+    // is written down. Narrowing it to decodable words is what left `at` as
+    // its own only candidate and deadlocked reading entirely.
+    const spoken = type.id === 'sound-it-out';
     const distractors = pickWordDistractors({
       target: pairing.targetId,
       count: choiceCount - 1,
       level,
       confusions,
-      allowedWords,
-      metGraphemes: allowedGraphemes,
+      allowedWords: spoken ? spokenWords : allowedWords,
+      metGraphemes: spoken ? undefined : allowedGraphemes,
       // Word Pick shows written words, so its wrong answers share the target's
       // first letter and the child has to read to the end. Picture Match shows
       // pictures, where that is no shortcut.

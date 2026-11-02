@@ -108,7 +108,12 @@ describe('FrustrationGuard cap', () => {
         confusions: {},
         now: 1_000_000,
         maxDifficulty: capped,
-      }).map((t) => t.taskTypeId),
+      })
+        // Teaching cards are not mini-games and have no difficulty rung at
+        // all, so they say nothing about whether the cap leaves enough to
+        // alternate between.
+        .filter((t) => t.kind !== 'meet')
+        .map((t) => t.taskTypeId),
     );
     expect(types.size).toBeGreaterThanOrEqual(2);
     for (const id of types) expect(taskTypeById(id).baseDifficulty).toBeLessThanOrEqual(capped);
@@ -123,7 +128,7 @@ describe('FrustrationGuard cap', () => {
         confusions: {},
         now: 1_000_000,
         maxDifficulty: DEFAULT_CONFIG.cappedDifficulty,
-      });
+      }).filter((t) => t.kind !== 'meet');
       for (let i = 1; i < plan.length; i += 1) {
         expect(plan[i].taskTypeId, `${sessionId}[${i}]`).not.toBe(plan[i - 1].taskTypeId);
       }

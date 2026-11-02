@@ -69,13 +69,16 @@ describe('a device that has played pushes its log to the server', () => {
     await playDays(a, child.id, 2, 1);
 
     const local = await idsOf(a, child.id);
-    // Two quests of fourteen tasks, so at least one attempt per task. It used
-    // to be ">40", which counted on word tasks scattering secondary credit over
-    // their letters; a quest that opens on oral blending logs fewer, because
-    // Robot Talk deliberately credits no grapheme. The guard here only needs to
-    // prove the fixture really played — the assertion that matters is that the
-    // server ends up with exactly these ids.
-    expect(local.length).toBeGreaterThanOrEqual(2 * 14);
+    // Two quests, so at least one attempt per answered task. It used to be
+    // ">40", which counted on word tasks scattering secondary credit over their
+    // letters; a quest that opens on oral blending logs fewer, because Robot
+    // Talk deliberately credits no grapheme. And a quest is no longer fourteen
+    // TASKS: some of its slots are teaching cards, which earn no evidence at
+    // all, so two quests of fourteen slots produce fewer than twenty-eight
+    // attempts. The guard here only needs to prove the fixture really played —
+    // the assertion that matters is that the server ends up with exactly these
+    // ids.
+    expect(local.length).toBeGreaterThanOrEqual(2 * 10);
     expect(local.every((id) => isUuid(id))).toBe(true);
 
     const report = await a.sync();

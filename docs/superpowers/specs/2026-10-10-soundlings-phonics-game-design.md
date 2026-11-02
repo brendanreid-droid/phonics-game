@@ -354,7 +354,9 @@ Hard invariants, each covered by a unit test:
 
 1. First task is a win-back. The child starts on a success.
 2. Last task is a win-back. The child leaves on a success.
-3. No two adjacent tasks share a task type.
+3. No two adjacent **tasks** share a task type. A Meet card (§7.3) is not a task and does not separate two that are: a quest with `sound-hunt`, a teaching card and `sound-hunt` is still two Sound Hunts in a row to the child, so the rule is enforced over the task subsequence, with the cards spliced in afterwards. Two teaching cards may sit side by side, which is how a first lesson introduces its opening pair.
+
+   **This invariant yields when a child has only one usable mini-game.** That case is reachable — a brand-new child under the frustration cap has met no letter, so every letter game is unbuildable and only Robot Talk remains — and the alternative would be to test a letter nobody had taught them, which invariant 5d forbids. 5d wins. The builder's last-resort rung already tolerated an unavoidable repeat; this records why.
 4. At least one win-back in the middle third.
 5. Every task's target — and every distractor — uses only graphemes the child has actually been **introduced to**, meaning the introduction groups up to and including the one their current focus sits in. Not merely "taught somewhere in this level": on day one a child has met two letters, and offering a third as a wrong answer is a trick question, not a challenge.
 
@@ -378,10 +380,14 @@ Hard invariants, each covered by a unit test:
 
 5d. **Meet before test.** A grapheme's first appearance as a primary target in a quest is preceded, in that same quest, by its Meet card (§7.3). Nothing may be tested before it has been taught.
 
-5e. **One new sound at a time, and the focus grows through the lesson.** A quest opens on a single newly-introduced grapheme and practises it alone for `introPracticeCount` tasks before a second is introduced. Focus never spans a partial introduction group.
+5e. **One new sound at a time, and the focus grows through the lesson.** A quest introduces a grapheme, practises it for `introPracticeCount` slots before introducing the next, and never lets a letter appear — as a target or as a wrong answer — before its Meet card. Focus never spans a partial introduction group.
+
+   **Exception, and it is forced rather than chosen: a child's FIRST lesson introduces a pair.** Every letter game in this product is multiple choice, and one taught letter cannot be contrasted with anything — "which one says /s/?" over a single card is not a question. So the opening block of teaching cards is as long as it takes to make a choice possible (two letters, in Level 1) and runs back to back; every introduction after it is spaced by its practice, one at a time, because by then the letters already taught supply the wrong answers.
+
+   This is why `s` and `a` are the first two of the Australian sequence, and why the group is `s a t` rather than three unrelated letters: the first pair must be contrastable and the third must complete a word. The alternative — allowing an untaught letter as a wrong answer so that a single introduction has something to sit against — would break invariant 5d on the child's very first screen, which is the defect this whole section exists to remove.
 
    `focusTargetCount: 3` sliced the flat grapheme list and ignored the group boundaries entirely, so a child's third quest opened `p i m f` — four new sounds at once, splitting the `[m, f]` group that the curriculum had deliberately kept together. Day one meanwhile opened with three. A teacher introduces one sound, practises it to the point of recognition, and only then adds the next; a quest should read as a lesson, not a shuffle.
-6. Session length equals `config.sessionLength` (default 14).
+6. Session length equals `config.sessionLength` (default 14), **counting teaching cards**. The length is how long the child is sitting there, and a Meet card takes a slot like anything else. The number of answerable tasks is therefore 14 minus the cards, typically 12 on a quest that introduces two sounds. Invariants 1, 2, 4 and 7 are about the tasks: the opening anchor is the first task, and a Meet card follows it rather than preceding it, so a child still starts on a guaranteed success before anything new is asked of them.
 7. If fewer than 2 mastered targets exist (i.e. a brand-new child), win-backs are replaced as follows: the **opening** and **middle-third** anchors use the lowest-difficulty task type available, and the **closing** anchor uses at most the second-lowest and must sit on a target the child has already answered correctly in this session.
 
    An earlier version of this invariant required all three anchors to use the lowest-difficulty type, and that is **impossible**. On a child's first sessions the focus is `s, a`, and no Level 1 word is buildable from those two letters alone — every word needs `t`, `p`, `m` or `i`. So only two task types exist, invariant 3 forces strict alternation, and slots 0 and 13 of a 14-task quest have opposite parity and therefore opposite types. A brute force over all 2^14 sequences finds zero solutions.
@@ -425,10 +431,14 @@ The last row is the "bad day" case — tired, unwell, distracted. The right resp
 ### 5.7 Level completion
 
 Level 1 is complete when:
-- At least `oralBlendRequired` Level-1 words mastered for `ORAL_BLEND`
+- At least `oralBlendRequired` (**3**) Level-1 words mastered for `ORAL_BLEND`
 - All 7 graphemes mastered for `SOUND_ID` **and** `LETTER_SOUND`
-- At least 8 Level-1 words mastered for `BLEND_READ`
-- At least 6 Level-1 words mastered for `SEGMENT_SPELL`
+- At least `blendWordsRequired` (**6**) Level-1 words mastered for `BLEND_READ`
+- At least `segmentWordsRequired` (**5**) Level-1 words mastered for `SEGMENT_SPELL`
+
+All four quotas are enforced, and the oral one is drawn from the picturable words because Robot Talk shows pictures to choose between.
+
+**Three oral words, not four, and the number was measured.** The quota binds only the struggling learner — a strong child masters the oral words incidentally — and over 30 seeds a quota of 4 left one struggling child in thirty unable to finish Level 1 inside a hundred days. Their blocker was not the oral work itself (they had seven oral words, nine read, seventeen spelt) but two letters that kept fading faster than they could be re-proven; the extra oral slots were what pushed the run past the cap. A quota that strands a child is not a standard. The table is in `packages/engine/src/config.ts` beside the value.
 
 Oral blending is listed first because it is first in the teaching order, not because it is hardest. A child who can hear /m/-/a/-/p/ as "map" has the ability that makes print worth decoding; one who cannot is matching shapes.
 
@@ -446,22 +456,31 @@ Quotas: **6** blend-reading words and **5** spelling words. An earlier draft sai
 
 ### Measured figures
 
-> **These figures are stale and are known to be wrong.** They were measured before the teaching sequence was rebuilt (invariants 5b–5e, Robot Talk, Sound It Out, the Meet card). That change adds two stages below the ones measured here and gates two more, so quest counts will rise — correctly, because the old counts were bought by skipping teaching. They are left in place, marked, until the harness has been re-run. **They must be re-measured, not re-estimated.** This spec has twice published hand-derived pacing figures that were wrong; it will not do so a third time.
+Re-measured **2026-11-02**, after the teaching sequence rebuild. From the simulation harness, 30 seeds per profile, one quest per simulated day, nine mini-games, every §5.4 gate in force. **These are measurements, not targets.**
 
-From the simulation harness, 30 seeds per profile, one quest per simulated day, with the calibrated config below. **These are measurements, not targets.**
+| Profile | Accuracy | Quests (min / mean / max) | Tasks (mean) | Teaching cards | Completed |
+|---|---|---|---|---|---|
+| Fast | 95% | 14 / **23.3** / 30 | 327 | 8.0 | 30/30 |
+| Average | 80% | 18 / **28.9** / 45 | 405 | 8.1 | 30/30 |
+| Struggling | 70% | 23 / **46.7** / 84 | 654 | 8.1 | 30/30 |
+| Near-chance | 55% | 40 / 40.0 / 40 | 560 | 7.9 | **0/30** at a 40-quest cap |
 
-| Profile | Accuracy | Quests (min / mean / max) | Tasks (mean) | Completed |
-|---|---|---|---|---|
-| Fast | 95% | 11 / **17.1** / 22 | 240 | 30/30 |
-| Average | 80% | 14 / **22.0** / 37 | 308 | 30/30 |
-| Struggling | 70% | 13 / **31.5** / 64 | 441 | 30/30 |
-| Near-chance | 55% | 25 / 39.5 / 40 | 553 | 1/30 at a 40-quest cap |
+The previous figures, for comparison: fast 17.1, average 22.0, struggling 31.5, and 1 of 30 near-chance children got through the cap.
 
-These are measured with seven mini-games. Before Plan 3 added the second game per skill the same harness gave fast 14.7, average 21.5, struggling 29.6 mean quests (tasks 206 / 301 / 414). **Quest counts rose, most for the strong learner (+16%)**, and that is the correct direction: demanding two independent proofs costs more than demanding one, and that cost is what makes the anti-memorisation guarantee (§5.3) worth having. An earlier plan expected the counts to fall; they did not, and the ranges were re-set from the measurement rather than the other way round.
+**Quest counts rose — 36% for a strong learner, 48% for a struggling one — and the rise is correct.** The old numbers were bought by skipping the teaching: a child met three letters at once, each one as a quiz, and was asked to spell words the game had never asked them to read. What the extra quests pay for:
 
-Calibrated config: `initialHalfLifeHours` 24 (was 6 — indefensible for a once-a-day product), `growthFactor` 4, `slowLatencyMs` 7000, `focusTargetCount` 3. Every mastery guarantee is unchanged: 3 unscaffolded correct, 2 separate sessions, 0.8 strength, most recent answer correct.
+- about 8 slots per run are teaching cards, which earn no evidence by design;
+- a word must be read before it is spelt (5b), so the two skills are sequential rather than racing each other for slots;
+- three-sound words wait for a two-sound one (5c), so the VC ramp is actually used;
+- oral blending is a completion quota, which no previous figure included at all.
 
-So a strong child needs about **17 quests, roughly 85 minutes of play**, to reach genuine mastery of seven sounds in both directions plus reading and spelling. That is more than this spec once claimed and it is the real number. For context it is also far less than the classroom time the same content takes, and it buys a demonstrable outcome rather than a completion count.
+**Nothing was tuned to recover the old numbers and no mastery guarantee was weakened.** The one config value that moved was `oralBlendRequired`, 4 to 3, for the reason given in §5.7 — a child was being stranded, not a figure being protected.
+
+**Near-chance is now a hard stop: 0 of 30, against 1 of 30 before and 3 of 30 before that.** A guesser has to pass every gate in sequence — hear the word, know the letters, read it, then spell it — instead of finding the one that lets them through. That is the clearest single piece of evidence that the gates do what they are for.
+
+Calibrated config: `initialHalfLifeHours` 24, `growthFactor` 4, `slowLatencyMs` 7000, `focusTargetCount` 3, `introPracticeCount` 4, `readsBeforeSpelling` 1, `shortWordsBeforeLong` 1, `oralBlendRequired` 3. Every mastery guarantee is unchanged: 3 unscaffolded correct, 2 separate sessions, 0.8 strength, most recent answer correct.
+
+So a strong child needs about **23 quests, roughly two hours of play**, and a struggling one about **47 quests — seven weeks of daily play** — for seven sounds in both directions plus reading and spelling. The struggling figure is the one to watch. It is roughly what a classroom takes over the same material, but it is also the number that decides whether a child who finds reading hard is still here at the end of Level 1, and no simulation can answer that.
 
 **Why it sits at roughly twice the structural floor**, and why that is the design rather than a bug: mastery is a live predicate, so a mastered sound that is not revisited decays below the 0.8 gate and must be re-proven. Mastered material leaves the practice pool except for the three win-back anchors, so it lapses. Completion needs every record fresh simultaneously. Traces show spelling words lagging sounds by several quests.
 

@@ -42,6 +42,12 @@ export interface SimulateResult {
   /** Quests that closed on a target the child had failed or been scaffolded on earlier in that quest. */
   questsClosingOnFailedTarget: number;
   scaffoldedAnswers: number;
+  /**
+   * Teaching cards shown — slots that cost the child time and produced no
+   * evidence. Reported separately so the pacing figures can say how much of a
+   * run was instruction rather than practice.
+   */
+  teachingCards: number;
   /** Simulated hours from the first quest's start to the last quest's start. */
   elapsedHours: number;
 }
@@ -133,6 +139,7 @@ export function simulateChild(args: SimulateArgs): SimulateResult {
   let questsEndingOnFailure = 0;
   let closingSwaps = 0;
   let questsClosingOnFailedTarget = 0;
+  let teachingCards = 0;
 
   while (quests < maxQuests && !levelProgress(level, mastery, now, config).complete) {
     quests += 1;
@@ -147,6 +154,17 @@ export function simulateChild(args: SimulateArgs): SimulateResult {
 
     for (let i = 0; i < plan.length; i += 1) {
       let task = plan[i];
+      // A teaching card takes its slot and earns no evidence: the child looks
+      // at the letter, hears the sound and taps "Got it". Counted in
+      // `tasksPlayed` because it is time the child spends, but never scored —
+      // `recordTaskResult` throws if one reaches it, and a simulated child who
+      // answered teaching cards would make the pacing figures a fiction.
+      if (task.kind === 'meet') {
+        tasksPlayed += 1;
+        teachingCards += 1;
+        now += TASK_MS;
+        continue;
+      }
       if (i === plan.length - 1) {
         const closing = closingTask(task, played, outcomes);
         if (closing !== task) closingSwaps += 1;
@@ -214,6 +232,7 @@ export function simulateChild(args: SimulateArgs): SimulateResult {
     closingSwaps,
     questsClosingOnFailedTarget,
     scaffoldedAnswers,
+    teachingCards,
     elapsedHours: (lastQuestStart - start) / HOUR,
   };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WORD_LIST, getWord } from '@soundlings/curriculum';
+import { WORD_LIST, getWord, wordsForLevel } from '@soundlings/curriculum';
 import { DEFAULT_CONFIG, applyAttempt, buildSession, emptyRecord, makeRng, shuffle } from '@soundlings/engine';
 import type { Attempt, MasteryMap, TaskInstance } from '@soundlings/engine';
 import { masteryKey } from '@soundlings/engine';
@@ -254,7 +254,12 @@ function realSpellingTasks(): TaskInstance[] {
     ['s', 'a', 't', 'p', 'i', 'm', 'f'],
   ];
   for (const graphemes of stages) {
-    const mastery = masteredGraphemes(graphemes);
+    // Plus a read of every word and one short word spelt. Invariant 5b gates
+    // spelling a word behind reading that same word, and 5c gates three sounds
+    // behind two, so a child who has only mastered sounds has no spelling task
+    // at all — and this test is about what a Word Builder task looks like, not
+    // about when one is offered.
+    const mastery = { ...masteredGraphemes(graphemes), ...readEveryWord() };
     for (let n = 0; n < 40; n += 1) {
       const plan = buildSession({ sessionId: `ws-${graphemes.length}-${n}`, level: 1, mastery, confusions: {}, now: NOW });
       found.push(...plan.filter((t) => t.taskTypeId === 'word-builder'));
@@ -264,6 +269,24 @@ function realSpellingTasks(): TaskInstance[] {
 }
 
 const NOW = 1000 * 3_600_000;
+
+/** One unaided correct read of every Level 1 word, and one spelling of `at`. */
+function readEveryWord(): MasteryMap {
+  const map: MasteryMap = {};
+  const once = (targetId: string, skill: 'BLEND_READ' | 'SEGMENT_SPELL', taskTypeId: string): void => {
+    map[masteryKey(targetId, skill)] = applyAttempt(
+      emptyRecord(targetId, skill, DEFAULT_CONFIG),
+      {
+        sessionId: 'earlier', targetId, skill, taskTypeId,
+        correct: true, scaffolded: false, latencyMs: 900, weight: 1, at: NOW - 1000,
+      },
+      DEFAULT_CONFIG,
+    );
+  };
+  for (const word of wordsForLevel(1)) once(word.id, 'BLEND_READ', 'sound-it-out');
+  once('at', 'SEGMENT_SPELL', 'word-builder');
+  return map;
+}
 
 function masteredGraphemes(ids: readonly string[]): MasteryMap {
   const map: MasteryMap = {};

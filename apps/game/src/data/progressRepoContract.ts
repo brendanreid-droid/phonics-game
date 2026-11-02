@@ -27,6 +27,9 @@ function veteranMastery(): MasteryMap {
     const sessionId = `warmup-${s}`;
     const plan = buildSession({ sessionId, level: 1, mastery, confusions: {}, now: NOW + s * 24 * HOUR });
     for (const [i, task] of plan.entries()) {
+      // A teaching card earns no evidence — the runner advances past it — and
+      // `recordTaskResult` throws rather than let one be scored.
+      if (task.kind === 'meet') continue;
       mastery = recordTaskResult(
         mastery,
         task,
@@ -40,8 +43,9 @@ function veteranMastery(): MasteryMap {
 
 /**
  * A mastery map in which every Level 1 requirement is met at NOW: all seven
- * sounds in both skills, six words to read and five to spell. The same
- * construction completion.test.ts in the engine uses for its quotas.
+ * sounds in both skills, three words blended orally, six to read and five to
+ * spell. The same construction completion.test.ts in the engine uses for its
+ * quotas.
  */
 function masteredLevelOne(): MasteryMap {
   const mastery: MasteryMap = {};
@@ -60,6 +64,10 @@ function masteredLevelOne(): MasteryMap {
     master(g, 'SOUND_ID');
     master(g, 'LETTER_SOUND');
   }
+  // Oral blending is a completion quota of its own (spec §5.7): a child who
+  // cannot hear /p/-/a/-/t/ as "pat" has not finished the level, however well
+  // they decode.
+  for (const w of ['pat', 'tap', 'pit']) master(w, 'ORAL_BLEND');
   for (const w of ['pat', 'tap', 'pit', 'sit', 'sip', 'pip']) master(w, 'BLEND_READ');
   for (const w of ['sat', 'tip', 'sap', 'mat', 'map']) master(w, 'SEGMENT_SPELL');
   return mastery;
@@ -185,6 +193,9 @@ export function describeProgressRepo(name: string, fresh: () => ProgressRepo): v
         const plan = buildSession({ sessionId: 'q1', level: 1, mastery: {}, confusions: {}, now: NOW });
         let live: MasteryMap = {};
         for (const [i, task] of plan.entries()) {
+          // A teaching card produces no attempt, so there is nothing of it in
+          // the log to replay.
+          if (task.kind === 'meet') continue;
           const outcome = {
             sessionId: 'q1',
             correct: i % 3 !== 1,
@@ -296,12 +307,22 @@ export function describeProgressRepo(name: string, fresh: () => ProgressRepo): v
         const store = fresh();
         const plan = buildSession({ sessionId: 'q1', level: 1, mastery: {}, confusions: {}, now: NOW });
         const asked: string[] = [];
-        const wrongAt = new Set([1, 3]);
+        // Slots 3 and 4, not 1 and 3: a first quest teaches its opening pair,
+        // so slots 1 and 2 are teaching cards and a wrong answer cannot be
+        // recorded against them.
+        const wrongAt = new Set([3, 4]);
 
         const play = async (from: number, until: number) => {
           for (let i = from; i < until; i += 1) {
             const task = plan[i];
             asked.push(task.id);
+            // A teaching card still occupies its slot and still advances the
+            // saved index — that is exactly what must not be re-shown on
+            // resume — but it produces no attempt.
+            if (task.kind === 'meet') {
+              await store.saveActiveSession('kid', sessionFor(plan, i + 1, i));
+              continue;
+            }
             const correct = !wrongAt.has(i);
             for (const a of attemptsForTask(
               task,

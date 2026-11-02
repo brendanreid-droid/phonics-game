@@ -61,6 +61,22 @@ async function started(repo: ProgressRepo = new MemoryProgressRepo()) {
 }
 
 const viewOf = (runner: QuestRunner): QuestView => runner.getView();
+
+/**
+ * Taps "Got it" on any teaching card the runner is standing on, and returns
+ * the task underneath.
+ *
+ * A teaching card occupies a slot and is acknowledged rather than answered, so
+ * a test that wants to answer something — or to answer it WRONGLY, which a card
+ * has no way to do — has to get past it first. This is what the child's tap on
+ * "Got it" does.
+ */
+async function onTask(runner: QuestRunner): Promise<TaskInstance> {
+  while (viewOf(runner).status === 'playing' && viewOf(runner).task?.kind === 'meet') {
+    await runner.answer(taskOf(runner).primaryTarget);
+  }
+  return taskOf(runner);
+}
 const taskOf = (runner: QuestRunner): TaskInstance => {
   const task = runner.getView().task;
   if (!task) throw new Error(`no current task (status ${runner.getView().status})`);
@@ -93,8 +109,20 @@ async function storeQuest(repo: ProgressRepo, plan: TaskInstance[], index = 0, e
   return session;
 }
 
+/**
+ * A real plan with its teaching cards removed.
+ *
+ * Most of this file is about how the runner SCORES: outcomes into mastery,
+ * attempts into the log, stars, the closing-anchor promise. A teaching card
+ * takes part in none of that — it is acknowledged and advanced past — and
+ * leaving them in would only shift every index the tests below count on.
+ * The runner's handling of a card has its own test ('advances past a teaching
+ * card without recording anything').
+ */
 const freshPlan = (id = 'seed-1') =>
-  buildSession({ sessionId: id, level: 1, mastery: {}, confusions: {}, now: START });
+  buildSession({ sessionId: id, level: 1, mastery: {}, confusions: {}, now: START }).filter(
+    (task) => task.kind !== 'meet',
+  );
 
 describe('a clean quest', () => {
   it('runs all fourteen tasks and finishes with three stars', async () => {
@@ -154,6 +182,10 @@ describe('how outcomes become evidence', () => {
 
     let expected: MasteryMap = {};
     for (const task of session.plan) {
+      // The runner advances past a teaching card without recording anything,
+      // and `recordTaskResult` throws if one reaches it. A replay that scored
+      // them would not be replaying what the runner did.
+      if (task.kind === 'meet') continue;
       expected = recordTaskResult(
         expected,
         task,
@@ -196,9 +228,11 @@ describe('persistence', () => {
   it('saves after every answered task, not only at the end', async () => {
     const { runner, repo } = await started();
     for (let done = 1; done <= 5; done += 1) {
-      await runner.answer(correctFor(taskOf(runner)));
+      await runner.answer(correctFor(await onTask(runner)));
       const session = await repo.loadActiveSession(PROFILE);
-      expect(session?.index, `after ${done} tasks`).toBe(done);
+      // At LEAST `done`, not exactly: the index counts slots and a teaching
+      // card takes one without producing an answer.
+      expect(session?.index ?? 0, `after ${done} tasks`).toBeGreaterThanOrEqual(done);
       const attempts = await repo.loadAttempts(PROFILE);
       expect(attempts.filter((a) => a.weight === 1), `after ${done} tasks`).toHaveLength(done);
       expect(Object.keys(await repo.loadMastery(PROFILE)).length).toBeGreaterThan(0);
@@ -209,14 +243,19 @@ describe('persistence', () => {
     const repo = new MemoryProgressRepo();
     const first = await started(repo);
     const planBefore = (await repo.loadActiveSession(PROFILE))?.plan;
-    for (let i = 0; i < 6; i += 1) await first.runner.answer(correctFor(taskOf(first.runner)));
-    const expectedNext = taskOf(first.runner);
+    for (let i = 0; i < 6; i += 1) await first.runner.answer(correctFor(await onTask(first.runner)));
+    const answeredSoFar = (await repo.loadAttempts(PROFILE)).filter((a) => a.weight === 1).length;
+    const expectedNext = await onTask(first.runner);
 
     // The app is killed and relaunched: a new runner over the same storage.
     const second = await started(repo);
 
-    expect(viewOf(second.runner).index).toBe(6);
+    // The property is WHICH task it resumes on, not the slot number: six
+    // answers no longer put the child on slot six, because the teaching cards
+    // between them took slots of their own.
+    expect(answeredSoFar).toBe(6);
     expect(taskOf(second.runner).id).toBe(expectedNext.id);
+    expect(viewOf(second.runner).index).toBeGreaterThanOrEqual(6);
     const planAfter = (await repo.loadActiveSession(PROFILE))?.plan;
     expect(planAfter).toEqual(planBefore);
   });
@@ -229,9 +268,14 @@ describe('persistence', () => {
 
     const second = await started(repo);
     expect((await repo.loadAttempts(PROFILE)).length).toBe(attemptsBefore);
+    const plan = (await repo.loadActiveSession(PROFILE))?.plan ?? [];
     await finishCleanly(second.runner);
     expect(viewOf(second.runner).status).toBe('finished');
-    expect((await repo.loadAttempts(PROFILE)).filter((a) => a.weight === 1)).toHaveLength(14);
+    // One attempt per TASK, which is fewer than the fourteen slots: the quest's
+    // teaching cards are acknowledged and leave nothing behind.
+    const answerable = plan.filter((t) => t.kind !== 'meet').length;
+    expect(answerable).toBeLessThan(14);
+    expect((await repo.loadAttempts(PROFILE)).filter((a) => a.weight === 1)).toHaveLength(answerable);
   });
 
   it('resumes into the same session id, so one quest counts as one session of evidence', async () => {
@@ -247,10 +291,13 @@ describe('persistence', () => {
   it('keeps the star count across an interruption', async () => {
     const repo = new MemoryProgressRepo();
     const first = await started(repo);
-    // Two errors on different tasks: two stars.
-    await first.runner.answer(wrongFor(taskOf(first.runner)));
+    // Two errors on different tasks: two stars. Each wrong answer is followed
+    // by the right one on the SAME task, so `onTask` is only needed before the
+    // wrong ones — a teaching card can sit between two tasks but never between
+    // a miss and the retry of it.
+    await first.runner.answer(wrongFor(await onTask(first.runner)));
     await first.runner.answer(correctFor(taskOf(first.runner)));
-    await first.runner.answer(wrongFor(taskOf(first.runner)));
+    await first.runner.answer(wrongFor(await onTask(first.runner)));
     await first.runner.answer(correctFor(taskOf(first.runner)));
     const second = await started(repo);
     await finishCleanly(second.runner);
@@ -396,7 +443,7 @@ describe('a wrong answer', () => {
     await runner.answer(correctFor(first)); // helped finish
     expect(taskOf(runner).id).toBe('again');
 
-    await runner.answer(wrongFor(taskOf(runner)));
+    await runner.answer(wrongFor(await onTask(runner)));
     // Still on the same task, with the first level of help.
     expect(viewOf(runner).index).toBe(1);
     expect(viewOf(runner).tier).toBe(2);
@@ -451,7 +498,7 @@ describe('a wrong answer', () => {
 describe('stars from a played quest', () => {
   it('still earns three stars after one slip', async () => {
     const { runner } = await started();
-    await runner.answer(wrongFor(taskOf(runner)));
+    await runner.answer(wrongFor(await onTask(runner)));
     await finishCleanly(runner);
     expect(viewOf(runner).stars).toBe(3);
   });
@@ -459,7 +506,7 @@ describe('stars from a played quest', () => {
   it('earns two stars for three errors on three different tasks', async () => {
     const { runner } = await started();
     for (let i = 0; i < 3; i += 1) {
-      await runner.answer(wrongFor(taskOf(runner)));
+      await runner.answer(wrongFor(await onTask(runner)));
       await runner.answer(correctFor(taskOf(runner)));
     }
     await finishCleanly(runner);
@@ -469,7 +516,7 @@ describe('stars from a played quest', () => {
   it('earns one star for five errors', async () => {
     const { runner } = await started();
     for (let i = 0; i < 5; i += 1) {
-      await runner.answer(wrongFor(taskOf(runner)));
+      await runner.answer(wrongFor(await onTask(runner)));
       await runner.answer(correctFor(taskOf(runner)));
     }
     await finishCleanly(runner);
@@ -745,11 +792,17 @@ describe('creatures', () => {
   };
 
   const twoTaskQuest = (): TaskInstance[] => {
-    const full = buildSession({ sessionId: 'creature-1', level: 1, mastery: {}, confusions: {}, now: START });
-    const hunt = full.find((t) => t.taskTypeId === 'sound-hunt' && t.primaryTarget === 's');
-    const other = full.find((t) => t.taskTypeId === 'sound-singer' && t.primaryTarget !== 's');
-    if (!hunt || !other) throw new Error('expected suitable tasks in the plan');
-    return [hunt, other];
+    // Swept across seeds rather than pinned to one. A first quest now teaches
+    // two letters and spends several slots on the teaching, so which letter
+    // gets which mini-game varies far more than it used to; one seed happening
+    // to hold both of these is not something to depend on.
+    for (let i = 0; i < 40; i += 1) {
+      const full = freshPlan(`creature-${i}`);
+      const hunt = full.find((t) => t.taskTypeId === 'sound-hunt' && t.primaryTarget === 's');
+      const other = full.find((t) => t.taskTypeId === 'sound-singer' && t.primaryTarget !== 's');
+      if (hunt && other) return [hunt, other];
+    }
+    throw new Error('expected suitable tasks in the plan');
   };
 
   it('is a real setup: finishing /s/ by ear in a new session hatches Sisi', () => {
@@ -857,11 +910,14 @@ describe('finishing a quest records the day and latches completion', () => {
     };
 
     const lastTaskCompletesTheLevel = (): TaskInstance[] => {
-      const full = buildSession({ sessionId: 'complete-1', level: 1, mastery: {}, confusions: {}, now: START });
-      const hunt = full.find((t) => t.taskTypeId === 'sound-hunt' && t.primaryTarget === 's');
-      const other = full.find((t) => t.taskTypeId === 'sound-singer' && t.primaryTarget !== 's');
-      if (!hunt || !other) throw new Error('expected suitable tasks in the plan');
-      return [other, hunt];
+      // Swept across seeds, for the reason given on `twoTaskQuest` above.
+      for (let i = 0; i < 40; i += 1) {
+        const full = freshPlan(`complete-${i}`);
+        const hunt = full.find((t) => t.taskTypeId === 'sound-hunt' && t.primaryTarget === 's');
+        const other = full.find((t) => t.taskTypeId === 'sound-singer' && t.primaryTarget !== 's');
+        if (hunt && other) return [other, hunt];
+      }
+      throw new Error('expected suitable tasks in the plan');
     };
 
     it('is a real setup: the level is not complete until the final task is answered', () => {
@@ -892,7 +948,7 @@ describe('finishing a quest records the day and latches completion', () => {
       const repo = new MemoryProgressRepo();
       await repo.saveMastery(PROFILE, almostThere());
       // A quest that never touches /s/ by ear: the level is still one short.
-      const full = buildSession({ sessionId: 'x', level: 1, mastery: {}, confusions: {}, now: START });
+      const full = freshPlan('x');
       const other = full.filter((t) => t.primaryTarget !== 's').slice(0, 2);
       await storeQuest(repo, other, 0, { sessionId: 'quest-today' });
       const runner = runnerWith(repo);

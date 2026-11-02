@@ -60,10 +60,28 @@ export interface EngineConfig {
    * grapheme needs before any word containing it may be asked (read or spelt).
    */
   wordReadinessCorrect: number;
+  /**
+   * Unscaffolded correct reads of a word before that same word may be asked
+   * for in writing (spec §5.4 invariant 5b).
+   */
+  readsBeforeSpelling: number;
+  /**
+   * Unscaffolded correct answers on two-sound words, per print skill, before a
+   * three-sound word may be asked on that skill (invariant 5c).
+   */
+  shortWordsBeforeLong: number;
+  /**
+   * Tasks on a newly-introduced grapheme before a second one joins the focus
+   * (invariant 5e). Counts attempts, not successes: this paces the lesson, it
+   * does not judge the child.
+   */
+  introPracticeCount: number;
 
   // Level completion
   blendWordsRequired: number;
   segmentWordsRequired: number;
+  /** Words that must be mastered for ORAL_BLEND to finish a level (spec §5.7). */
+  oralBlendRequired: number;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -118,10 +136,48 @@ export const DEFAULT_CONFIG: EngineConfig = {
   // the sounds a sounds-only first quest asks about, so this cannot deadlock.
   wordReadinessCorrect: 2,
 
+  // One unaided read is the bar for spelling that same word. Not mastery: that
+  // needs two separate sessions, so a child would have to wait a day between
+  // reading a word and writing it, and a teacher moves a child from reading
+  // `at` to building `at` within the same lesson. One is "they have decoded
+  // it", which is the thing spelling builds on.
+  readsBeforeSpelling: 1,
+  // One two-sound word, likewise, rather than a quota: `at` is the only VC word
+  // available until the second introduction group opens, so anything above 1
+  // would stall reading entirely for a child on the first group.
+  shortWordsBeforeLong: 1,
+  // Four tasks on a new letter before the next one joins it. Three felt thin
+  // next to two mini-games (a child would meet the sound, play each game once,
+  // and be handed another letter); five leaves no room in a 14-task quest for
+  // a second introduction plus the mixed practice and the close. Measured in
+  // Task 7, not argued about here.
+  introPracticeCount: 4,
+
   // Six words read and five spelt, on top of all seven sounds proven in both
   // directions. Reduced from 8 and 6, which were arbitrary.
   blendWordsRequired: 6,
   segmentWordsRequired: 5,
+  // Three words heard and blended orally. Lower than the reading and spelling
+  // quotas on purpose: this is the stage a child passes THROUGH on the way to
+  // print, not one they should be held at once they can decode.
+  //
+  // THREE, not four, and the difference was measured rather than argued. This
+  // quota binds only the struggling learner — a strong child masters the oral
+  // words incidentally and finishes in 23.3 quests at any value — and over 30
+  // seeds per profile:
+  //
+  //   quota   struggling: finished / mean quests / worst
+  //     2        30/30 / 43.3 / 65
+  //     3        30/30 / 46.7 / 84
+  //     4        29/30 / 54.5 / 100+
+  //
+  // At four, one struggling child in thirty never finished Level 1 inside a
+  // hundred days. Their blocker was not the oral quota itself — they had seven
+  // oral words, nine read and seventeen spelt — but two letters that kept
+  // fading faster than they could be re-proven, and the extra oral work was
+  // what pushed the whole run past the cap. A quota that strands a child is not
+  // a standard, it is a wall.
+  oralBlendRequired: 3,
 };
 
 export function withDefaults(partial?: Partial<EngineConfig>): EngineConfig {

@@ -37,6 +37,11 @@ function traceQuests(count: number): TracedQuest[] {
     quests.push({ quest, tasks });
 
     for (const task of tasks) {
+      // A teaching card is acknowledged, never answered: the quest runner
+      // advances past it without recording anything, and `recordTaskResult`
+      // throws if one is ever scored. The simulated child must behave the same
+      // way or the trace would be measuring a child who cannot exist.
+      if (task.kind === 'meet') continue;
       mastery = recordTaskResult(
         mastery,
         task,
@@ -55,11 +60,15 @@ function render(quests: readonly TracedQuest[]): string {
     .map(({ quest, tasks }) =>
       [
         `=== QUEST ${quest} ===`,
-        ...tasks.map(
-          (task, index) =>
-            `${String(index + 1).padStart(2)}. ${task.taskTypeId.padEnd(14)} ` +
-            `${task.skill.padEnd(14)} ${String(task.primaryTarget).padEnd(10)} ` +
-            `${task.band}${task.anchor ? ' ANCHOR' : ''}`,
+        ...tasks.map((task, index) =>
+          task.kind === 'meet'
+            ? // Marked, and indented differently, because reading this trace is
+              // the point of the test: a teaching card must not be mistakable
+              // for a task that scores.
+              `${String(index + 1).padStart(2)}. ── MEET ${String(task.primaryTarget)} ──`
+            : `${String(index + 1).padStart(2)}. ${task.taskTypeId.padEnd(14)} ` +
+              `${task.skill.padEnd(14)} ${String(task.primaryTarget).padEnd(10)} ` +
+              `${task.band}${task.anchor ? ' ANCHOR' : ''}`,
         ),
       ].join('\n'),
     )
@@ -98,7 +107,7 @@ describe('the order a child is actually taught in', () => {
     expect(firstRead).toBeLessThan(firstSpell);
   });
 
-  it.fails('never asks for a word to be spelt before that same word has been read', () => {
+  it('never asks for a word to be spelt before that same word has been read', () => {
     const read = new Set<string>();
     for (const task of IN_ORDER) {
       if (task.skill === 'SEGMENT_SPELL') {
@@ -108,7 +117,7 @@ describe('the order a child is actually taught in', () => {
     }
   });
 
-  it.fails('blends two sounds before three, on each skill separately', () => {
+  it('blends two sounds before three, on each skill separately', () => {
     for (const skill of ['BLEND_READ', 'SEGMENT_SPELL'] as const) {
       const lengths = IN_ORDER.filter((t) => t.skill === skill).map(
         (t) => getWord(t.primaryTarget).graphemes.length,

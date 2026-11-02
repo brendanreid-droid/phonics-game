@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getGrapheme, getWord, graphemesForLevel } from '@soundlings/curriculum';
+import { getGrapheme, getWord, graphemesForLevel, wordsForLevel } from '@soundlings/curriculum';
 import type { Skill } from '@soundlings/curriculum';
 import { DEFAULT_CONFIG } from './config';
 import { applyAttempt, emptyRecord, getRecord, isMastered, strengthAt } from './mastery';
@@ -52,12 +52,65 @@ function masteredGraphemes(ids: readonly string[]): MasteryMap {
   return masteredPairs(ids.flatMap((id): Pair[] => [[id, 'SOUND_ID'], [id, 'LETTER_SOUND']]));
 }
 
+/**
+ * One unaided correct answer on each pairing — the bar invariants 5b and 5c
+ * set, which is far below mastery.
+ *
+ * Kept separate from `masteredPairs` on purpose: mastering a pairing takes it
+ * out of the unmastered pools and changes what gets scheduled, which is not
+ * what a test asking "has this word been read yet" wants to say.
+ */
+function answeredOnce(pairs: readonly Pair[]): MasteryMap {
+  const map: MasteryMap = {};
+  for (const [id, skill] of pairs) {
+    map[masteryKey(id, skill)] = applyAttempt(
+      emptyRecord(id, skill, DEFAULT_CONFIG),
+      {
+        sessionId: 'earlier', targetId: id, skill, taskTypeId: 'sound-it-out',
+        correct: true, scaffolded: false, latencyMs: 900, weight: 1, at: NOW - HOUR,
+      },
+      DEFAULT_CONFIG,
+    );
+  }
+  return map;
+}
+
+/**
+ * A child who has read every word at this level once, and spelt the shortest.
+ *
+ * Invariant 5b gates spelling a word behind reading that same word, and 5c
+ * gates three sounds behind two, per skill. A test about what a reading or
+ * spelling question LOOKS like is not a test of that ladder and should not have
+ * to climb it; this is the state of a child who has.
+ */
+function hasReadEverything(): MasteryMap {
+  const words = wordsForLevel(1).map((w) => w.id);
+  return {
+    ...answeredOnce(words.map((id): Pair => [id, 'BLEND_READ'])),
+    // `at` is the two-sound word every Level 1 spelling depends on: without a
+    // short word spelt, invariant 5c withholds every three-sound one.
+    ...answeredOnce([['at', 'SEGMENT_SPELL']]),
+  };
+}
+
 function args(mastery: MasteryMap, sessionId: string, extra: Partial<BuildSessionArgs> = {}): BuildSessionArgs {
   return { sessionId, level: 1, mastery, confusions: {}, now: NOW, ...extra };
 }
 
 function build(mastery: MasteryMap, sessionId = 'test-session', extra: Partial<BuildSessionArgs> = {}) {
   return buildSession(args(mastery, sessionId, extra));
+}
+
+/**
+ * The quest's TASKS, with its teaching cards left out.
+ *
+ * A Meet card has no choices, no correct answer, no difficulty rung and no
+ * registered task type, so every assertion about what a *question* looks like
+ * has to skip it. Assertions about the shape of the whole quest — its length,
+ * which slots are anchors — use `build` and see the cards too.
+ */
+function tasks(mastery: MasteryMap, sessionId = 'test-session', extra: Partial<BuildSessionArgs> = {}) {
+  return build(mastery, sessionId, extra).filter((t) => t.kind !== 'meet');
 }
 
 /**
@@ -147,9 +200,13 @@ describe('buildSession invariants', () => {
   });
 
   it('never places two of the same mini-game back to back, for any seed or any stage of learning', () => {
+    // Over the TASKS. Two teaching cards may sit side by side — "here is /s/",
+    // "here is /a/" — because neither is a mini-game and neither is answered;
+    // that is how a first lesson introduces the pair it needs in order to ask
+    // a question at all.
     for (const [name, mastery] of Object.entries(STATES)) {
       for (const seed of SEEDS) {
-        const plan = build(mastery, seed);
+        const plan = tasks(mastery, seed);
         for (let i = 1; i < plan.length; i += 1) {
           expect(
             plan[i].taskTypeId === plan[i - 1].taskTypeId,
@@ -170,7 +227,7 @@ describe('buildSession invariants', () => {
     // alternatives to pick between.
     for (const [name, mastery] of Object.entries(STATES)) {
       for (const seed of SEEDS.slice(0, 15)) {
-        for (const task of build(mastery, seed)) {
+        for (const task of tasks(mastery, seed)) {
           if (task.taskTypeId === 'word-builder') continue;
           const min = taskTypeById(task.taskTypeId).minChoices;
           expect(task.choices.length, `${name}, ${seed}, ${task.id}`).toBeGreaterThanOrEqual(min);
@@ -185,7 +242,12 @@ describe('buildSession invariants', () => {
     for (const length of [2, 4, 5, 8, 9]) {
       for (const [name, mastery] of Object.entries(STATES)) {
         for (const seed of SEEDS.slice(0, 10)) {
-          const plan = build(mastery, seed, { length });
+          const plan = tasks(mastery, seed, { length });
+          // Three TASKS is the excluded case, which a quest of four slots can
+          // now be: with three anchors in three slots and two usable types the
+          // middle anchor must repeat a neighbour. The exclusion was always
+          // about the task count, and teaching cards made that visible.
+          if (plan.length <= 3) continue;
           for (let i = 1; i < plan.length; i += 1) {
             expect(plan[i].taskTypeId, `${name}, ${seed}, length ${length}, slot ${i}`).not.toBe(plan[i - 1].taskTypeId);
           }
@@ -235,7 +297,7 @@ describe('buildSession invariants', () => {
 
   it('always includes the correct answer, or for spelling every letter the word needs', () => {
     for (const [name, mastery] of Object.entries(STATES)) {
-      for (const task of build(mastery)) {
+      for (const task of tasks(mastery)) {
         if (task.taskTypeId === 'missing-letter') {
           // choices are LETTERS for one gap; the right one must be among them.
           expect(task.choices, name).toContain(getWord(task.correctChoice).graphemes[task.blankIndex as number]);
@@ -274,8 +336,12 @@ describe('buildSession invariants', () => {
   it('supplies two tiles for a word that repeats a letter', () => {
     // pip = p-i-p. Find one by sweeping seeds over a state where it is in play: p is mastered
     // and i, the focus, has been answered twice, so every sound in pip is known (invariant 5a).
-    const mastery = { ...masteredGraphemes(['s', 'a', 't', 'p']), ...heard({ i: 2 }) };
-    const pip = SEEDS.flatMap((seed) => build(mastery, seed)).find(
+    // Every letter mastered, so the focus is the whole level and the spelling
+    // pool is every word in it. With the focus narrowed to one introduction
+    // group — which is what invariant 5e asks for — `pip` is review material
+    // behind a dozen more urgent words and does not come up in 40 seeds.
+    const mastery = { ...masteredGraphemes(['s', 'a', 't', 'p', 'i', 'm', 'f']), ...hasReadEverything() };
+    const pip = SEEDS.flatMap((seed) => tasks(mastery, seed)).find(
       (t) => t.taskTypeId === 'word-builder' && t.correctChoice === 'pip',
     );
     expect(pip, 'no pip spelling task came up in 40 seeds').toBeDefined();
@@ -309,7 +375,9 @@ describe('buildSession invariants', () => {
 
 describe('buildSession for a brand-new child', () => {
   it('opens and takes its breather on the easiest task type, so the first screen is the gentlest', () => {
-    const plan = build({});
+    // Tasks only: a teaching card has no difficulty rung at all, and counting
+    // its 0 would make every real task look harder than the easiest.
+    const plan = tasks({});
     const min = Math.min(...difficulties(plan));
     expect(plan[0].difficulty).toBe(min);
     const mid = plan.findIndex((t, i) => i > 0 && i < plan.length - 1 && t.anchor);
@@ -388,7 +456,7 @@ describe('buildSession for a brand-new child', () => {
     // The opening task is Robot Talk, which is the right first screen a child
     // ever sees: no letters, no reading, just "which picture is this word".
     for (const seed of SEEDS) {
-      const plan = build({}, seed);
+      const plan = tasks({}, seed);
       expect(new Set(plan.map((t) => t.taskTypeId)), seed).toEqual(
         new Set(['robot-talk', 'sound-hunt', 'sound-singer', 'picture-start']),
       );
@@ -400,11 +468,22 @@ describe('buildSession for a brand-new child', () => {
     // The anti-deadlock property. SOUND_ID mastery needs two task types, and sound-hunt is the only
     // direct one, so word tasks must supply the second. Invariant 5a delays them until s, a and t
     // have been answered twice; it must not prevent them. (This used to assert it on day one.)
+    //
+    // READING, not spelling. Invariant 5b now gates spelling a word behind
+    // reading that same word, so a child whose sounds have just opened has no
+    // spelling task at all — and does not need one, because a reading task
+    // credits its letters exactly the same way. The property is that WORD work
+    // supplies the second task type, not that spelling does.
     const mastery = heard({ s: 2, a: 2, t: 2 });
-    const spelled = SEEDS.flatMap((seed) => build(mastery, seed)).filter((t) => t.skill === 'SEGMENT_SPELL');
-    expect(spelled.length).toBeGreaterThan(0);
-    const credited = new Set(spelled.flatMap((t) => t.secondaryTargets));
-    expect(credited).toEqual(new Set(['s', 'a', 't']));
+    const words = SEEDS.flatMap((seed) => build(mastery, seed)).filter(isWordTask);
+    expect(words.length).toBeGreaterThan(0);
+    const credited = new Set(words.flatMap((t) => t.secondaryTargets));
+    expect(credited).toEqual(new Set(['a', 't']));
+    // `at` is the only word open at this point, so `s` waits for `sat` — which
+    // waits for `at` to be read. Once it has been, all three are credited.
+    const after = { ...mastery, ...answeredOnce([['at', 'BLEND_READ']]) };
+    const later = SEEDS.flatMap((seed) => build(after, seed)).filter(isWordTask);
+    expect(new Set(later.flatMap((t) => t.secondaryTargets))).toEqual(new Set(['s', 'a', 't']));
   });
 
   it('keeps alternating, and still opens on the easiest, when the frustration cap leaves only the sound games', () => {
@@ -414,7 +493,7 @@ describe('buildSession for a brand-new child', () => {
     // the no-adjacent-repeat rule forced strict alternation, which is why the
     // closing anchor may be the second-easiest type.)
     for (const seed of SEEDS) {
-      const plan = build({}, seed, { maxDifficulty: 2 });
+      const plan = tasks({}, seed, { maxDifficulty: 2 });
       expect(new Set(plan.map((t) => t.taskTypeId)), seed).toEqual(new Set(['robot-talk', 'sound-hunt']));
       expect(plan[0].taskTypeId, seed).toBe('robot-talk');
       expect(taskTypeById(plan[plan.length - 1].taskTypeId).baseDifficulty, seed).toBeLessThanOrEqual(2);
@@ -499,7 +578,7 @@ describe('buildSession for a brand-new child', () => {
   });
 
   it('starts every task at the fewest choices its mini-game allows, so a first screen is winnable', () => {
-    for (const task of build({})) {
+    for (const task of tasks({})) {
       expect(task.choices.length, task.id).toBe(taskTypeById(task.taskTypeId).minChoices);
     }
   });
@@ -700,7 +779,9 @@ describe('buildSession composition', () => {
   });
 
   it('shuffles the spelling tiles, so they never arrive in the word\'s own order', () => {
-    const mastery = masteredGraphemes(['s', 'a', 't', 'p']);
+    // Invariant 5b: a word must have been read before it can be spelt, so a
+    // test about what a spelling task LOOKS like needs a child who has read.
+    const mastery = { ...masteredGraphemes(['s', 'a', 't', 'p']), ...hasReadEverything() };
     const spelled = SEEDS.flatMap((seed) => build(mastery, seed)).filter(isTileSpelling);
     expect(spelled.length).toBeGreaterThan(0);
     const inOrder = spelled.filter((t) => t.choices.slice(0, 3).join('') === getWord(t.correctChoice).graphemes.join(''));
@@ -724,9 +805,9 @@ describe('buildSession composition', () => {
   it('shows a picture the child keeps mistaking for the target, even when it is not a close match', () => {
     // sip is two letters from mat, behind the minimal pairs map and pat, so only history ranks it first.
     // m has been answered twice, so mat is a word the child is ready for (invariant 5a).
-    const mastery = { ...masteredGraphemes(['s', 'a', 't', 'p', 'i']), ...heard({ m: 2 }) };
+    const mastery = { ...masteredGraphemes(['s', 'a', 't', 'p', 'i']), ...heard({ m: 2 }), ...hasReadEverything() };
     const confusions = { 'mat>sip': 5 };
-    const reads = SEEDS.flatMap((seed) => build(mastery, seed, { confusions }))
+    const reads = SEEDS.flatMap((seed) => tasks(mastery, seed, { confusions }))
       .filter((t) => t.skill === 'BLEND_READ' && t.correctChoice === 'mat');
     expect(reads.length).toBeGreaterThan(0);
     for (const task of reads) expect(task.choices, task.id).toContain('sip');
@@ -734,9 +815,9 @@ describe('buildSession composition', () => {
 
   it('offers a letter the child keeps confusing as an extra spelling tile', () => {
     // i and m have been answered twice, so sit and sam are ready words that hold s but not p.
-    const mastery = { ...masteredGraphemes(['s', 'a', 't', 'p']), ...heard({ i: 2, m: 2 }) };
+    const mastery = { ...masteredGraphemes(['s', 'a', 't', 'p']), ...heard({ i: 2, m: 2 }), ...hasReadEverything() };
     const confusions = { 's>p': 5 };
-    const spelled = SEEDS.flatMap((seed) => build(mastery, seed, { confusions })).filter((t) => {
+    const spelled = SEEDS.flatMap((seed) => tasks(mastery, seed, { confusions })).filter((t) => {
       const letters = isTileSpelling(t) ? getWord(t.correctChoice).graphemes : [];
       return letters.includes('s') && !letters.includes('p');
     });
@@ -751,7 +832,7 @@ describe('buildSession composition', () => {
 
   it('shuffles the pictures in a reading task too', () => {
     // t, p and i are the focus and have each been answered twice: the picture words are ready (invariant 5a).
-    const mastery = { ...masteredGraphemes(['s', 'a']), ...heard({ t: 2, p: 2, i: 2 }) };
+    const mastery = { ...masteredGraphemes(['s', 'a']), ...heard({ t: 2, p: 2, i: 2 }), ...hasReadEverything() };
     const positions = new Set<number>();
     for (const seed of SEEDS) {
       for (const task of build(mastery, seed)) {
@@ -763,9 +844,9 @@ describe('buildSession composition', () => {
   });
 
   it('credits a repeated letter once: pip is p and i, not p, i and p', () => {
-    const mastery = { ...masteredGraphemes(['s', 'a', 't', 'p']), ...heard({ i: 2 }) };
+    const mastery = { ...masteredGraphemes(['s', 'a', 't', 'p']), ...heard({ i: 2 }), ...hasReadEverything() };
     // Missing Letter credits only its gap, so it is not what this is about.
-    const pips = SEEDS.flatMap((seed) => build(mastery, seed))
+    const pips = SEEDS.flatMap((seed) => tasks(mastery, seed))
       // Robot Talk credits no graphemes at all, deliberately: hearing the sounds
       // in "pip" is not evidence the child knows the letter p.
       .filter((t) => t.correctChoice === 'pip' && t.taskTypeId !== 'missing-letter' && !isOral(t));
@@ -786,26 +867,70 @@ describe('buildSession composition', () => {
   });
 
   it('reviews the weakest material first', () => {
-    // s, a and t are mastered, and so are the spellings that do not touch the focus. p, i
-    // and m are the focus; f is met but outside it, so it is the only review.
-    // f/SOUND_ID has just been failed, f/LETTER_SOUND is nearly known.
-    // p, i and m, the focus, have been answered twice, so the focus has words in it as it did before
-    // invariant 5a, and the review slot is a real choice between sounds rather than a forced spelling.
-    const base = { ...reviewBase(), ...heard({ p: 2, i: 2, m: 2 }) };
-    const answer = (skill: Skill, correct: boolean, at: number, id: string): Attempt => ({
-      sessionId: id, targetId: 'f', skill, taskTypeId: 'sound-hunt', correct, scaffolded: false, latencyMs: 900, weight: 1, at,
+    // s a t p i are mastered, so the focus is the last whole introduction group
+    // (m, f) and review is what the child has met but is no longer working on.
+    //
+    // This test used to put a letter in review — f, met but outside a focus of
+    // p i m. The whole-group focus clamp (invariant 5e) makes that state
+    // impossible: the focus always takes the EARLIEST group with anything
+    // unmastered, so a met letter can never be both unmastered and outside it.
+    // A letter that fades returns to the focus rather than to review, which is
+    // right — a faded sound is current work. What review holds now is word
+    // work on letters the child has finished with.
+    //
+    // Every word those five letters make is mastered except reading `pat` and
+    // `tap`, which leaves the review pool exactly two pairings deep: `pat` has
+    // just been got wrong, `tap` has been read correctly twice. So the review
+    // slot is a real choice between them rather than a forced one.
+    //
+    // Mastering the rest is not padding. A read word unlocks spelling it
+    // (invariant 5b) and a two-sound word unlocks three (5c), so leaving any
+    // of them merely *answered* would pull a dozen more pairings into review
+    // and the test would be measuring the pool instead of the ranking.
+    const DECODABLE = ['at', 'it', 'sat', 'pat', 'tap', 'sap', 'tip', 'pit', 'sit', 'sip', 'pip'];
+    const answer = (id: string, correct: boolean, session: string): Attempt => ({
+      sessionId: session, targetId: id, skill: 'BLEND_READ', taskTypeId: 'sound-it-out',
+      correct, scaffolded: false, latencyMs: 900, weight: 1, at: NOW - HOUR,
     });
-    let weak = emptyRecord('f', 'SOUND_ID', DEFAULT_CONFIG);
-    weak = applyAttempt(weak, answer('SOUND_ID', false, NOW - HOUR, 'w1'), DEFAULT_CONFIG);
-    let nearly = emptyRecord('f', 'LETTER_SOUND', DEFAULT_CONFIG);
-    nearly = applyAttempt(nearly, answer('LETTER_SOUND', true, NOW - HOUR, 'n1'), DEFAULT_CONFIG);
-    nearly = applyAttempt(nearly, answer('LETTER_SOUND', true, NOW - HOUR, 'n2'), DEFAULT_CONFIG);
-    const mastery = { ...base, [masteryKey('f', 'SOUND_ID')]: weak, [masteryKey('f', 'LETTER_SOUND')]: nearly };
+    let weak = emptyRecord('pat', 'BLEND_READ', DEFAULT_CONFIG);
+    weak = applyAttempt(weak, answer('pat', false, 'w1'), DEFAULT_CONFIG);
+    let nearly = emptyRecord('tap', 'BLEND_READ', DEFAULT_CONFIG);
+    nearly = applyAttempt(nearly, answer('tap', true, 'n1'), DEFAULT_CONFIG);
+    nearly = applyAttempt(nearly, answer('tap', true, 'n2'), DEFAULT_CONFIG);
+    const mastery = {
+      ...masteredGraphemes(['s', 'a', 't', 'p', 'i']),
+      // The task types have to be ones that PROVE the skill — mastery needs two
+      // of them (`provingTaskTypeCount`), and the default list here is mostly
+      // reading games, which prove nothing about spelling.
+      ...masteredPairs(
+        DECODABLE.filter((id) => id !== 'pat' && id !== 'tap').map((id): Pair => [id, 'BLEND_READ']),
+        { types: ['sound-it-out', 'picture-match', 'word-pick'] },
+      ),
+      ...masteredPairs(DECODABLE.map((id): Pair => [id, 'SEGMENT_SPELL']), {
+        types: ['word-builder', 'missing-letter', 'word-builder'],
+      }),
+      [masteryKey('pat', 'BLEND_READ')]: weak,
+      [masteryKey('tap', 'BLEND_READ')]: nearly,
+    };
+    // Across every seed, whenever a review slot goes to a reading task it goes
+    // to `pat` and never to `tap`. Not "the first review task is pat": a
+    // spelling type that only the review band can supply is forced into a
+    // review slot before the urgency ranking is consulted at all, so pinning
+    // the assertion to slot one would be testing that accident instead of the
+    // ranking.
+    let quests = 0;
     for (const seed of SEEDS) {
-      const review = build(mastery, seed, { config: { reviewCount: 1 } }).filter((t) => t.band === 'review');
-      expect(review.length, seed).toBe(1);
-      expect(`${review[0].primaryTarget}/${review[0].skill}`, seed).toBe('f/SOUND_ID');
+      const reviewed = tasks(mastery, seed)
+        .filter((t) => t.band === 'review' && t.skill === 'BLEND_READ')
+        .map((t) => t.primaryTarget);
+      if (reviewed.length === 0) continue;
+      quests += 1;
+      // `tap` may be there too when a quest has review slots to spare. What
+      // must never happen is `tap` being reviewed while `pat`, the weaker of
+      // the two, is passed over.
+      expect(reviewed, seed).toContain('pat');
     }
+    expect(quests, 'no reading task was reviewed in 40 seeds').toBeGreaterThan(0);
   });
 
   it('counts how overdue a target is as well as how weak, when reviewing', () => {
@@ -889,7 +1014,7 @@ describe('buildSession under a difficulty cap and a short session (the frustrati
 
   it('stays within the cap by not scheduling a skill whose every task type is above it', () => {
     for (const seed of SEEDS) {
-      for (const task of build(mastery, seed, { maxDifficulty: 1 })) {
+      for (const task of tasks(mastery, seed, { maxDifficulty: 1 })) {
         expect(task.taskTypeId).toBe('robot-talk');
         expect(task.skill).toBe('ORAL_BLEND');
       }
@@ -919,8 +1044,8 @@ describe('buildSession under a difficulty cap and a short session (the frustrati
   });
 
   it('falls back to the easiest task type when the cap is below every difficulty', () => {
-    const plan = build(mastery, 'zero-cap', { maxDifficulty: 0 });
-    expect(plan.length).toBe(DEFAULT_CONFIG.sessionLength);
+    expect(build(mastery, 'zero-cap', { maxDifficulty: 0 }).length).toBe(DEFAULT_CONFIG.sessionLength);
+    const plan = tasks(mastery, 'zero-cap', { maxDifficulty: 0 });
     expect(new Set(plan.map((t) => t.taskTypeId))).toEqual(new Set(['robot-talk']));
   });
 });
@@ -989,13 +1114,20 @@ describe('buildSession across a whole first week', () => {
     for (const [name, mastery] of Object.entries(STATES)) {
       for (const length of [8, 14]) {
         for (const seed of SEEDS.slice(0, 15)) {
-          const plan = build(mastery, seed, { length });
+          const whole = build(mastery, seed, { length });
+          const plan = whole.filter((t) => t.kind !== 'meet');
           const label = `${name}, length ${length}, ${seed}`;
-          expect(plan.length, label).toBe(length);
+          // The LENGTH is the whole quest, teaching cards included — that is
+          // how long the child is sitting there. Every other invariant here is
+          // about the tasks.
+          expect(whole.length, label).toBe(length);
           expect(plan[0].anchor, label).toBe(true);
-          expect(plan[length - 1].anchor, label).toBe(true);
-          expect(plan.slice(Math.floor(length / 3), Math.ceil((2 * length) / 3)).some((t) => t.anchor), label).toBe(true);
-          for (let i = 1; i < length; i += 1) {
+          expect(plan[plan.length - 1].anchor, label).toBe(true);
+          expect(
+            plan.slice(Math.floor(plan.length / 3), Math.ceil((2 * plan.length) / 3)).some((t) => t.anchor),
+            label,
+          ).toBe(true);
+          for (let i = 1; i < plan.length; i += 1) {
             expect(plan[i].taskTypeId, `${label}, slot ${i}`).not.toBe(plan[i - 1].taskTypeId);
           }
         }
@@ -1056,11 +1188,23 @@ describe('buildSession: sounds before words (invariant 5a)', () => {
     }
   });
 
-  it('gives a brand-new child letter work across all three graphemes of the first group', () => {
+  it('teaches the first PAIR on day one and the third letter in the next quest (invariant 5e)', () => {
+    // This used to expect all three of `s a t` on day one, and that was the
+    // defect: a child met three letters at once, every one of them as a quiz.
+    //
+    // Two, because a letter question is multiple choice and one letter cannot
+    // be contrasted with anything. The third arrives in the next quest, by
+    // which time the first two supply its wrong answers.
     const asked = new Set(
       SEEDS.flatMap((seed) => inPrint(build({}, seed)).map((t) => t.primaryTarget)),
     );
-    expect(asked).toEqual(new Set(['s', 'a', 't']));
+    expect(asked).toEqual(new Set(['s', 'a']));
+
+    // And `t` is the one the next quest opens by teaching.
+    const nextDay = heard({ s: 3, a: 3 });
+    const cards = SEEDS.flatMap((seed) => build(nextDay, seed)).filter((t) => t.kind === 'meet');
+    expect(cards.length).toBeGreaterThan(0);
+    expect(new Set(cards.map((t) => t.primaryTarget))).toEqual(new Set(['t']));
   });
 
   it('still arranges a brand-new quest: four types, open on the easiest, close on the second-easiest', () => {
@@ -1068,8 +1212,8 @@ describe('buildSession: sounds before words (invariant 5a)', () => {
     // This is the situation amended invariant 7 exists for. The close may be no
     // harder than the second-easiest rung.
     for (const seed of SEEDS) {
-      const plan = build({}, seed);
-      expect(plan.length, seed).toBe(DEFAULT_CONFIG.sessionLength);
+      const plan = tasks({}, seed);
+      expect(plan.length + 2, seed).toBe(DEFAULT_CONFIG.sessionLength);
       expect(new Set(plan.map((t) => t.taskTypeId)), seed).toEqual(
         new Set(['robot-talk', 'sound-hunt', 'sound-singer', 'picture-start']),
       );
@@ -1089,7 +1233,14 @@ describe('buildSession: sounds before words (invariant 5a)', () => {
     for (const seed of SEEDS) {
       expect(wordTasks(build(mastery, seed)).length, seed).toBeGreaterThan(0);
     }
-    // and only the words those three sounds make
+    // `at` and not yet `sat`. Invariant 5a has opened both — every sound in
+    // them is known — and invariant 5c then holds the three-sound one back
+    // until a two-sound word has been blended. This used to be `['at', 'sat']`.
+    expect([...wordsAcross(mastery)].sort()).toEqual(['at']);
+  });
+
+  it('opens `sat` once `at` itself has been read (invariant 5c)', () => {
+    const mastery = { ...heard({ s: 2, a: 2, t: 2 }), ...answeredOnce([['at', 'BLEND_READ']]) };
     expect([...wordsAcross(mastery)].sort()).toEqual(['at', 'sat']);
   });
 
@@ -1113,7 +1264,15 @@ describe('buildSession: sounds before words (invariant 5a)', () => {
   it('asks only for words whose every grapheme is known, when some of a later group are', () => {
     // s, a, t are mastered, so focus is p and i. p has been answered twice; i not at all.
     // Of the words the child has met, pat, tap and sap need only s, a, t, p. Anything with i must wait.
-    const mastery = { ...masteredGraphemes(['s', 'a', 't']), ...heard({ p: 2 }) };
+    //
+    // `at` has been read, which is what invariant 5c asks for before any
+    // three-sound word opens. Without it the only word in play is `at` itself
+    // and this test would be asserting nothing about p.
+    const mastery = {
+      ...masteredGraphemes(['s', 'a', 't']),
+      ...heard({ p: 2 }),
+      ...answeredOnce([['at', 'BLEND_READ']]),
+    };
     const words = wordsAcross(mastery);
     expect(words.size).toBeGreaterThan(0);
     for (const word of words) {
@@ -1124,9 +1283,20 @@ describe('buildSession: sounds before words (invariant 5a)', () => {
   });
 
   it('does not offer a word as a wrong answer if it holds a sound the child is not ready for', () => {
-    const mastery = { ...masteredGraphemes(['s', 'a', 't']), ...heard({ p: 2 }) };
+    // Words shown IN PRINT or AS A PICTURE. Sound It Out is excluded for the
+    // same reason Robot Talk is: its candidates are spoken, nothing is written
+    // down, and a child rejecting a heard "am" needs no knowledge of `m`.
+    // Holding it to this rule is what left `at` as its own only candidate and
+    // deadlocked reading — and through invariant 5b, spelling with it.
+    const mastery = {
+      ...masteredGraphemes(['s', 'a', 't']),
+      ...heard({ p: 2 }),
+      ...answeredOnce([['at', 'BLEND_READ']]),
+    };
     for (const seed of SEEDS) {
-      for (const task of build(mastery, seed).filter((t) => t.skill === 'BLEND_READ')) {
+      for (const task of tasks(mastery, seed).filter(
+        (t) => t.skill === 'BLEND_READ' && t.taskTypeId !== 'sound-it-out',
+      )) {
         for (const choice of task.choices) {
           for (const g of getWord(choice).graphemes) expect(['s', 'a', 't', 'p'], `${seed}: ${choice}`).toContain(g);
         }
@@ -1222,8 +1392,14 @@ describe('buildSession: sounds before words (invariant 5a)', () => {
 // ---------------------------------------------------------------------------
 
 describe('buildSession: Word Pick', () => {
-  // p, i and m have been answered twice, so the picture words are ready (invariant 5a).
-  const ready = { ...masteredGraphemes(['s', 'a', 't']), ...heard({ p: 2, i: 2, m: 2 }) };
+  // Every letter mastered and every word read once.
+  //
+  // It used to be `s a t` mastered with p, i and m heard twice. The focus must
+  // now be a WHOLE introduction group (invariant 5e), which in that state is
+  // `p i` — leaving m unmet, `mat` undecodable, and the words this game is
+  // about out of reach. With every letter mastered the focus is the whole
+  // level, so every picture word is in play, which is what these tests need.
+  const ready = { ...masteredGraphemes(['s', 'a', 't', 'p', 'i', 'm', 'f']), ...hasReadEverything() };
   const wordPicks = (mastery: MasteryMap, extra: Partial<BuildSessionArgs> = {}) =>
     SEEDS.flatMap((seed) => build(mastery, seed, extra)).filter((t) => t.taskTypeId === 'word-pick');
 
@@ -1268,7 +1444,7 @@ describe('buildSession: Word Pick', () => {
   });
 
   it('leaves Picture Match alone: it does not insist on the first letter', () => {
-    const matches = SEEDS.flatMap((seed) => build(ready, seed)).filter((t) => t.taskTypeId === 'picture-match');
+    const matches = SEEDS.flatMap((seed) => tasks(ready, seed)).filter((t) => t.taskTypeId === 'picture-match');
     expect(matches.length).toBeGreaterThan(0);
     const mixed = matches.some((task) =>
       task.choices.some((c) => c !== task.correctChoice && getWord(c).graphemes[0] !== getWord(task.correctChoice).graphemes[0]),
@@ -1278,7 +1454,7 @@ describe('buildSession: Word Pick', () => {
 
   it('still shows a mix-up the child has made, ahead of the first-letter rule', () => {
     const confusions = { 'mat>sip': 5 };
-    const mats = SEEDS.flatMap((seed) => build(ready, seed, { confusions }))
+    const mats = SEEDS.flatMap((seed) => tasks(ready, seed, { confusions }))
       .filter((t) => t.taskTypeId === 'word-pick' && t.correctChoice === 'mat');
     expect(mats.length).toBeGreaterThan(0);
     for (const task of mats) expect(task.choices, task.id).toContain('sip');
@@ -1300,7 +1476,7 @@ describe('buildSession: Word Pick', () => {
 
 describe('buildSession: Missing Letter', () => {
   // s, a, t are mastered and p, i, m have been answered twice, so spelling is open.
-  const ready = { ...masteredGraphemes(['s', 'a', 't']), ...heard({ p: 2, i: 2, m: 2 }) };
+  const ready = { ...masteredGraphemes(['s', 'a', 't']), ...heard({ p: 2, i: 2, m: 2 }), ...hasReadEverything() };
   const gaps = (mastery: MasteryMap = ready, extra: Partial<BuildSessionArgs> = {}) =>
     SEEDS.flatMap((seed) => build(mastery, seed, extra)).filter((t) => t.taskTypeId === 'missing-letter');
 
@@ -1381,7 +1557,7 @@ describe('buildSession: Missing Letter', () => {
   it('offers a letter the child keeps confusing with the one in the gap', () => {
     // m and a are in 'mat'. The child has mixed up a with p, which is not on a's generic list.
     const confusions = { 'a>p': 5 };
-    const asked = SEEDS.flatMap((seed) => build(ready, seed, { confusions }))
+    const asked = SEEDS.flatMap((seed) => tasks(ready, seed, { confusions }))
       .filter((t) => t.taskTypeId === 'missing-letter' && getWord(t.primaryTarget).graphemes[t.blankIndex as number] === 'a');
     expect(asked.length).toBeGreaterThan(0);
     for (const task of asked) expect(task.choices, task.id).toContain('p');
@@ -1535,13 +1711,18 @@ describe('buildSession: Picture Start', () => {
     // Every level-1 letter is met and m is in the focus, so m has four pictured rivals (s, t, p, f) and
     // only two places for them. None is on m's own confusable list (n and w are), so only the child's
     // history can say which two.
-    const mastery = { ...masteredGraphemes(['s', 'a', 't']), ...heard({ p: 2, i: 2, m: 2 }) };
+    // Every letter mastered, so the focus is the whole level, every letter is
+    // met AND taught, and `f` may appear as a wrong answer. With `f` untaught
+    // — which it is in any state where it is still pending — invariant 5e
+    // keeps it off the screen until its teaching card, and the mix-up this
+    // test is about could not be shown.
+    const mastery = masteredGraphemes(['s', 'a', 't', 'p', 'i', 'm', 'f']);
     const confusions = { 'm>f': 5 };
-    const asked = SEEDS.flatMap((seed) => build(mastery, seed, { confusions }))
+    const asked = SEEDS.flatMap((seed) => tasks(mastery, seed, { confusions }))
       .filter((t) => t.taskTypeId === 'picture-start' && t.primaryTarget === 'm');
     expect(asked.length).toBeGreaterThan(0);
     for (const task of asked) expect(task.choices, task.id).toContain('f');
-    const without = SEEDS.flatMap((seed) => build(mastery, seed))
+    const without = SEEDS.flatMap((seed) => tasks(mastery, seed))
       .filter((t) => t.taskTypeId === 'picture-start' && t.primaryTarget === 'm');
     expect(without.some((t) => !t.choices.includes('f'))).toBe(true);
   });
@@ -1549,8 +1730,8 @@ describe('buildSession: Picture Start', () => {
   it('keeps the other invariants with six task types in play, in every state', () => {
     for (const [name, mastery] of Object.entries(ALL_STATES)) {
       for (const seed of SEEDS) {
-        const plan = build(mastery, seed);
-        expect(plan, `${name}, ${seed}`).toHaveLength(DEFAULT_CONFIG.sessionLength);
+        expect(build(mastery, seed), `${name}, ${seed}`).toHaveLength(DEFAULT_CONFIG.sessionLength);
+        const plan = tasks(mastery, seed);
         expect(plan[0].anchor && plan[plan.length - 1].anchor, `${name}, ${seed}`).toBe(true);
         for (let i = 1; i < plan.length; i += 1) {
           expect(plan[i].taskTypeId, `${name}, ${seed}, slot ${i}`).not.toBe(plan[i - 1].taskTypeId);

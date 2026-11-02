@@ -28,6 +28,30 @@ const NOW = 1_000_000;
  * the given task types in turn. Three answers on two or more games is mastered; two on one is
  * merely heard, which is all it takes to unlock words (invariant 5a).
  */
+/**
+ * One unaided correct read of every word, and one spelling of the shortest.
+ *
+ * Invariant 5b gates spelling a word behind reading it, and 5c gates three
+ * sounds behind two, so the spelling mini-games do not exist for a child who
+ * has not read.
+ */
+function readEveryWord(): MasteryMap {
+  const map: MasteryMap = {};
+  const once = (targetId: string, skill: 'BLEND_READ' | 'SEGMENT_SPELL', taskTypeId: string): void => {
+    map[masteryKey(targetId, skill)] = applyAttempt(
+      emptyRecord(targetId, skill, DEFAULT_CONFIG),
+      {
+        sessionId: 'earlier', targetId, skill, taskTypeId,
+        correct: true, scaffolded: false, latencyMs: 900, weight: 1, at: NOW - 1000,
+      },
+      DEFAULT_CONFIG,
+    );
+  };
+  for (const word of wordsForLevel(1)) once(word.id, 'BLEND_READ', 'sound-it-out');
+  once('at', 'SEGMENT_SPELL', 'word-builder');
+  return map;
+}
+
 function masteredFor(
   ids: readonly string[],
   type: string | readonly string[] = ['sound-hunt', 'sound-singer', 'word-builder', 'picture-start', 'picture-match'],
@@ -368,19 +392,29 @@ describe('isPlayablePlan', () => {
   });
 
   it('accepts every real task the engine builds, of every task type, so no plan is thrown away as unplayable', () => {
-    const mastery = {
-      ...masteredFor(['s', 'a', 't']),
-      ...masteredFor(['p', 'i', 'm'], 'sound-hunt', 2),
-    };
+    // Several states, not one. Reading and spelling are now gated on each
+    // other — a word must be read before it is spelt (invariant 5b) and a
+    // two-sound word before a three-sound one (5c) — so no single mastery
+    // state produces all nine mini-games any more.
+    const states: MasteryMap[] = [
+      {},
+      { ...masteredFor(['s', 'a', 't']), ...masteredFor(['p', 'i', 'm'], 'sound-hunt', 2) },
+      { ...masteredFor(['s', 'a', 't', 'p', 'i', 'm', 'f']), ...readEveryWord() },
+    ];
     const seen = new Set<string>();
-    for (let i = 0; i < 40; i += 1) {
-      const built = buildSession({ sessionId: `pp-${i}`, level: 1, mastery, confusions: {}, now: NOW });
-      for (const t of built) {
-        seen.add(t.taskTypeId);
-        expect(isPlayablePlan([t]), `${t.taskTypeId} ${t.id}`).toBe(true);
+    for (const [n, mastery] of states.entries()) {
+      for (let i = 0; i < 40; i += 1) {
+        const built = buildSession({ sessionId: `pp-${n}-${i}`, level: 1, mastery, confusions: {}, now: NOW });
+        for (const t of built) {
+          seen.add(t.taskTypeId);
+          expect(isPlayablePlan([t]), `${t.taskTypeId} ${t.id}`).toBe(true);
+        }
       }
     }
-    expect([...seen].sort()).toEqual(TASK_TYPES.map((t) => t.id).sort());
+    // The teaching card is in there too, and that is the point: it is NOT a
+    // registered task type, and a plan holding one must still be playable.
+    expect(seen.has('meet-the-sound')).toBe(true);
+    for (const type of TASK_TYPES) expect(seen.has(type.id), type.id).toBe(true);
   });
 
   it('rejects an empty plan', () => {

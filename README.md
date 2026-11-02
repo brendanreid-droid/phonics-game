@@ -29,7 +29,7 @@ npm run typecheck
 | `packages/api` | The sync layer over Supabase. `rebuild.ts` and `syncQueue.ts` are pure and decide whether a child's history survives; the rest moves data. |
 | `packages/ui` | Soft Paper design tokens. |
 | `packages/audio` | Audio-key manifest and a queue that never overlaps speech. |
-| `apps/game` | Expo app: profiles, island home, four mini-games, quest runner. |
+| `apps/game` | Expo app: profiles, island home, nine mini-games, quest runner. |
 
 `curriculum` and `engine` are deliberately pure so the adaptive logic — the part of this product that actually differentiates it — can be tested adversarially. It needed to be: simulation found a version of this engine where Level 1 **could not be completed at all**, while every unit test passed.
 
@@ -47,23 +47,28 @@ Three principles that look like fussiness and are not:
 
 ## Current state
 
-Level 1 is playable end to end: profiles, the island, **seven mini-games**, a fourteen-task quest, results, trophies, and a PIN-gated parent area.
+Level 1 is playable end to end: profiles, the island, **nine mini-games**, a fourteen-slot quest, results, trophies, and a PIN-gated parent area.
 
-Measured pacing, from the simulation harness over 30 synthetic children per profile:
+A quest now reads as a lesson rather than a shuffle. It opens on a guaranteed success, teaches a sound on a card with no right answer and nothing recorded, practises that sound, teaches the next, and mixes them. A word is read before it is spelt; a two-sound word comes before a three-sound one; oral blending — hearing /m/-/a/-/p/ as "map", with no letters on screen — runs from day one and is required to finish the level.
 
-| Learner | Quests to finish Level 1 |
-|---|---|
-| Strong | 11–22, mean 17 |
-| Average | 14–37, mean 22 |
-| Struggling | 13–64, mean 32 |
+Measured pacing, re-measured 2026-11-02 from the simulation harness over 30 synthetic children per profile:
 
-Counts rose when the second mini-game per skill landed, which is the intended trade: proving a sound two independent ways costs more than proving it one way, and that cost is what makes the claim worth making.
+| Learner | Quests to finish Level 1 | Finished |
+|---|---|---|
+| Strong | 14–30, mean **23** | 30/30 |
+| Average | 18–45, mean **29** | 30/30 |
+| Struggling | 23–84, mean **47** | 30/30 |
+| Guessing (55%) | — | **0/30** within 40 quests |
+
+**The counts rose by a third to a half, and that is the point.** The old numbers were bought by skipping the teaching. About eight slots of every run are now teaching cards that earn no evidence at all, and reading and spelling are sequential instead of racing each other for slots. A child guessing at 55% used to get through occasionally; now none do.
+
+Seven weeks of daily play for a struggling child is the figure to watch. It is roughly what a classroom takes over the same material, and it is also the number that decides whether a child who finds reading hard is still here at the end — which no simulation can answer.
 
 **Sync:** optional parent sign-in keeps progress safe online and across devices. Only profiles, the attempt log and the level-completion latch sync; everything else is rebuilt from the log. The game never waits on the network. See the review gate for what was and was not verified.
 
 **Not done:** real voice, illustrated artwork, Levels 2–6, `SAY_IT` voice tasks, and a signed-in run of the sync against the live Supabase project.
 
-**The voice pack** is 68 clips, defined once in [`packages/audio/voice-script.txt`](packages/audio/voice-script.txt) with IPA and a delivery note per line. Three things read it, so they cannot drift apart:
+**The voice pack** is 69 clips, defined once in [`packages/audio/voice-script.txt`](packages/audio/voice-script.txt) with IPA and a delivery note per line. Three things read it, so they cannot drift apart:
 
 | | |
 |---|---|

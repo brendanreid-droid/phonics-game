@@ -578,6 +578,8 @@ describe('the recorded choice count', () => {
   it('is written by the engine for every kind of task, and read back unchanged', () => {
     const plan = buildSession({ sessionId: 'rec', level: 1, mastery: masteredSounds(['s', 'a', 't', 'p', 'i'], 1e9), confusions: {}, now: 1e9 });
     for (const task of plan) {
+      // A teaching card makes no attempt, so it records no choice count.
+      if (task.kind === 'meet') continue;
       const [primary] = attemptsForTask(task, { sessionId: 'rec', correct: true, scaffolded: false, latencyMs: 1, at: 1e9 }, DEFAULT_CONFIG);
       expect(primary.choiceCount, task.taskTypeId).toBe(task.choices.length);
       if (task.taskTypeId !== 'word-builder') expect(choiceCountsSeen([primary])[0]).toBe(task.choices.length);
@@ -602,6 +604,7 @@ describe('choiceCountsSeen agrees with the sessions the engine really builds', (
     const log: Attempt[] = [];
     const perTask: TaskInstance[] = [];
     plan.forEach((task, i) => {
+      if (task.kind === 'meet') return;
       const made = attemptsForTask(
         task,
         { sessionId: 'q1', correct: true, scaffolded: false, latencyMs: 900, at: NOW + i },
@@ -642,7 +645,20 @@ describe('choiceCountsSeen agrees with the sessions the engine really builds', (
         // those rules would mean a second copy of the session builder's pool
         // logic living here, and the two would drift silently.
         if (task.taskTypeId === 'robot-talk' || task.taskTypeId === 'sound-it-out') return;
-        expect(seen[i], `${task.taskTypeId} for ${task.primaryTarget}`).toBe(task.choices.length);
+        // An UPPER bound, not an equality, and the change is honest rather than
+        // convenient. The reconstruction counts every letter the child has met;
+        // the builder now counts the letters taught BY THAT SLOT, because the
+        // focus grows across a quest (invariant 5e) and a letter introduced
+        // halfway through cannot be a wrong answer before its teaching card.
+        // The log does not say which slot an attempt came from, so the
+        // reconstruction cannot know — it can only say "no more than this".
+        //
+        // That costs nothing where it is used. The reconstruction exists for
+        // attempts logged before `choiceCount` was a field at all, and no quest
+        // from that era grew its focus mid-session.
+        expect(seen[i] ?? 0, `${task.taskTypeId} for ${task.primaryTarget}`).toBeGreaterThanOrEqual(
+          task.choices.length,
+        );
         checked += 1;
       });
       expect(checked).toBeGreaterThan(5);

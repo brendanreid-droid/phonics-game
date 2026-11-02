@@ -1,5 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { CreatureArt } from '../src/art/creatures';
+import type { CreatureId } from '../src/art/creatures';
 import { CREATURES } from '@soundlings/curriculum';
 import { tokens } from '@soundlings/ui';
 import { levelFromParam } from '../src/progress/levelCards';
@@ -36,7 +38,9 @@ export default function ResultsScreen() {
           <View style={styles.creatureRow}>
             {creatures.map((creature) => (
               <View key={creature.id} style={styles.creature}>
-                <Text style={styles.creatureEmoji}>{creature.emoji}</Text>
+                {/* The one place a creature is drawn big. This is the moment
+                    the whole product exists for, so it gets 72pt. */}
+                <CreatureArt id={creature.id as CreatureId} size={72} />
                 <Text style={styles.creatureName}>{creature.name}</Text>
               </View>
             ))}
@@ -92,7 +96,6 @@ const styles = StyleSheet.create({
   hatchedTitle: { fontFamily: tokens.font.ui, fontSize: tokens.type.body, color: tokens.color.ink },
   creatureRow: { flexDirection: 'row', gap: tokens.space.lg },
   creature: { alignItems: 'center' },
-  creatureEmoji: { fontSize: 56 },
   creatureName: { fontFamily: tokens.font.ui, fontSize: tokens.type.caption, color: tokens.color.inkSoft },
   enough: {
     fontFamily: tokens.font.ui,

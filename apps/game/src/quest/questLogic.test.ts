@@ -81,6 +81,7 @@ function plan(sessionId = 'q') {
 function task(overrides: Partial<TaskInstance> = {}): TaskInstance {
   return {
     id: 'x',
+    kind: 'task',
     taskTypeId: 'sound-hunt',
     skill: 'SOUND_ID',
     primaryTarget: 's',

@@ -3,6 +3,8 @@ import { Redirect, useFocusEffect, useRouter } from 'expo-router';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { LEVELS } from '@soundlings/curriculum';
 import { tokens } from '@soundlings/ui';
+import { CreatureArt, EggArt } from '../src/art/creatures';
+import type { CreatureId } from '../src/art/creatures';
 import { avatarById } from '../src/profiles/avatars';
 import { useProfile } from '../src/profiles/ProfileContext';
 import { canResume } from '../src/quest/questLogic';
@@ -100,7 +102,13 @@ export default function Island() {
         >
           {island.collection.map(({ creature, hatched }) => (
             <View key={creature.id} style={[styles.slot, hatched ? styles.slotHatched : styles.slotEgg]}>
-              <Text style={[styles.slotEmoji, !hatched && styles.eggEmoji]}>{hatched ? creature.emoji : '🥚'}</Text>
+              {hatched ? (
+                <CreatureArt id={creature.id as CreatureId} size={40} />
+              ) : (
+                // Tinted with the creature's own colour: enough to tell the
+                // eggs apart, not enough to give away what is inside.
+                <EggArt id={creature.id as CreatureId} size={40} />
+              )}
               <Text style={styles.slotName}>{hatched ? creature.name : ' '}</Text>
             </View>
           ))}
@@ -184,8 +192,6 @@ const styles = StyleSheet.create({
   // The two must differ at a glance, without reading anything.
   slotHatched: { backgroundColor: tokens.color.tile, borderBottomWidth: 5, borderBottomColor: tokens.color.tileEdge },
   slotEgg: { borderWidth: 2, borderStyle: 'dashed', borderColor: tokens.color.tileEdge },
-  slotEmoji: { fontSize: 52 },
-  eggEmoji: { opacity: 0.45 },
   slotName: { fontFamily: tokens.font.ui, fontSize: tokens.type.caption, color: tokens.color.ink },
   streak: { fontFamily: tokens.font.ui, fontSize: tokens.type.body, color: tokens.color.inkSoft, minHeight: 24 },
   play: {

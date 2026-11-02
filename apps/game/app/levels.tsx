@@ -1,6 +1,8 @@
 import { useCallback, useState } from 'react';
 import { Redirect, useFocusEffect, useRouter } from 'expo-router';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { CreatureArt, EggArt } from '../src/art/creatures';
+import type { CreatureId } from '../src/art/creatures';
 import { LEVELS } from '@soundlings/curriculum';
 import { tokens } from '@soundlings/ui';
 import { useProfile } from '../src/profiles/ProfileContext';
@@ -76,11 +78,13 @@ export default function Levels() {
 
             {card.state !== 'locked' ? (
               <View style={styles.faces}>
-                {card.creatures.map(({ creature, hatched }) => (
-                  <Text key={creature.id} style={[styles.face, !hatched && styles.egg]}>
-                    {hatched ? creature.emoji : '🥚'}
-                  </Text>
-                ))}
+                {card.creatures.map(({ creature, hatched }) =>
+                  hatched ? (
+                    <CreatureArt key={creature.id} id={creature.id as CreatureId} size={28} />
+                  ) : (
+                    <EggArt key={creature.id} id={creature.id as CreatureId} size={28} />
+                  ),
+                )}
               </View>
             ) : null}
 
@@ -121,8 +125,6 @@ const styles = StyleSheet.create({
   done: { fontFamily: tokens.font.ui, fontSize: tokens.type.body, color: tokens.color.ink, backgroundColor: tokens.color.correct, borderRadius: tokens.radius.pill, paddingHorizontal: tokens.space.md, paddingVertical: tokens.space.xs },
   lock: { fontSize: 28 },
   faces: { flexDirection: 'row', flexWrap: 'wrap', gap: tokens.space.sm },
-  face: { fontSize: 36 },
-  egg: { opacity: 0.45 },
   track: { height: 14, borderRadius: tokens.radius.pill, backgroundColor: tokens.color.line, overflow: 'hidden' },
   bar: { height: '100%', borderRadius: tokens.radius.pill, backgroundColor: tokens.color.accent },
 });

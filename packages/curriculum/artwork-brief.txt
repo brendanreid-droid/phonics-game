@@ -1,0 +1,93 @@
+# The artwork, as data. One line per asset, pipe-delimited:
+#
+#   kind | id | what to draw | must NOT read as | note
+#
+# kind is one of:
+#   word      a Level 1 word, shown in Robot Talk and Picture Match
+#   mnemonic  a letter's memory hook, shown on the Meet card and as a hint
+#   start     one of a letter's start pictures, shown in Picture Start
+#   creature  a Soundling, earned when its sound is mastered
+#   cast      a recurring character
+#
+# scripts/generate-artwork-brief.ts joins this to the curriculum and writes
+# docs/ARTWORK-BRIEF.md. It FAILS if a line names an asset the curriculum does
+# not have, or if a curriculum picture has no line here — so the brief and the
+# game cannot drift apart. Planned additions and retirements are listed in the
+# two blocks at the end and are reported as a delta rather than as an error.
+#
+# "must NOT read as" is the whole job. Every one of these is a word a child
+# must NAME from the picture with nobody prompting them, and seven of the nine
+# shipped placeholders fail that: a child shown the current `pat` says "dog".
+#
+# --- the words ---------------------------------------------------------------
+# Verbs and adjectives are the hard ones. An object drawn alone becomes its own
+# name — a chair is "chair", never "sit" — so the ACTION has to be the subject
+# of the picture and the object incidental.
+word|map|An opened paper map, creased, with a coastline and a dotted route. Held flat, filling the frame.|a globe; a phone; a treasure chest|The one shipped picture that already works. Keep its reading, change only the style.
+word|tap|A garden tap, side on, with a single stream of water running from it.|a hose; a sink; a bath|Australian: a tap, not a faucet. The water stream is what stops it reading as a pipe.
+word|mat|A woven doormat lying flat on the ground, from slightly above, with a visible weave and fringe.|a rug in a room; a yoga mat; a person|The shipped picture is a meditating person and a child says "person". Draw the object, empty, with nothing on it.
+word|pat|A hand mid-pat on a dog's head, the hand large and nearest the viewer, the dog small and only partly in frame.|a dog|HIGHEST RISK ON THE SHEET. The shipped picture is a whole dog and every child says "dog". If the hand cannot be made to dominate, say so and we will drop the word rather than ship a picture that fails.
+word|sit|Sam sitting squarely on a low stool, front on, knees bent, hands on knees.|a chair; a stool; standing|Sam is the subject and the stool is a minimal shape under them. Contrast hard with `sip` below: this one is NOT holding anything.
+word|sip|Pam drinking through a straw, cup at the mouth, cheeks drawn in, eyes closed.|a cup; a drink; juice|The straw at the lips is the whole picture. Must not be mistakable for `sit` at a glance — different character, standing, cup held high.
+word|pit|A dug pit in sandy ground, deep enough to show its far wall, a spade standing in the heap beside it.|a hole in a wall; a cave; a tunnel|RISK: a child may say "hole". The spade and the heap of sand are what make it a dug pit. Test this one first.
+word|sam|Sam, head and shoulders, waving, smiling, front on.|a generic child|Only works once a child knows Sam. See The cast below.
+word|pam|Pam, head and shoulders, waving, smiling, front on.|a generic child; Sam|Must be unmistakable from Sam at 56px: different hair silhouette and different colour, not just a different face.
+# --- the letters: mnemonics --------------------------------------------------
+# Shown large on the Meet card, the first time a child ever sees the letter, and
+# again as the first hint when they are stuck. It is also the creature's animal,
+# so these and the creatures below must look like the same world.
+mnemonic|s|A snake curled into the shape of the letter s, head at the top.|a worm; a rope|The letterform IS the mnemonic here. The curve should be readable as `s` without the letter beside it.
+mnemonic|a|A single red apple with a stalk and one leaf.|a tomato; a cherry|Plain and frontal. This is the vowel a child will meet second, so it carries a lot.
+mnemonic|t|A teddy bear sitting, arms out, front on.|a dog; a generic bear|Jointed arms and a stitched muzzle read as "teddy"; a realistic bear reads as "bear".
+mnemonic|p|A pig, front on, snout prominent, ears forward.|a dog; a cow|
+mnemonic|i|An insect — a plump caterpillar on a leaf, side on, with distinct segments.|a worm; a snake|Caterpillar rather than beetle: it must not be confused with Sisi the snake, and a child reliably says "caterpillar"... which is NOT "insect". Discuss before drawing: the mnemonic word may need to change with the picture.
+mnemonic|m|A crescent moon with a calm face, three-quarter.|a banana; a star|
+mnemonic|f|A fish, side on, one visible eye, fanned tail.|a whale; a shark|
+# --- the letters: start pictures ---------------------------------------------
+# Picture Start shows a letter and asks which picture STARTS with that sound, so
+# these are the only assets where the first sound matters more than the picture.
+# Each must be named with a word beginning with its own letter and no other.
+start|s:sock|A single woollen sock, ribbed cuff, lying slightly crumpled.|a shoe; a boot; a stocking|
+start|s:sun|A round sun with short straight rays, face optional.|a star; a flower|
+start|s:sponge|A rectangular kitchen sponge, corner torn, with visible pores.|a cake; a brick; a biscuit|RISK: a child may say "cake". Yellow-and-green reads as sponge; plain yellow does not.
+start|a:ant|An ant side on, three body segments, six legs, antennae.|a beetle; a spider|Must differ from the `i` caterpillar at 56px.
+start|a:ambulance|An ambulance side on, with a cross and a light bar.|a van; a truck; a bus|
+start|t:tree|A broadleaf tree with a visible trunk and a rounded crown.|a bush; broccoli|
+start|t:train|A steam train side on, funnel and wheels, one carriage.|a bus; a tram|
+start|t:tooth|A single molar with two roots, front on.|a cloud; a pillow|RISK: an outline tooth reads as a blob. Keep the roots.
+start|p:pen|A capped ballpoint pen at a slight angle.|a pencil; a marker; a stick|A pencil is the obvious failure. Keep the cap and the clip.
+start|p:pizza|A whole pizza seen from above, cut into slices, visible toppings.|a pie; a cake|
+start|p:potato|A single brown potato with eyes and an irregular outline.|a rock; an egg; a bread roll|RISK: a potato and a rock have the same silhouette. Eyes and a warm brown are what separate them.
+start|m:milk|A glass of milk, full, on nothing.|water; a glass; a jug|
+start|m:monkey|A monkey, head and shoulders, front on, ears out.|a bear; a cat|
+start|m:map|The SAME map drawing as the `map` word above, reused.|—|Deliberately the same asset. One picture, one meaning, everywhere in the game.
+start|f:fire|A small campfire: three logs and flames.|a candle; the sun|
+start|f:feather|A single feather at an angle, with a visible quill and barbs.|a leaf; a fern|
+start|f:flower|A simple five-petal flower with a stem and two leaves.|a sun; a star|
+# --- the creatures -----------------------------------------------------------
+# One per sound, earned when that sound is mastered. Each is the mnemonic animal
+# given a character: the reward IS the lesson. They appear as eggs first, then
+# hatched, on the island.
+#
+# Their names begin with their own sound, so a child saying "Sisi" rehearses /s/.
+creature|sisi|Sisi the snake. The `s` mnemonic snake, given eyes, a blush and a friendly curl.|a scary snake; a dragon|Must read as the same snake as the `s` mnemonic, not a different animal.
+creature|annie|Annie the apple. The apple with eyes, arms and legs.|a tomato character|
+creature|tito|Tito the teddy. The teddy with a character's posture.|a bear|
+creature|popo|Popo the pig.|—|
+creature|indi|Indi the insect. The caterpillar with a character's face.|a worm; Sisi|
+creature|momo|Momo the moon.|a star; a cheese|
+creature|fifi|Fifi the fish.|—|
+# --- the cast ----------------------------------------------------------------
+# Not in the curriculum data yet: see the planned block below.
+cast|sam|Sam: a child of about five, short dark curly hair, round face, a yellow top.|Pam|Appears in `sit` and as the word `sam`.
+cast|pam|Pam: a child of about five, long straight red hair in two plaits, a green top.|Sam|Appears in `sip` and as the word `pam`. The plaits are the silhouette difference.
+# --- planned: in this brief, not yet in the curriculum ------------------------
+# These are commissioned here and wired into packages/curriculum/src/words.ts
+# when the art arrives, not before.
++word|sam
++word|pam
+# --- retiring: in the curriculum, deliberately not briefed --------------------
+# These words KEEP their place in the game — they are still read and spelt — and
+# only lose their picture, so they leave Robot Talk and Picture Match.
+-word|pip|A pip is an apple seed. A five-year-old shown one says "seed" at best and "nut" in the shipped version. There is no drawing of a pip that a child names "pip".
+-word|fit|"Fit" is an adjective with no picture. The shipped flexed arm is named "muscle" by every child. Nothing can be drawn here.

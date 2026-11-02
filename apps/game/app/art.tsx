@@ -3,6 +3,7 @@ import { CREATURE_LIST } from '@soundlings/curriculum';
 import { tokens } from '@soundlings/ui';
 import { CreatureArt, EggArt } from '../src/art/creatures';
 import type { CreatureId } from '../src/art/creatures';
+import { DRAWN_WORDS, WordPictureArt } from '../src/art/wordPictures';
 
 /**
  * The creature sheet. A development screen, deliberately not linked from
@@ -33,6 +34,43 @@ export default function ArtSheet() {
       <Text style={styles.note}>
         A development screen. Judge the drawings at the size the island renders them, not larger.
       </Text>
+
+      {/*
+        The naming test comes first because it is the only one with a right
+        answer, and the only one that needs a child rather than an opinion.
+      */}
+      <Text style={styles.heading}>Word pictures — the naming test</Text>
+      <Text style={styles.note}>
+        Show one to a five-year-old who has not been told the word. Do not prompt. Write down the
+        first thing they say. `map` is the control: an object, and the one shipped picture children
+        already name — if they name `map` but not `sit`, the drawing is fine and the idea is not.
+      </Text>
+      <View style={styles.row}>
+        {DRAWN_WORDS.map((id) => (
+          <View key={id} style={styles.cell}>
+            <View style={[styles.tile, styles.tileWord]}>
+              <WordPictureArt id={id} size={56} />
+            </View>
+            <Text style={styles.label}>{id === 'map' ? 'map (control)' : id}</Text>
+          </View>
+        ))}
+      </View>
+      <Text style={styles.note}>
+        As they appear in the game — 56pt. The other five words still show their emoji, which is what
+        the illustration brief exists to replace.
+      </Text>
+
+      <View style={styles.row}>
+        {DRAWN_WORDS.map((id) => (
+          <View key={id} style={styles.cell}>
+            <View style={[styles.tile, styles.tileWord]}>
+              <WordPictureArt id={id} size={56} flat />
+            </View>
+            <Text style={styles.label}>{id}</Text>
+          </View>
+        ))}
+      </View>
+      <Text style={styles.note}>Silhouettes, for the same reason as below.</Text>
 
       <Text style={styles.heading}>At size — 40pt, as the island draws them</Text>
       <View style={styles.row}>
@@ -137,6 +175,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   tileBig: { width: 96, height: 96 },
+  tileWord: { width: tokens.tap.tile, height: tokens.tap.tile, borderRadius: tokens.radius.lg },
   // Copied from island.tsx so the preview shows the real slot, not an
   // approximation of it.
   slot: {

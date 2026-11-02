@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { WordPicture } from '../art/WordPicture';
 import { getWord } from '@soundlings/curriculum';
 import { tokens } from '@soundlings/ui';
 import { dimmedFor } from '../quest/dimming';
@@ -102,7 +103,7 @@ export function RobotTalk({ task, audio, externalTier, onAnswer, position }: Tas
                 onAnswer(choice, tier);
               }}
             >
-              <Text style={styles.pictureEmoji}>{candidate.picture ?? '?'}</Text>
+              <WordPicture id={candidate.id} size={56} />
             </Pressable>
           );
         })}
@@ -131,5 +132,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderBottomWidth: 4,
   },
-  pictureEmoji: { fontSize: 56 },
 });

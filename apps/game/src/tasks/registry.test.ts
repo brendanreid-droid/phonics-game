@@ -9,6 +9,17 @@ vi.mock('react-native', () => ({
   Text: 'Text',
   View: 'View',
 }));
+// The drawn artwork (creatures, word pictures) renders through react-native-svg,
+// which Node cannot parse either. The registry only cares that a component
+// exists, so the primitives become strings like the React Native ones above.
+vi.mock('react-native-svg', () => ({
+  Svg: 'Svg',
+  G: 'G',
+  Path: 'Path',
+  Circle: 'Circle',
+  Ellipse: 'Ellipse',
+  Rect: 'Rect',
+}));
 vi.mock('react-native-reanimated', () => ({
   default: { View: 'AnimatedView' },
   useAnimatedStyle: () => ({}),

@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { getGrapheme } from '@soundlings/curriculum';
 import { tokens } from '@soundlings/ui';
 import { dimmedFor } from '../quest/dimming';
+import { CANDIDATE_TINTS } from './candidateTints';
 import { TaskFrame } from './TaskFrame';
 import { useHintLadder } from './useHintLadder';
 import { appearanceFor } from './tileAppearance';
@@ -79,7 +80,7 @@ export function SoundSinger({ task, audio, externalTier, onAnswer, position }: T
       ) : null}
 
       <View style={styles.row}>
-        {task.choices.map((choice) => {
+        {task.choices.map((choice, index) => {
           const state = dimmed.includes(choice)
             ? 'dimmed'
             : tier >= 3 && choice === task.correctChoice
@@ -99,7 +100,13 @@ export function SoundSinger({ task, audio, externalTier, onAnswer, position }: T
               style={[
                 styles.speaker,
                 {
-                  backgroundColor: look.backgroundColor,
+                  // The button's own tint identifies it; `look` only overrides
+                  // it once the button is dimmed or revealed. Without this the
+                  // buttons were identical, and a child who had listened to
+                  // two of them had to hold in their head which was which —
+                  // the same defect this game's sibling, Sound It Out, had.
+                  backgroundColor:
+                    state === 'idle' ? CANDIDATE_TINTS[index % CANDIDATE_TINTS.length] : look.backgroundColor,
                   borderBottomColor: look.borderBottomColor,
                   opacity: look.opacity,
                 },

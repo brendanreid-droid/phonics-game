@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { getWord } from '@soundlings/curriculum';
 import { tokens } from '@soundlings/ui';
 import { dimmedFor } from '../quest/dimming';
+import { CANDIDATE_TINTS } from './candidateTints';
 import { TaskFrame } from './TaskFrame';
 import { useHintLadder } from './useHintLadder';
 import {
@@ -153,20 +154,6 @@ export function SoundItOut({ task, audio, externalTier, onAnswer, position }: Ta
     </TaskFrame>
   );
 }
-
-/**
- * A tint per candidate, so a child can tell them apart.
- *
- * The candidates are identified only by the sound they make, which is the
- * point — but three identical speaker buttons meant that after hearing two of
- * them a child had to remember WHICH button said what. That is working memory,
- * not phonics, and it is load this game has no business adding.
- *
- * Deliberately not the correct or not-this colours: a tint here means "this
- * one", never "right" or "wrong". And deliberately not a letter or a number,
- * which would either give the answer away or ask a pre-reader to read.
- */
-const CANDIDATE_TINTS = ['#dbe6ef', '#efe3db', '#e3efdb'];
 
 const styles = StyleSheet.create({
   letters: { flexDirection: 'row', gap: tokens.space.lg },

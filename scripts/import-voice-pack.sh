@@ -69,7 +69,13 @@ for key in $KEYS; do
   [ -f "$src" ] || { skipped=$((skipped + 1)); continue; }
   trimmed="$TMP/$key.wav"
   m4a="$OUT_DIR/$key.m4a"
-  measurement=$(python3 -I scripts/lib/trim-clip.py "$src" "$trimmed")
+  # A phoneme is one articulation; a word may hold silence inside it. The two
+  # are trimmed by different rules, so the kind is passed in.
+  case "$key" in
+    ph.*) kind=sound ;;
+    *)    kind=word ;;
+  esac
+  measurement=$(python3 -I scripts/lib/trim-clip.py "$kind" "$src" "$trimmed")
   rm -f "$m4a"   # afconvert refuses to overwrite
   # 64 kbit mono AAC. Speech at this rate is transparent, and the pack has to
   # fit in an app a parent downloads over a phone connection.

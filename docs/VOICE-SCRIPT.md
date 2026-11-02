@@ -54,7 +54,13 @@ you can make them.
 - Keep the mic position, level and room identical for every clip. These play
   back-to-back, and a jump in tone between two of them is audible.
 - If you fluff one, say it again rather than editing — three clean takes of a
-  short clip costs less than a repair.
+  short clip costs less than a repair. `import-voice-pack.sh` keeps the
+  loudest take of a sound and the longer take of a word, and drops the rest, so
+  a false start costs nothing. Leave a clear pause between takes.
+- **A sound that cannot be held — /t/, /p/ — may be said two or three times in
+  one file**, which is the natural thing to do; only one of them reaches the
+  game. Do not run them together: they need a gap between them, or they are one
+  sound said oddly.
 - Mono, 44.1 kHz, WAV or AIFF. We convert.
 
 ## The sounds

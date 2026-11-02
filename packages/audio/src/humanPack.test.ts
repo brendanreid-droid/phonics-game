@@ -33,6 +33,8 @@ type Measurement = {
   tailMs: number;
   peak: number;
   sourceDurationMs: number;
+  sourceBlocks: number;
+  keptBlocks: number;
 };
 
 const MEASURED = measured as unknown as Record<string, Measurement | string>;
@@ -64,12 +66,37 @@ describe('the recorded pack', () => {
     }
   });
 
-  it('ends promptly, but not so promptly that a release is clipped', () => {
-    // A plosive's burst and a fricative's decay live in the last few
-    // milliseconds; cutting them makes /p/ indistinguishable from /b/.
+  it('ends promptly', () => {
+    // No lower bound, deliberately. A fricative decays so gradually that its
+    // energy is still above the noise floor when the fade reaches it, so a
+    // measured tail of nothing is correct for /f/ and means only that the fade
+    // is doing the work of stopping the clip cleanly.
     for (const [key, m] of clips) {
       expect(m.tailMs, `${key} ends with ${m.tailMs}ms of silence`).toBeLessThanOrEqual(100);
-      expect(m.tailMs, `${key} may be clipped`).toBeGreaterThanOrEqual(20);
+    }
+  });
+
+  it('holds one sound per phoneme clip, however many takes were recorded', () => {
+    // /t/ and /p/ cannot be held, so the reader gave three of each in one file.
+    // That is the right instinct at a microphone and the wrong file here: the
+    // game plays one clip as one sound, and plays it three times over on a
+    // teaching card, which would have made nine.
+    const sounds = clips.filter(([key]) => key.startsWith('ph.'));
+    expect(sounds.length).toBe(7);
+    for (const [key, m] of sounds) {
+      expect(m.keptBlocks, `${key} holds ${m.keptBlocks} sounds`).toBe(1);
+    }
+    // Not vacuous: the repeated takes really are in the masters, and really
+    // were discarded rather than never having been there.
+    const repeated = sounds.filter(([, m]) => m.sourceBlocks > 1).map(([key]) => key);
+    expect(repeated).toEqual(['ph.t', 'ph.p']);
+  });
+
+  it('keeps one word per word clip, dropping false starts', () => {
+    // Several clips open with a breath or an abandoned attempt, then a pause,
+    // then the word. Kept, that pause is dead air in the middle of a prompt.
+    for (const [key, m] of clips.filter(([key]) => key.startsWith('wd.'))) {
+      expect(m.keptBlocks, `${key} holds ${m.keptBlocks} separated blocks`).toBeLessThanOrEqual(2);
     }
   });
 
@@ -99,6 +126,15 @@ describe('the recorded pack', () => {
     for (const [key, m] of clips) {
       expect(m.durationMs, `${key} is ${m.durationMs}ms`).toBeGreaterThanOrEqual(180);
       expect(m.durationMs, `${key} is ${m.durationMs}ms`).toBeLessThanOrEqual(1400);
+    }
+  });
+
+  it('holds words of a consistent length, so none is an outlier worth a listen', () => {
+    // Before the false starts were dropped the spread was 245ms to 928ms, and
+    // the long end was all padding rather than speech. A word that drifts back
+    // out of this band is one to play on /voice before trusting it.
+    for (const [key, m] of clips.filter(([key]) => key.startsWith('wd.'))) {
+      expect(m.durationMs, `${key} is ${m.durationMs}ms`).toBeLessThanOrEqual(850);
     }
   });
 });

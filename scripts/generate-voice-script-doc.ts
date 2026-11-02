@@ -15,7 +15,22 @@ import { fileURLToPath } from 'node:url';
 // a space in its name, and `.pathname` hands back %20.
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SOURCE = join(ROOT, 'packages', 'audio', 'voice-script.txt');
+const MANIFEST = join(ROOT, 'packages', 'audio', 'src', 'manifest.json');
 const OUT = join(ROOT, 'docs', 'VOICE-SCRIPT.md');
+
+/**
+ * Which clips are already recorded, read out of the manifest.
+ *
+ * The pack arrives in sessions, and the second session should not re-record
+ * the first. Before this, the script handed to a reader listed all 69 clips
+ * whatever had already been done, so the only thing stopping a repeat was
+ * somebody remembering.
+ */
+const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8')) as Record<string, unknown>;
+function isRecorded(key: string): boolean {
+  const path = manifest[key];
+  return typeof path === 'string' && !path.includes('/placeholder-');
+}
 
 interface Row {
   key: string;
@@ -105,16 +120,37 @@ function table(section: { prefix: string }): string {
     // "tuh" off this page would record exactly the defect the note beside it
     // forbids. The one column a reader's eye lands on must not contradict the
     // instruction next to it.
+    // A tick, so a reader can see at a glance which rows are already done
+    // rather than reading the outstanding list and cross-referencing.
+    const file = isRecorded(row.key) ? `\`${row.key}\` ✓` : `\`${row.key}\``;
     if (sounds) {
-      lines.push(`| \`${row.key}\` | **/${row.ipa}/** | ${row.note} |`);
+      lines.push(`| ${file} | **/${row.ipa}/** | ${row.note} |`);
       continue;
     }
-    lines.push(`| \`${row.key}\` | ${row.text} | ${row.ipa ? `\`/${row.ipa}/\`` : '—'} | ${row.note} |`);
+    lines.push(`| ${file} | ${row.text} | ${row.ipa ? `\`/${row.ipa}/\`` : '—'} | ${row.note} |`);
   }
   return lines.join('\n');
 }
 
 const counts = SECTIONS.map((s) => `${rows.filter((r) => r.key.startsWith(s.prefix)).length} ${s.label}`);
+
+const outstanding = rows.filter((r) => !isRecorded(r.key));
+const outstandingBySection = SECTIONS.map((section) => ({
+  section,
+  keys: outstanding.filter((r) => r.key.startsWith(section.prefix)).map((r) => r.key),
+})).filter((group) => group.keys.length > 0);
+
+const progress =
+  outstanding.length === 0
+    ? `**All ${rows.length} clips are recorded.** Nothing below needs doing again; the tables are kept as the record of how each one was asked for.`
+    : [
+        `**${rows.length - outstanding.length} of ${rows.length} clips are already recorded** and are ticked (✓) in the tables below.`,
+        `**Please record only the ${outstanding.length} unticked clips.** Re-recording a ticked one is not harmful, but it is an hour nobody needs to spend, and a second take in a different room would be audible against the first.`,
+        '',
+        ...outstandingBySection.map(
+          (group) => `- **${group.section.title}** — ${group.keys.length}: ${group.keys.map((k) => `\`${k}\``).join(', ')}`,
+        ),
+      ].join('\n');
 
 const doc = `# Soundlings — recording script
 
@@ -123,6 +159,8 @@ const doc = `# Soundlings — recording script
 > clips nobody recorded.
 
 **${rows.length} clips**: ${counts.join(', ')}. About an hour in a quiet room.
+
+${progress}
 
 ## For whoever is reading
 
@@ -157,7 +195,10 @@ you can make them.
 
 - One clip per file, named with the **File** column of each table below, e.g.
   \`ph.s.wav\`, \`wd.sat.wav\`.
-- Leave about half a second of silence at each end; the game trims.
+- Leave about half a second of silence at each end. \`scripts/import-voice-pack.sh\`
+  trims it off, levels every clip to the same peak, and encodes the result —
+  the clips play back-to-back with no gap of their own, so silence left in a
+  file becomes a gap inside a word.
 - Keep the mic position, level and room identical for every clip. These play
   back-to-back, and a jump in tone between two of them is audible.
 - If you fluff one, say it again rather than editing — three clean takes of a

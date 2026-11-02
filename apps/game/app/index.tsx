@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { isPlaceholderPack } from '@soundlings/audio';
+import { hasPlaceholderTeachingClips, placeholderKeys } from '@soundlings/audio';
 import { tokens } from '@soundlings/ui';
 import { AddProfileSheet } from '../src/profiles/AddProfileSheet';
 import { DeleteProfileSheet } from '../src/profiles/DeleteProfileSheet';
@@ -46,6 +46,8 @@ export default function ProfilePicker() {
 
   const sheetOpen = adding || (profiles.length === 0 && !dismissedWhileEmpty);
 
+  const remainingPlaceholders = placeholderKeys().length;
+
   const play = async (profile: Profile) => {
     await select(profile.id);
     router.replace('/island');
@@ -53,9 +55,30 @@ export default function ProfilePicker() {
 
   return (
     <View style={styles.screen}>
-      {isPlaceholderPack() ? (
+      {/*
+        Two different warnings, because the pack arrives in pieces and the
+        pieces are not equally dangerous.
+
+        A synthesised phoneme is harmful: every speech engine says a lone
+        consonant with a schwa after it, so /t/ becomes "tuh", and a child
+        sounding out t-a-p hears "tuh-a-puh" and never reaches "tap". While any
+        phoneme or word is still synthesised, the game must not be put in front
+        of a child, and the banner says exactly that.
+
+        A synthesised "Well done!" is merely unlovely. So once the teaching
+        clips are recorded, this drops to a count of what is left — enough to
+        stop anyone believing the pack is finished, quiet enough not to read as
+        a warning against using it.
+      */}
+      {hasPlaceholderTeachingClips() ? (
         <View style={styles.banner}>
           <Text style={styles.bannerText}>Placeholder voice — not for use with children</Text>
+        </View>
+      ) : remainingPlaceholders > 0 ? (
+        <View style={[styles.banner, styles.bannerSoft]}>
+          <Text style={styles.bannerText}>
+            Recorded voice. {remainingPlaceholders} clips still placeholder.
+          </Text>
         </View>
       ) : null}
 
@@ -166,6 +189,9 @@ const styles = StyleSheet.create({
     borderRadius: tokens.radius.pill,
     backgroundColor: tokens.color.hint,
   },
+  // Softer than the hard warning: present, unalarming, and not competing with
+  // the faces a child is meant to be looking at.
+  bannerSoft: { backgroundColor: tokens.color.tile },
   bannerText: { fontFamily: tokens.font.ui, fontSize: tokens.type.caption, color: tokens.color.ink },
   title: { fontFamily: tokens.font.ui, fontSize: tokens.type.title, color: tokens.color.ink },
   scroller: { flex: 1, alignSelf: 'stretch' },

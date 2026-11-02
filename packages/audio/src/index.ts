@@ -5,7 +5,10 @@ export {
   PRAISE_KEYS,
   audioPath,
   hasAudio,
-  isPlaceholderPack,
+  hasPlaceholderTeachingClips,
+  isMixedPack,
+  isPlaceholder,
   manifestKeys,
-  packName,
+  packOf,
+  placeholderKeys,
 } from './manifest';

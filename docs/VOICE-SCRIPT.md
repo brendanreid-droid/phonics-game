@@ -6,6 +6,14 @@
 
 **69 clips**: 7 sounds, 7 letter names, 24 words, 15 game lines, 12 praise, 4 encouragements. About an hour in a quiet room.
 
+**31 of 69 clips are already recorded** and are ticked (✓) in the tables below.
+**Please record only the 38 unticked clips.** Re-recording a ticked one is not harmful, but it is an hour nobody needs to spend, and a second take in a different room would be audible against the first.
+
+- **The letter names** — 7: `ln.s`, `ln.a`, `ln.t`, `ln.p`, `ln.i`, `ln.m`, `ln.f`
+- **What the game says** — 15: `ui.which_says`, `ui.find_letter`, `ui.build_word`, `ui.tap_picture`, `ui.listen_again`, `ui.lets_go`, `ui.all_done`, `ui.try_this_one`, `ui.which_sound`, `ui.find_word`, `ui.missing_letter`, `ui.which_starts`, `ui.robot_listen`, `ui.sound_it_out`, `ui.meet_this_sound`
+- **Praise** — 12: `praise.1`, `praise.2`, `praise.3`, `praise.4`, `praise.5`, `praise.6`, `praise.7`, `praise.8`, `praise.9`, `praise.10`, `praise.11`, `praise.12`
+- **After a wrong answer** — 4: `encourage.1`, `encourage.2`, `encourage.3`, `encourage.4`
+
 ## For whoever is reading
 
 Thank you — this is for a reading game for five-year-olds who are meeting
@@ -39,7 +47,10 @@ you can make them.
 
 - One clip per file, named with the **File** column of each table below, e.g.
   `ph.s.wav`, `wd.sat.wav`.
-- Leave about half a second of silence at each end; the game trims.
+- Leave about half a second of silence at each end. `scripts/import-voice-pack.sh`
+  trims it off, levels every clip to the same peak, and encodes the result —
+  the clips play back-to-back with no gap of their own, so silence left in a
+  file becomes a gap inside a word.
 - Keep the mic position, level and room identical for every clip. These play
   back-to-back, and a jump in tone between two of them is audible.
 - If you fluff one, say it again rather than editing — three clean takes of a
@@ -52,13 +63,13 @@ These seven matter more than everything else here put together. Please read the 
 
 | File | Sound | How |
 |---|---|---|
-| `ph.s` | **/s/** | As at the start of "sun". Stretch it: a long hiss, two seconds. No vowel before or after. |
-| `ph.a` | **/æ/** | The SHORT vowel of "cat". Not "ah" (father), not the letter name. |
-| `ph.t` | **/t/** | As at the start of "tap". Clipped and unvoiced. NO schwa — "t", never "tuh". Little more than a tap of air. |
-| `ph.p` | **/p/** | As at the start of "pig". Clipped and unvoiced. NO schwa — "p", never "puh". A puff, not a syllable. |
-| `ph.i` | **/ɪ/** | The SHORT vowel of "pin". Not "eye", which is the letter name. |
-| `ph.m` | **/m/** | As at the start of "man". Hum it, lips closed, two seconds. Stretchable and voiced. |
-| `ph.f` | **/f/** | As at the start of "fish". Stretch it: a long unvoiced breath through the lip and teeth. No "fuh". |
+| `ph.s` ✓ | **/s/** | As at the start of "sun". Stretch it: a long hiss, two seconds. No vowel before or after. |
+| `ph.a` ✓ | **/æ/** | The SHORT vowel of "cat". Not "ah" (father), not the letter name. |
+| `ph.t` ✓ | **/t/** | As at the start of "tap". Clipped and unvoiced. NO schwa — "t", never "tuh". Little more than a tap of air. |
+| `ph.p` ✓ | **/p/** | As at the start of "pig". Clipped and unvoiced. NO schwa — "p", never "puh". A puff, not a syllable. |
+| `ph.i` ✓ | **/ɪ/** | The SHORT vowel of "pin". Not "eye", which is the letter name. |
+| `ph.m` ✓ | **/m/** | As at the start of "man". Hum it, lips closed, two seconds. Stretchable and voiced. |
+| `ph.f` ✓ | **/f/** | As at the start of "fish". Stretch it: a long unvoiced breath through the lip and teeth. No "fuh". |
 
 ## The letter names
 
@@ -80,30 +91,30 @@ Whole words at a natural pace. **Never sound a word out and never separate it in
 
 | File | Say | Sound (IPA) | How |
 |---|---|---|---|
-| `wd.at` | at | `/æt/` | Whole word, natural. Do not segment. |
-| `wd.am` | am | `/æm/` | Whole word, natural. Do not segment. |
-| `wd.if` | if | `/ɪf/` | Whole word, natural. Do not segment. |
-| `wd.it` | it | `/ɪt/` | Whole word, natural. Do not segment. |
-| `wd.pat` | pat | `/pæt/` | Whole word, natural. Do not segment. |
-| `wd.tap` | tap | `/tæp/` | Whole word, natural. Do not segment. |
-| `wd.pit` | pit | `/pɪt/` | Whole word, natural. Do not segment. |
-| `wd.sit` | sit | `/sɪt/` | Whole word, natural. Do not segment. |
-| `wd.sip` | sip | `/sɪp/` | Whole word, natural. Do not segment. |
-| `wd.pip` | pip | `/pɪp/` | Whole word, natural. Do not segment. |
-| `wd.fat` | fat | `/fæt/` | Whole word, natural. Do not segment. |
-| `wd.fit` | fit | `/fɪt/` | Whole word, natural. Do not segment. |
-| `wd.mat` | mat | `/mæt/` | Whole word, natural. Do not segment. |
-| `wd.map` | map | `/mæp/` | Whole word, natural. Do not segment. |
-| `wd.sat` | sat | `/sæt/` | Whole word, natural. Do not segment. |
-| `wd.tip` | tip | `/tɪp/` | Whole word, natural. Do not segment. |
-| `wd.sap` | sap | `/sæp/` | Whole word, natural. Do not segment. |
-| `wd.sam` | Sam | `/sæm/` | A name. Whole word, natural. |
-| `wd.pam` | Pam | `/pæm/` | A name. Whole word, natural. |
-| `wd.i_pronoun` | I | `/ɑe/` | The word "I", not the letter name. Whole word. |
-| `wd.the` | the | `/ðə/` | Unstressed, as in ordinary speech: "thuh", not "thee". |
-| `wd.a_word` | a | `/ə/` | Unstressed "uh", as in "a cat". Not the letter name "ay". |
-| `wd.as` | as | `/æz/` | Ends in a Z sound. Say "az", not "ass". |
-| `wd.is` | is | `/ɪz/` | Ends in a Z sound. Say "iz", not "iss". |
+| `wd.at` ✓ | at | `/æt/` | Whole word, natural. Do not segment. |
+| `wd.am` ✓ | am | `/æm/` | Whole word, natural. Do not segment. |
+| `wd.if` ✓ | if | `/ɪf/` | Whole word, natural. Do not segment. |
+| `wd.it` ✓ | it | `/ɪt/` | Whole word, natural. Do not segment. |
+| `wd.pat` ✓ | pat | `/pæt/` | Whole word, natural. Do not segment. |
+| `wd.tap` ✓ | tap | `/tæp/` | Whole word, natural. Do not segment. |
+| `wd.pit` ✓ | pit | `/pɪt/` | Whole word, natural. Do not segment. |
+| `wd.sit` ✓ | sit | `/sɪt/` | Whole word, natural. Do not segment. |
+| `wd.sip` ✓ | sip | `/sɪp/` | Whole word, natural. Do not segment. |
+| `wd.pip` ✓ | pip | `/pɪp/` | Whole word, natural. Do not segment. |
+| `wd.fat` ✓ | fat | `/fæt/` | Whole word, natural. Do not segment. |
+| `wd.fit` ✓ | fit | `/fɪt/` | Whole word, natural. Do not segment. |
+| `wd.mat` ✓ | mat | `/mæt/` | Whole word, natural. Do not segment. |
+| `wd.map` ✓ | map | `/mæp/` | Whole word, natural. Do not segment. |
+| `wd.sat` ✓ | sat | `/sæt/` | Whole word, natural. Do not segment. |
+| `wd.tip` ✓ | tip | `/tɪp/` | Whole word, natural. Do not segment. |
+| `wd.sap` ✓ | sap | `/sæp/` | Whole word, natural. Do not segment. |
+| `wd.sam` ✓ | Sam | `/sæm/` | A name. Whole word, natural. |
+| `wd.pam` ✓ | Pam | `/pæm/` | A name. Whole word, natural. |
+| `wd.i_pronoun` ✓ | I | `/ɑe/` | The word "I", not the letter name. Whole word. |
+| `wd.the` ✓ | the | `/ðə/` | Unstressed, as in ordinary speech: "thuh", not "thee". |
+| `wd.a_word` ✓ | a | `/ə/` | Unstressed "uh", as in "a cat". Not the letter name "ay". |
+| `wd.as` ✓ | as | `/æz/` | Ends in a Z sound. Say "az", not "ass". |
+| `wd.is` ✓ | is | `/ɪz/` | Ends in a Z sound. Say "iz", not "iss". |
 
 ## What the game says
 

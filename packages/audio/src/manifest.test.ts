@@ -7,8 +7,12 @@ import {
   PRAISE_KEYS,
   audioPath,
   hasAudio,
-  isPlaceholderPack,
+  hasPlaceholderTeachingClips,
+  isMixedPack,
+  isPlaceholder,
   manifestKeys,
+  packOf,
+  placeholderKeys,
 } from './manifest';
 
 const REPO_ROOT = join(__dirname, '..', '..', '..');
@@ -53,10 +57,36 @@ describe('audio manifest', () => {
     expect(() => audioPath('nope.nothing')).toThrow(/unknown audio key/i);
   });
 
-  it('reports that the current pack is a placeholder', () => {
-    // When this flips to false, a real voice pack has landed and the in-app
-    // placeholder banner will disappear on its own.
-    expect(isPlaceholderPack()).toBe(true);
+  it('plays a recorded human voice for every phoneme and every word', () => {
+    // The clips that teach. A synthesised phoneme is not a rough approximation
+    // of the right sound, it is the wrong sound: every speech engine renders a
+    // lone consonant with a schwa after it, so /t/ comes out "tuh" and a child
+    // sounding out t-a-p hears "tuh-a-puh". This is the assertion that says the
+    // game is safe to put in front of a child at all.
+    const synthesised = manifestKeys()
+      .filter((key) => key.startsWith('ph.') || key.startsWith('wd.'))
+      .filter(isPlaceholder);
+    expect(synthesised, `still synthesised: ${synthesised.join(', ')}`).toEqual([]);
+    expect(hasPlaceholderTeachingClips()).toBe(false);
+  });
+
+  it('is not vacuous: there are phoneme and word keys to check', () => {
+    // Guards the check above against passing because the filter found nothing.
+    const teaching = manifestKeys().filter((k) => k.startsWith('ph.') || k.startsWith('wd.'));
+    expect(teaching.length).toBeGreaterThanOrEqual(31);
+    for (const key of teaching) expect(packOf(key), key).toBe('human-au');
+  });
+
+  it('still knows which clips are waiting to be recorded', () => {
+    // The letter names, the interface lines and the praise. Harmless as
+    // synthesised audio, but the home screen says how many are left so nobody
+    // believes the pack is finished.
+    const waiting = placeholderKeys();
+    expect(waiting.length).toBeGreaterThan(0);
+    expect(isMixedPack()).toBe(true);
+    for (const key of waiting) {
+      expect(key.startsWith('ph.') || key.startsWith('wd.'), `${key} teaches and must be recorded`).toBe(false);
+    }
   });
 });
 

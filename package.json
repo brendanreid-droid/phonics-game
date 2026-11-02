@@ -11,6 +11,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.base.json --noEmit",
     "generate:audio-map": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/generate-audio-asset-map.ts",
+    "generate:audio-manifest": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/generate-audio-manifest.ts",
+    "import:voice-pack": "./scripts/import-voice-pack.sh",
     "pretest": "./scripts/check-no-secrets.sh",
     "generate:voice-script": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/generate-voice-script-doc.ts",
     "generate:artwork-brief": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/lib/run-ts.mjs ./scripts/generate-artwork-brief.ts"

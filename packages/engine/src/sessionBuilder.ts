@@ -305,7 +305,7 @@ export function buildSession(args: BuildSessionArgs): TaskInstance[] {
       const others = blendWordIds.filter(
         (id) =>
           id !== p.targetId &&
-          getWord(id).picture !== undefined &&
+          getWord(id).picturable &&
           // `forbidden` holds LETTERS, so a word is excluded when one of its
           // letters has not been taught yet — not by its own id.
           getWord(id).graphemes.every((g) => !forbidden.has(g)),

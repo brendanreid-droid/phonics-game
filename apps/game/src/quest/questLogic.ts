@@ -281,7 +281,7 @@ export function isPlayablePlan(plan: readonly TaskInstance[]): boolean {
         // there is no letter on this screen to fall back on: a word without one
         // would render as a blank card the child cannot choose between.
         task.choices.forEach((c) => getWord(c));
-        if (!task.choices.every((c) => getWord(c).picture !== undefined)) return false;
+        if (!task.choices.every((c) => getWord(c).picturable)) return false;
         return task.choices.includes(task.correctChoice);
       }
       if (task.skill === 'BLEND_READ') {

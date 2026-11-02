@@ -50,7 +50,7 @@ const graphemeEntries = (ids: string[] = GRAPHEMES): Entry[] =>
 // Exactly the quota: three picturable words blended orally, six of the nine
 // read, and five spelt.
 const ORAL_WORDS = ['pat', 'tap', 'pit'];
-const BLEND_WORDS = ['pat', 'tap', 'pit', 'sit', 'sip', 'pip'];
+const BLEND_WORDS = ['pat', 'tap', 'pit', 'sit', 'sip', 'sam'];
 const SPELL_WORDS = ['sat', 'tip', 'sap', 'mat', 'map'];
 // Robot Talk shows pictures, so oral blending is drawn from the picturable
 // words like reading is.
@@ -158,7 +158,7 @@ describe('the four completion quotas', () => {
     const entries = [
       ...allGraphemes,
       ...oralEntries(ORAL_WORDS.slice(0, 2)),
-      ...blendEntries([...BLEND_WORDS, 'fit', 'mat', 'map']),
+      ...blendEntries([...BLEND_WORDS, 'pam', 'mat', 'map']),
       ...spellEntries([...SPELL_WORDS, 'sam', 'pam', 'fat']),
     ];
     const progress = levelProgress(1, mapOf(entries), NOW);
@@ -200,7 +200,7 @@ describe('the four completion quotas', () => {
     const entries = [
       ...allGraphemes,
       ...oralEntries([...ORAL_WORDS, 'sit']),
-      ...blendEntries([...BLEND_WORDS, 'fit', 'mat', 'map']),
+      ...blendEntries([...BLEND_WORDS, 'pam', 'mat', 'map']),
       ...spellEntries([...SPELL_WORDS, 'sam', 'pam', 'fat']),
     ];
     const progress = levelProgress(1, mapOf(entries), NOW);
@@ -360,7 +360,7 @@ describe('fraction', () => {
     const entries = [
       ...graphemeEntries(),
       ...oralEntries([...ORAL_WORDS, 'sit']),
-      ...blendEntries([...BLEND_WORDS, 'fit', 'mat', 'map']),
+      ...blendEntries([...BLEND_WORDS, 'pam', 'mat', 'map']),
       ...spellEntries([...SPELL_WORDS, 'sam', 'pam', 'fat']),
     ];
     expect(levelProgress(1, mapOf(entries), NOW).fraction).toBe(1);

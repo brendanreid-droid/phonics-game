@@ -1,9 +1,9 @@
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { CREATURE_LIST } from '@soundlings/curriculum';
+import { CREATURE_LIST, PICTURABLE_WORD_LIST } from '@soundlings/curriculum';
 import { tokens } from '@soundlings/ui';
 import { CreatureArt, EggArt } from '../src/art/creatures';
 import type { CreatureId } from '../src/art/creatures';
-import { DRAWN_WORDS, WordPictureArt } from '../src/art/wordPictures';
+import { DRAWN_WORDS, WordPictureArt, hasWordPicture } from '../src/art/wordPictures';
 
 /**
  * The creature sheet. A development screen, deliberately not linked from
@@ -27,6 +27,9 @@ import { DRAWN_WORDS, WordPictureArt } from '../src/art/wordPictures';
  *
  * Reachable at /art while the dev server is running.
  */
+/** Picturable words still waiting on a drawing, named rather than counted. */
+const EMOJI_ONLY = PICTURABLE_WORD_LIST.filter((w) => !hasWordPicture(w.id)).map((w) => w.id);
+
 export default function ArtSheet() {
   return (
     <ScrollView contentContainerStyle={styles.screen}>
@@ -56,8 +59,9 @@ export default function ArtSheet() {
         ))}
       </View>
       <Text style={styles.note}>
-        As they appear in the game — 56pt. The other five words still show their emoji, which is what
-        the illustration brief exists to replace.
+        As they appear in the game — 56pt. {EMOJI_ONLY.join(', ')} still show their emoji, which is
+        what the illustration brief exists to replace. Sam and Pam have no emoji behind them at all:
+        nothing in a font means "Sam" rather than "a child", so they are drawn or they are nothing.
       </Text>
 
       <View style={styles.row}>

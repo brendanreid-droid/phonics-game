@@ -8,39 +8,58 @@ import type { Word, WordId, WordSeed } from './types';
  * them as decodable would teach a child to sound "is" as "iss". They are
  * tricky words — see trickyWords.ts.
  *
- * `picture` is a stand-in emoji pending real illustration. It is present only
- * where a five-year-old can reliably name the image unprompted; that is the
- * acceptance test for the real artwork too (see spec §14). Function words and
- * ambiguous pictures (sat vs sit, tip) are intentionally picture-less and so
- * never appear in Picture Match.
+ * `picturable` says whether a five-year-old shown a picture of the word says
+ * the word, unprompted — the acceptance test for the real artwork too (see
+ * spec §14). Function words and the words whose obvious image is named
+ * something else (sat vs sit, tip) are deliberately not picturable, and so
+ * never appear in Robot Talk or Picture Match.
+ *
+ * `picture` is the stand-in emoji for a picturable word that nobody has drawn
+ * yet. Sam and Pam have drawings and no emoji could stand for them, so they
+ * carry none.
  */
 const SEEDS: WordSeed[] = [
-  // Function words — no picture possible.
-  { id: 'at', text: 'at', graphemes: ['a', 't'], pattern: 'vc', audio: 'wd.at' },
-  { id: 'am', text: 'am', graphemes: ['a', 'm'], pattern: 'vc', audio: 'wd.am' },
-  { id: 'if', text: 'if', graphemes: ['i', 'f'], pattern: 'vc', audio: 'wd.if' },
-  { id: 'it', text: 'it', graphemes: ['i', 't'], pattern: 'vc', audio: 'wd.it' },
+  // Function words — nothing to draw.
+  { id: 'at', text: 'at', graphemes: ['a', 't'], pattern: 'vc', picturable: false, audio: 'wd.at' },
+  { id: 'am', text: 'am', graphemes: ['a', 'm'], pattern: 'vc', picturable: false, audio: 'wd.am' },
+  { id: 'if', text: 'if', graphemes: ['i', 'f'], pattern: 'vc', picturable: false, audio: 'wd.if' },
+  { id: 'it', text: 'it', graphemes: ['i', 't'], pattern: 'vc', picturable: false, audio: 'wd.it' },
 
-  // CVC words with reliable pictures.
-  { id: 'pat', text: 'pat', graphemes: ['p', 'a', 't'], pattern: 'cvc', picture: '🐶', audio: 'wd.pat' },
-  { id: 'tap', text: 'tap', graphemes: ['t', 'a', 'p'], pattern: 'cvc', picture: '🚰', audio: 'wd.tap' },
-  { id: 'pit', text: 'pit', graphemes: ['p', 'i', 't'], pattern: 'cvc', picture: '🕳️', audio: 'wd.pit' },
-  { id: 'sit', text: 'sit', graphemes: ['s', 'i', 't'], pattern: 'cvc', picture: '🪑', audio: 'wd.sit' },
-  { id: 'sip', text: 'sip', graphemes: ['s', 'i', 'p'], pattern: 'cvc', picture: '🥤', audio: 'wd.sip' },
-  { id: 'pip', text: 'pip', graphemes: ['p', 'i', 'p'], pattern: 'cvc', picture: '🌰', audio: 'wd.pip' },
-  { id: 'fit', text: 'fit', graphemes: ['f', 'i', 't'], pattern: 'cvc', picture: '💪', audio: 'wd.fit' },
-  { id: 'mat', text: 'mat', graphemes: ['m', 'a', 't'], pattern: 'cvc', picture: '🧘', audio: 'wd.mat' },
-  { id: 'map', text: 'map', graphemes: ['m', 'a', 'p'], pattern: 'cvc', picture: '🗺️', audio: 'wd.map' },
+  // Picturable, still on a stand-in emoji. See packages/curriculum/artwork-brief.txt
+  // for what each one has to be drawn as, and what it must not read as.
+  { id: 'tap', text: 'tap', graphemes: ['t', 'a', 'p'], pattern: 'cvc', picturable: true, picture: '🚰', audio: 'wd.tap' },
+  { id: 'pit', text: 'pit', graphemes: ['p', 'i', 't'], pattern: 'cvc', picturable: true, picture: '🕳️', audio: 'wd.pit' },
+  { id: 'mat', text: 'mat', graphemes: ['m', 'a', 't'], pattern: 'cvc', picturable: true, picture: '🧘', audio: 'wd.mat' },
 
-  // CVC words without a reliable picture — still used for spelling and blending.
-  // fat is picture-less on purpose: a child names the obvious image (a pig) as
-  // "pig", and that emoji already belongs to /p/'s mnemonic and Popo.
-  { id: 'fat', text: 'fat', graphemes: ['f', 'a', 't'], pattern: 'cvc', audio: 'wd.fat' },
-  { id: 'sat', text: 'sat', graphemes: ['s', 'a', 't'], pattern: 'cvc', audio: 'wd.sat' },
-  { id: 'tip', text: 'tip', graphemes: ['t', 'i', 'p'], pattern: 'cvc', audio: 'wd.tip' },
-  { id: 'sap', text: 'sap', graphemes: ['s', 'a', 'p'], pattern: 'cvc', audio: 'wd.sap' },
-  { id: 'sam', text: 'Sam', graphemes: ['s', 'a', 'm'], pattern: 'cvc', audio: 'wd.sam' },
-  { id: 'pam', text: 'Pam', graphemes: ['p', 'a', 'm'], pattern: 'cvc', audio: 'wd.pam' },
+  // Picturable and drawn. The emoji stays as the fallback until the
+  // commissioned art lands; apps/game renders the drawing in preference.
+  { id: 'pat', text: 'pat', graphemes: ['p', 'a', 't'], pattern: 'cvc', picturable: true, picture: '🐶', audio: 'wd.pat' },
+  { id: 'sit', text: 'sit', graphemes: ['s', 'i', 't'], pattern: 'cvc', picturable: true, picture: '🪑', audio: 'wd.sit' },
+  { id: 'sip', text: 'sip', graphemes: ['s', 'i', 'p'], pattern: 'cvc', picturable: true, picture: '🥤', audio: 'wd.sip' },
+  { id: 'map', text: 'map', graphemes: ['m', 'a', 'p'], pattern: 'cvc', picturable: true, picture: '🗺️', audio: 'wd.map' },
+
+  // The cast. Picturable with no emoji: no emoji can mean "Sam" rather than
+  // "a child", so these are drawn or they are nothing. The plaits are what
+  // tell Pam from Sam at 56pt, not the face.
+  { id: 'sam', text: 'Sam', graphemes: ['s', 'a', 'm'], pattern: 'cvc', picturable: true, audio: 'wd.sam' },
+  { id: 'pam', text: 'Pam', graphemes: ['p', 'a', 'm'], pattern: 'cvc', picturable: true, audio: 'wd.pam' },
+
+  // Not picturable — still read and spelt, just never shown as a picture.
+  //
+  // fat: the obvious image is a pig, which a child names "pig", and that emoji
+  //   already belongs to /p/'s mnemonic and to Popo.
+  // pip: a pip is an apple seed. A child shown one says "seed" at best, and
+  //   said "nut" at the 🌰 this used to carry.
+  // fit: an adjective with nothing to draw. The 💪 it used to carry is named
+  //   "muscle" by every child.
+  // sat, tip: drawable, but indistinguishable from `sit` and `tap` in a
+  //   picture — and those two are the pair a child must tell apart.
+  { id: 'fat', text: 'fat', graphemes: ['f', 'a', 't'], pattern: 'cvc', picturable: false, audio: 'wd.fat' },
+  { id: 'sat', text: 'sat', graphemes: ['s', 'a', 't'], pattern: 'cvc', picturable: false, audio: 'wd.sat' },
+  { id: 'tip', text: 'tip', graphemes: ['t', 'i', 'p'], pattern: 'cvc', picturable: false, audio: 'wd.tip' },
+  { id: 'sap', text: 'sap', graphemes: ['s', 'a', 'p'], pattern: 'cvc', picturable: false, audio: 'wd.sap' },
+  { id: 'pip', text: 'pip', graphemes: ['p', 'i', 'p'], pattern: 'cvc', picturable: false, audio: 'wd.pip' },
+  { id: 'fit', text: 'fit', graphemes: ['f', 'i', 't'], pattern: 'cvc', picturable: false, audio: 'wd.fit' },
 ];
 
 function decodableFromLevel(seed: WordSeed): number {
@@ -66,7 +85,7 @@ export const WORDS: Record<WordId, Word> = Object.fromEntries(
 );
 
 /** Words usable in Picture Match. */
-export const PICTURABLE_WORD_LIST: readonly Word[] = WORD_LIST.filter((w) => w.picture !== undefined);
+export const PICTURABLE_WORD_LIST: readonly Word[] = WORD_LIST.filter((w) => w.picturable);
 
 /** Like indexing WORDS, but an unknown id throws and names itself. */
 export function getWord(id: WordId): Word {

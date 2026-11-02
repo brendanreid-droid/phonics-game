@@ -262,7 +262,7 @@ describe('pickWordDistractors', () => {
       const picks = pickWordDistractors({ target: 'mat', count: 99, level: 1, confusions: {}, rng: makeRng(seed) });
       expect(picks).not.toContain('mat');
       expect(new Set(picks).size).toBe(picks.length);
-      for (const id of picks) expect(WORDS[id].picture, id).toBeDefined();
+      for (const id of picks) expect(WORDS[id].picturable, id).toBe(true);
     }
   });
 
@@ -287,10 +287,12 @@ describe('pickWordDistractors', () => {
       const picks = pickWordDistractors({ target: 'mat', count: 2, level: 1, confusions: {}, rng: makeRng(seed) });
       expect(picks.slice().sort(), `seed ${seed}`).toEqual(['map', 'pat']);
     }
-    // sit's neighbours are sip (last), fit (first) and pit (first).
+    // sit has exactly two picturable neighbours: sip (last grapheme) and pit
+    // (first). `fit` was a third until it lost its picture — 💪 is named
+    // "muscle" by every child — which is why only two are asked for here.
     for (const seed of SEEDS) {
-      const picks = pickWordDistractors({ target: 'sit', count: 3, level: 1, confusions: {}, rng: makeRng(seed) });
-      expect(picks.slice().sort(), `seed ${seed}`).toEqual(['fit', 'pit', 'sip']);
+      const picks = pickWordDistractors({ target: 'sit', count: 2, level: 1, confusions: {}, rng: makeRng(seed) });
+      expect(picks.slice().sort(), `seed ${seed}`).toEqual(['pit', 'sip']);
     }
   });
 
@@ -324,7 +326,7 @@ describe('pickWordDistractors', () => {
     const picks = pickWordDistractors({ target: 'sat', count: 99, level: 1, confusions: {}, rng: makeRng(1) });
     expect(picks).not.toContain('sat');
     expect(picks.length).toBeGreaterThan(0);
-    for (const id of picks) expect(WORDS[id].picture, id).toBeDefined();
+    for (const id of picks) expect(WORDS[id].picturable, id).toBe(true);
   });
 
   it('does not offer the same word twice if allowedWords repeats it', () => {
@@ -370,25 +372,30 @@ describe('pickWordDistractors', () => {
   });
 
   it('ignores a logged confusion with a word that is not eligible to be shown', () => {
-    // sat has no picture; fit contains an f the child has not met.
-    const confusions = { [confusionKey('mat', 'sat')]: 9, [confusionKey('mat', 'fit')]: 9 };
+    // Two different reasons a logged confusion must still be refused: `sat` is
+    // not picturable, and `map` needs an `m` this child has not met. Both are
+    // needed — a filter that only checked one would pass on the other.
+    const confusions = { [confusionKey('pit', 'sat')]: 9, [confusionKey('pit', 'map')]: 9 };
     for (const seed of SEEDS) {
       const picks = pickWordDistractors({
-        target: 'mat', count: 99, level: 1, rng: makeRng(seed), confusions,
-        metGraphemes: ['m', 'a', 't', 'p', 'i', 's'],
+        target: 'pit', count: 99, level: 1, rng: makeRng(seed), confusions,
+        metGraphemes: ['p', 'i', 't', 's', 'a'],
       });
+      expect(picks.length, `seed ${seed}`).toBeGreaterThan(0);
       expect(picks).not.toContain('sat');
-      expect(picks).not.toContain('fit');
+      expect(picks).not.toContain('map');
     }
   });
 
   it('never offers a word built from a grapheme the child has not met', () => {
-    // sit with i, s, t, p met: mat and map need an unmet a and m; fit needs f.
+    // sit with s, i, t, p met: mat, map, pat, tap, sam and pam all need an
+    // unmet a or m, which leaves only the two words spelt from these four
+    // letters.
     for (const seed of SEEDS) {
       const picks = pickWordDistractors({
         target: 'sit', count: 99, level: 1, confusions: {}, rng: makeRng(seed), metGraphemes: ['s', 'i', 't', 'p'],
       });
-      expect(picks.slice().sort(), `seed ${seed}`).toEqual(['pip', 'pit', 'sip']);
+      expect(picks.slice().sort(), `seed ${seed}`).toEqual(['pit', 'sip']);
     }
   });
 
@@ -466,11 +473,12 @@ describe('pickWordDistractors, ranking for Word Pick (sharedFirstGrapheme)', () 
   });
 
   it('puts words sharing the first grapheme ahead of closer words that do not share it', () => {
-    // pat's nearest neighbour is mat (one grapheme away). pip is two away. With
-    // the first-letter rule, pip must still beat mat, because mat starts with m.
+    // pat's neighbours one grapheme away are mat, pit and pam. With the
+    // first-letter rule the two that start with p must both beat mat, which is
+    // exactly as close and starts with m.
     for (const seed of SEEDS) {
       const picks = pick('pat', 2, seed);
-      expect(picks.slice().sort(), `seed ${seed}`).toEqual(['pip', 'pit']);
+      expect(picks.slice().sort(), `seed ${seed}`).toEqual(['pam', 'pit']);
       for (const id of picks) expect(WORDS[id].graphemes[0], id).toBe('p');
     }
   });
@@ -482,8 +490,11 @@ describe('pickWordDistractors, ranking for Word Pick (sharedFirstGrapheme)', () 
   });
 
   it('orders words sharing the first grapheme nearest first', () => {
-    // For pat: pit is one grapheme away and pip is two.
-    for (const seed of SEEDS) expect(pick('pat', 2, seed)[0], `seed ${seed}`).toBe('pit');
+    // For sit: sip is one grapheme away and sam is two, so sip comes first
+    // even though both share the s.
+    for (const seed of SEEDS) {
+      expect(pick('sit', 2, seed), `seed ${seed}`).toEqual(['sip', 'sam']);
+    }
   });
 
   it('falls back to the nearest other words once the shared-first words run out', () => {

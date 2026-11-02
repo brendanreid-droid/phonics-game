@@ -55,7 +55,7 @@ export const TASK_TYPES: readonly TaskTypeMeta[] = [
     // No letters may appear, so pictures are the only possible answer. Unlike
     // the reading games' picture requirement, this is a fact about the task
     // rather than a gap in the artwork: there is nothing here to read.
-    canServeTarget: (targetId) => WORDS[targetId]?.picture !== undefined,
+    canServeTarget: (targetId) => WORDS[targetId]?.picturable === true,
   },
   {
     id: 'sound-hunt',
@@ -109,7 +109,7 @@ export const TASK_TYPES: readonly TaskTypeMeta[] = [
     // Shows pictures as the answers, so the word must have one. This used to be implicit, enforced only by the
     // session builder narrowing the pool to picturable words — which also, and
     // invisibly, kept Sound It Out's spoken candidates from existing.
-    canServeTarget: (targetId) => WORDS[targetId]?.picture !== undefined,
+    canServeTarget: (targetId) => WORDS[targetId]?.picturable === true,
   },
   {
     id: 'word-pick',
@@ -122,7 +122,7 @@ export const TASK_TYPES: readonly TaskTypeMeta[] = [
     // Shows a picture as the question, so the word must have one. This used to be implicit, enforced only by the
     // session builder narrowing the pool to picturable words — which also, and
     // invisibly, kept Sound It Out's spoken candidates from existing.
-    canServeTarget: (targetId) => WORDS[targetId]?.picture !== undefined,
+    canServeTarget: (targetId) => WORDS[targetId]?.picturable === true,
   },
   {
     id: 'missing-letter',

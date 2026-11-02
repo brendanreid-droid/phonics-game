@@ -117,7 +117,7 @@ describe('picturableWordsForLevel', () => {
     expect(picturableWordsForLevel(0)).toEqual([]);
     const words = picturableWordsForLevel(1);
     expect(words.length).toBeGreaterThan(0);
-    for (const w of words) expect(w.picture).toBeDefined();
+    for (const w of words) expect(w.picturable, w.id).toBe(true);
     expect(words.length).toBeLessThanOrEqual(PICTURABLE_WORD_LIST.length);
   });
 });
@@ -141,16 +141,21 @@ describe('picturableWordsStartingWith', () => {
     expect(ids).not.toContain('sam');
   });
 
-  // The test above is weak on its own: `sam` has no picture, so a filter that
-  // matched words merely CONTAINING the grapheme would still exclude it, and no
-  // picturable word has `m` anywhere but first. These pin the position
-  // directly, using graphemes that do appear mid-word in picturable words
-  // (`t` ends pat/pit/sit/fit/mat; `p` ends tap/sip/pip/map).
+  // These pin the position directly, using graphemes that do appear mid-word
+  // in picturable words (`t` ends pat/pit/sit/mat; `p` ends tap/sip/map;
+  // `m` ends sam/pam).
   it('does not match a grapheme in a later position', () => {
     expect(picturableWordsStartingWith('t', 1).map((w) => w.id)).toEqual(['tap']);
-    expect(picturableWordsStartingWith('f', 1).map((w) => w.id)).toEqual(['fit']);
-    expect(picturableWordsStartingWith('p', 1).map((w) => w.id).sort()).toEqual(['pat', 'pip', 'pit']);
-    expect(picturableWordsStartingWith('s', 1).map((w) => w.id).sort()).toEqual(['sip', 'sit']);
+    expect(picturableWordsStartingWith('m', 1).map((w) => w.id).sort()).toEqual(['map', 'mat']);
+    expect(picturableWordsStartingWith('p', 1).map((w) => w.id).sort()).toEqual(['pam', 'pat', 'pit']);
+    expect(picturableWordsStartingWith('s', 1).map((w) => w.id).sort()).toEqual(['sam', 'sip', 'sit']);
+  });
+
+  it('returns nothing for f, whose only picturable word was retired', () => {
+    // `fat` is a pig a child names "pig"; `fit` is an adjective with nothing to
+    // draw, and the 💪 it carried was named "muscle". Both were deliberate, and
+    // the consequence is that /f/ has no word picture at all.
+    expect(picturableWordsStartingWith('f', 1)).toEqual([]);
   });
 
   it('returns exactly the words whose first grapheme matches, for every Level 1 grapheme', () => {
@@ -164,9 +169,9 @@ describe('picturableWordsStartingWith', () => {
     }
   });
 
-  it('only returns words with a picture', () => {
+  it('only returns words that are picturable', () => {
     for (const word of picturableWordsStartingWith('s', 1)) {
-      expect(word.picture).toBeDefined();
+      expect(word.picturable, word.id).toBe(true);
     }
     // `i` starts `it` and `if`, which are real words but unpictured. A filter
     // that dropped the picture requirement would return them.

@@ -162,7 +162,7 @@ export function pickWordDistractors(args: WordDistractorArgs): WordId[] {
     if (id === target) return false;
     const word = getWord(id);
     return (
-      (!requirePicture || word.picture !== undefined) &&
+      (!requirePicture || word.picturable) &&
       word.decodableFromLevel <= level &&
       (met === undefined || word.graphemes.every((g) => met.has(g)))
     );

@@ -229,11 +229,113 @@ function Map({ flat }: Drawn) {
   );
 }
 
+/**
+ * The cast, head and shoulders, waving.
+ *
+ * These two are not optional extras. `pip` and `fit` left Robot Talk because no
+ * drawing of them is ever named "pip" or "fit" — and the engine needs a floor
+ * of eight picturable words, so two had to arrive before those two could go.
+ *
+ * They are also the only two words in the game that are picturable with no
+ * emoji behind them. No emoji means "Sam" rather than "a child", so these are
+ * drawn or they are nothing.
+ *
+ * **The hair is the picture.** A child meets Sam inside `sit` and Pam inside
+ * `sip`, and the job here is that the same person is recognisable alone. Faces
+ * do not survive 56pt; silhouettes do. So Sam's curls break the top edge of his
+ * head and Pam's plaits hang past her shoulders, and both are drawn in flat
+ * mode — the silhouette test is worthless if the drawing opts out of it, which
+ * is exactly how Annie once became an indistinguishable blob.
+ */
+function Waver({
+  flat,
+  hair,
+  top,
+  plaits,
+}: Drawn & { hair: string; top: string; plaits?: boolean }) {
+  return (
+    <G>
+      {/* The waving arm goes down first, so the shoulder covers where it joins
+          and the arm reads as coming from behind the body rather than being
+          stuck on. Bare skin, not a sleeve: at 56pt a sleeve the colour of the
+          top merges into it and the hand is left floating on its own. */}
+      <Path d="M40 50 L52 34" stroke={ink(SKIN, flat)} strokeWidth={10} strokeLinecap="round" />
+      {/* The hand is deliberately much smaller than the head and overlaps the
+          end of the arm. Drawn as a circle the same size and colour as the
+          head, with a gap, it read as a second head floating beside the
+          first. */}
+      <Circle cx={54} cy={31} r={5.5} fill={ink(SKIN, flat)} stroke={line(flat)} strokeWidth={flat ? 0 : 2} />
+      <Path
+        d="M9 64 C9 47 15 39 28 39 C41 39 47 47 47 64 Z"
+        fill={ink(top, flat)}
+        stroke={line(flat)}
+        strokeWidth={STROKE}
+        strokeLinejoin="round"
+      />
+      <Circle cx={28} cy={26} r={14} fill={ink(SKIN, flat)} stroke={line(flat)} strokeWidth={STROKE} />
+      {plaits ? (
+        <Path
+          d="M14 25 C14 10 42 10 42 25 C42 18 37 14 28 14 C19 14 14 18 14 25 Z"
+          fill={ink(hair, flat)}
+          stroke={line(flat)}
+          strokeWidth={flat ? 0 : 1.5}
+        />
+      ) : (
+        // Curls cut INTO the top edge rather than drawn on top of it, so they
+        // are part of the outline and survive being filled solid.
+        <Path
+          d="M14 25 C13 17 17 10 21 13 C22 7 27 7 28 12 C30 7 36 8 36 13 C41 10 43 17 42 25 C42 18 37 14 28 14 C19 14 14 18 14 25 Z"
+          fill={ink(hair, flat)}
+          stroke={line(flat)}
+          strokeWidth={flat ? 0 : 1.5}
+        />
+      )}
+      {/* Pam's plaits hang in FRONT of her shoulders, drawn last so nothing can
+          cover them. Behind the head, where they started, they were inside her
+          own silhouette and invisible — she read as Sam, which is the one
+          thing these two pictures may not do.
+          They start tucked under the head and flare out past the shoulder, so
+          the silhouette is broken at the bottom where there is room for it.
+          Each is a filled shape ANCHORED INSIDE THE HEAD rather than a line
+          beside it. As strokes they left a wedge of background enclosed
+          between plait, neck and shoulder — at 56pt that reads as a hole in
+          the drawing, not as hair. Starting them within the head circle means
+          no gap can open however the head or shoulders are moved. */}
+      {plaits ? (
+        <G>
+          <Path
+            d="M20 31 C10 38 3 50 4 63 C10 64 18 60 19 48 C20 41 23 35 25 32 Z"
+            fill={ink(hair, flat)}
+            stroke={line(flat)}
+            strokeWidth={flat ? 0 : 1.5}
+          />
+          <Path
+            d="M36 31 C46 38 53 50 52 63 C46 64 38 60 37 48 C36 41 33 35 31 32 Z"
+            fill={ink(hair, flat)}
+            stroke={line(flat)}
+            strokeWidth={flat ? 0 : 1.5}
+          />
+        </G>
+      ) : null}
+      {!flat && <Circle cx={22} cy={27} r={2} fill={INK} />}
+      {!flat && <Circle cx={34} cy={27} r={2} fill={INK} />}
+      {!flat && (
+        <Path d="M22 34 C25 38 31 38 34 34" stroke={INK} strokeWidth={2} strokeLinecap="round" fill="none" />
+      )}
+    </G>
+  );
+}
+
+const Sam = ({ flat }: Drawn) => <Waver flat={flat} hair={SAM_HAIR} top={SAM_TOP} />;
+const Pam = ({ flat }: Drawn) => <Waver flat={flat} hair={PAM_HAIR} top={PAM_TOP} plaits />;
+
 const DRAWINGS: Partial<Record<WordId, (props: Drawn) => React.JSX.Element>> = {
   sit: Sit,
   sip: Sip,
   pat: Pat,
   map: Map,
+  sam: Sam,
+  pam: Pam,
 };
 
 /** The words that have a drawing. Everything else still falls back to its emoji. */

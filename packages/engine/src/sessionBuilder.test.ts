@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getGrapheme, getWord, graphemesForLevel, wordsForLevel } from '@soundlings/curriculum';
+import { getGrapheme, getWord, graphemesForLevel, picturableWordsForLevel, wordsForLevel } from '@soundlings/curriculum';
 import type { Skill } from '@soundlings/curriculum';
 import { DEFAULT_CONFIG } from './config';
 import { applyAttempt, emptyRecord, getRecord, isMastered, strengthAt } from './mastery';
@@ -1054,8 +1054,12 @@ describe('buildSession for a child who has mastered everything', () => {
   /** Every Level 1 pairing mastered, by walking the plans a session would offer. */
   function everything(): MasteryMap {
     const ids = graphemesForLevel(1).map((g) => g.id);
-    const words = ['at', 'am', 'if', 'it', 'pat', 'tap', 'pit', 'sit', 'sip', 'pip', 'fit', 'mat', 'map', 'fat', 'sat', 'tip', 'sap', 'sam', 'pam'];
-    const pictured = ['pat', 'tap', 'pit', 'sit', 'sip', 'pip', 'fit', 'mat', 'map'];
+    // Derived, not listed. These were two hand-written copies of the word list
+    // and they went stale the moment `pip` and `fit` lost their pictures: the
+    // fixture went on claiming a child had mastered two words the engine no
+    // longer offers, and stopped claiming the two it had started offering.
+    const words = wordsForLevel(1).map((w) => w.id);
+    const pictured = picturableWordsForLevel(1).map((w) => w.id);
     return masteredPairs([
       ...ids.flatMap((id): Pair[] => [[id, 'SOUND_ID'], [id, 'LETTER_SOUND']]),
       // Oral blending counts towards Level 1 now, so a child who has mastered
@@ -1411,7 +1415,7 @@ describe('buildSession: Word Pick', () => {
     for (const task of wordPicks(ready)) {
       expect(task.skill, task.id).toBe('BLEND_READ');
       expect(task.secondaryTargets, task.id).toEqual([...new Set(getWord(task.primaryTarget).graphemes)]);
-      for (const choice of task.choices) expect(getWord(choice).picture, choice).toBeDefined();
+      for (const choice of task.choices) expect(getWord(choice).picturable, choice).toBe(true);
     }
   });
 

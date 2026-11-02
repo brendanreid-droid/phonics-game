@@ -72,8 +72,7 @@ The sequence, the vowels and the vocabulary are Australian. A `tap` is a tap, no
 
 These stay in the game — a child still reads and spells them — but they lose their picture and leave the two picture games. **Please do not try to solve these.** They were looked at and they do not have an answer.
 
-- **`pip`** — A pip is an apple seed. A five-year-old shown one says "seed" at best and "nut" in the shipped version. There is no drawing of a pip that a child names "pip".
-- **`fit`** — "Fit" is an adjective with no picture. The shipped flexed arm is named "muscle" by every child. Nothing can be drawn here.
+
 
 ## The letters
 

@@ -78,16 +78,22 @@ creature|indi|Indi the insect. The caterpillar with a character's face.|a worm; 
 creature|momo|Momo the moon.|a star; a cheese|
 creature|fifi|Fifi the fish.|—|
 # --- the cast ----------------------------------------------------------------
-# Not in the curriculum data yet: see the planned block below.
+# Sam and Pam are words in their own right as well as the two characters, and
+# they are the only words carried entirely by their drawing: no emoji means
+# "Sam" rather than "a child". They replaced `pip` and `fit`, whose pictures
+# were retired below.
 cast|sam|Sam: a child of about five, short dark curly hair, round face, a yellow top.|Pam|Appears in `sit` and as the word `sam`.
 cast|pam|Pam: a child of about five, long straight red hair in two plaits, a green top.|Sam|Appears in `sip` and as the word `pam`. The plaits are the silhouette difference.
-# --- planned: in this brief, not yet in the curriculum ------------------------
-# These are commissioned here and wired into packages/curriculum/src/words.ts
-# when the art arrives, not before.
-+word|sam
-+word|pam
-# --- retiring: in the curriculum, deliberately not briefed --------------------
-# These words KEEP their place in the game — they are still read and spelt — and
-# only lose their picture, so they leave Robot Talk and Picture Match.
--word|pip|A pip is an apple seed. A five-year-old shown one says "seed" at best and "nut" in the shipped version. There is no drawing of a pip that a child names "pip".
--word|fit|"Fit" is an adjective with no picture. The shipped flexed arm is named "muscle" by every child. Nothing can be drawn here.
+# --- done: what the +/- blocks used to hold -----------------------------------
+# `+word` and `-word` lines still work and are how a picture is commissioned
+# before the curriculum has it, or retired before the art is replaced. Both
+# blocks are empty because both moves have been made:
+#
+#   pip, fit   retired. A pip is an apple seed, and a child shown one says
+#              "seed" at best — it said "nut" at the 🌰 it carried. "Fit" is an
+#              adjective with nothing to draw, and the 💪 it carried is named
+#              "muscle" by every child. Both words are still read and spelt;
+#              they have only left Robot Talk and Picture Match.
+#   sam, pam   added, and drawn, which is what let the two above go: the engine
+#              needs at least eight picturable words and retiring two without
+#              adding two would have left seven.

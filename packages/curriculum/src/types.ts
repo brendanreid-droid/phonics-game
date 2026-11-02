@@ -85,8 +85,24 @@ export interface Word {
   graphemes: GraphemeId[];
   pattern: 'vc' | 'cv' | 'cvc';
   /**
-   * Stand-in art. ABSENT for function words (at, am, if, it) which cannot be
-   * pictured. Picture Match filters on this field rather than a maintained list.
+   * Whether a five-year-old shown a picture of this word says the word,
+   * unprompted. That is the acceptance test for the artwork (see spec §14) and
+   * it is a fact about the WORD, not about whether a file happens to exist —
+   * `at` can never be pictured, and `fit` is an adjective with nothing to draw.
+   * Robot Talk and Picture Match filter on this.
+   *
+   * It used to be inferred from `picture` being set, which meant the question
+   * "can this be pictured?" was answered by "is there an emoji for it?". Those
+   * came apart as soon as real drawings arrived: Sam has a picture and no
+   * emoji that could stand for her, and `fit` had an emoji every child names
+   * "muscle".
+   */
+  picturable: boolean;
+  /**
+   * The stand-in emoji, where a picturable word still has one. Absent for a
+   * word that is not picturable at all, and absent where the drawing is the
+   * picture. apps/game renders the drawing if there is one and falls back to
+   * this; a test there asserts every picturable word has one or the other.
    */
   picture?: string;
   audio: string;

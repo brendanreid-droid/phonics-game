@@ -175,9 +175,23 @@ describe('curriculum integrity', () => {
       }
     });
 
-    it('gives every picture a single owner, so a picture never means two words', () => {
-      const pictures = PICTURABLE_WORD_LIST.map((w) => w.picture);
+    it('gives every stand-in emoji a single owner, so a picture never means two words', () => {
+      // Only the words still ON a stand-in. Sam and Pam are picturable with no
+      // emoji behind them -- nothing in a font means "Sam" rather than "a
+      // child" -- so counting their absent emoji as a value would have two
+      // words sharing one picture, which is the very thing this forbids.
+      const pictures = PICTURABLE_WORD_LIST.map((w) => w.picture).filter((p) => p !== undefined);
       expect(new Set(pictures).size).toBe(pictures.length);
+      expect(pictures.length).toBeGreaterThan(0);
+    });
+
+    it('gives a word a stand-in emoji only if it is picturable at all', () => {
+      // An emoji on a word nobody can picture is what `fit` was: 💪, named
+      // "muscle" by every child, sitting on an adjective with nothing to draw.
+      for (const w of WORD_LIST) {
+        if (w.picturable) continue;
+        expect(w.picture, `"${w.id}" is not picturable but carries ${w.picture}`).toBeUndefined();
+      }
     });
 
     it('never reuses a grapheme mnemonic or creature emoji as a word picture', () => {
@@ -188,7 +202,8 @@ describe('curriculum integrity', () => {
       for (const c of CREATURE_LIST) claim(c.emoji, `creature ${c.name}`);
 
       for (const w of PICTURABLE_WORD_LIST) {
-        const clashes = owners.get(w.picture as string) ?? [];
+        if (w.picture === undefined) continue;
+        const clashes = owners.get(w.picture) ?? [];
         expect(
           clashes,
           `word "${w.id}" picture ${w.picture} is already used by: ${clashes.join(' and ')}`,

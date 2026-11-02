@@ -68,7 +68,7 @@ function masteredLevelOne(): MasteryMap {
   // cannot hear /p/-/a/-/t/ as "pat" has not finished the level, however well
   // they decode.
   for (const w of ['pat', 'tap', 'pit']) master(w, 'ORAL_BLEND');
-  for (const w of ['pat', 'tap', 'pit', 'sit', 'sip', 'pip']) master(w, 'BLEND_READ');
+  for (const w of ['pat', 'tap', 'pit', 'sit', 'sip', 'sam']) master(w, 'BLEND_READ');
   for (const w of ['sat', 'tip', 'sap', 'mat', 'map']) master(w, 'SEGMENT_SPELL');
   return mastery;
 }

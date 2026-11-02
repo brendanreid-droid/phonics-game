@@ -77,7 +77,7 @@ function wordsFor(
         Number(used.has(a.id)) - Number(used.has(b.id)) ||
         Number(avoid !== null && a.graphemes.includes(avoid)) - Number(avoid !== null && b.graphemes.includes(avoid)) ||
         unknownOthers(a) - unknownOthers(b) ||
-        Number(b.picture !== undefined) - Number(a.picture !== undefined) ||
+        Number(b.picturable) - Number(a.picturable) ||
         b.graphemes.length - a.graphemes.length ||
         a.id.localeCompare(b.id),
     )
